@@ -17,10 +17,15 @@ import {
   Users,
   Droplets,
   Package,
+  LogOut,
 } from "lucide-react";
 import { getBusinessBySlug } from "@/lib/businesses";
 import { Business } from "@/lib/types";
-import AvailabilitySection from "./_components/AvailabilitySection";
+import AvailabilitySection, { Selection } from "./_components/AvailabilitySection";
+import AuthModal from "@/components/auth/AuthModal";
+import BookingConfirmModal from "@/components/booking/BookingConfirmModal";
+import MyBookings from "@/components/booking/MyBookings";
+import { useAuth } from "@/context/AuthContext";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -220,10 +225,16 @@ function Sidebar({ business }: { business: Business }) {
 
 // ─── home tab (main content) ─────────────────────────────────────────────────
 
-function HomeTab({ business }: { business: Business }) {
+function HomeTab({
+  business,
+  onBook,
+}: {
+  business: Business;
+  onBook: (selection: Selection, date: Date) => void;
+}) {
   return (
     <div className="space-y-10 pb-6">
-      <AvailabilitySection business={business} />
+      <AvailabilitySection business={business} onBook={onBook} />
 
       <div className="border-t border-gray-100" />
 
@@ -289,6 +300,21 @@ export default function BusinessPage({
   const { businessSlug } = use(params);
   const business = getBusinessBySlug(businessSlug);
   const [activeTab, setActiveTab] = useState<Tab>("Home");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [bookingSelection, setBookingSelection] = useState<Selection | null>(null);
+  const [bookingDate, setBookingDate] = useState<Date>(new Date());
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const { user, loading, signOut } = useAuth();
+
+  function handleBook(selection: Selection, date: Date) {
+    if (!user) {
+      setAuthOpen(true);
+      return;
+    }
+    setBookingSelection(selection);
+    setBookingDate(date);
+    setBookingOpen(true);
+  }
 
   if (!business) notFound();
 
@@ -298,9 +324,29 @@ export default function BusinessPage({
       <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-30 h-14">
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
           <span className="text-base font-black tracking-tight text-gray-900">bookit</span>
-          <button className="text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors">
-            Sign in
-          </button>
+          {!loading && (
+            user ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 hidden sm:block">
+                  {user.displayName ?? user.email}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  <LogOut size={15} />
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAuthOpen(true)}
+                className="text-sm font-semibold px-4 py-1.5 rounded-full border-2 border-gray-200 text-gray-700 hover:border-gray-400 transition-colors"
+              >
+                Sign in
+              </button>
+            )
+          )}
         </div>
       </header>
 
@@ -372,16 +418,14 @@ export default function BusinessPage({
 
             {/* Tab content */}
             <div className="bg-white rounded-2xl border border-gray-100 px-5 pt-6">
-              {activeTab === "Home" && <HomeTab business={business} />}
+              {activeTab === "Home" && <HomeTab business={business} onBook={handleBook} />}
               {activeTab === "Book" && (
                 <div className="py-16 text-center">
                   <p className="text-sm text-gray-400">Full booking calendar coming soon</p>
                 </div>
               )}
               {activeTab === "My Bookings" && (
-                <div className="py-16 text-center">
-                  <p className="text-sm text-gray-400">Sign in to view your bookings</p>
-                </div>
+                <MyBookings accentColor={business.accentColor} />
               )}
             </div>
           </div>
@@ -390,6 +434,24 @@ export default function BusinessPage({
       </div>
 
       <div className="h-10" />
+
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        accentColor={business.accentColor}
+      />
+
+      <BookingConfirmModal
+        open={bookingOpen}
+        onClose={() => setBookingOpen(false)}
+        onSuccess={() => setActiveTab("My Bookings")}
+        selection={bookingSelection}
+        selectedDate={bookingDate}
+        businessSlug={business.slug}
+        businessName={business.name}
+        businessLocation={business.location}
+        accentColor={business.accentColor}
+      />
     </div>
   );
 }

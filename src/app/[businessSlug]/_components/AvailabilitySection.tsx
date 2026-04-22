@@ -132,7 +132,15 @@ interface DragState {
 
 // ─── component ───────────────────────────────────────────────────────────────
 
-export default function AvailabilitySection({ business }: { business: Business }) {
+export type { Selection };
+
+export default function AvailabilitySection({
+  business,
+  onBook,
+}: {
+  business: Business;
+  onBook: (selection: Selection, date: Date) => void;
+}) {
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -461,7 +469,7 @@ export default function AvailabilitySection({ business }: { business: Business }
                   <button
                     className="px-5 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-opacity hover:opacity-90 active:scale-95"
                     style={{ backgroundColor: business.accentColor }}
-                    onClick={() => alert("Booking flow coming soon!")}
+                    onClick={() => onBook(selection, selectedDate)}
                   >
                     Book Now →
                   </button>
