@@ -5,7 +5,9 @@ export interface Facility {
   name: string;
   description: string;
   image: string;
-  pricePerHour: number;
+  pricePerHour: number;       // base/normal rate
+  primePricePerHour?: number; // prime time rate (optional)
+  primeTimeStart?: number;    // hour when prime time begins e.g. 17 = 5 PM
   currency: string;
 }
 

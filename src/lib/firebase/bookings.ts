@@ -1,6 +1,5 @@
 import {
   collection,
-  addDoc,
   query,
   where,
   orderBy,
@@ -8,6 +7,7 @@ import {
   updateDoc,
   doc,
   Timestamp,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "./client";
 
@@ -30,13 +30,46 @@ export interface Booking {
 
 export type NewBooking = Omit<Booking, "id" | "createdAt" | "status">;
 
+export class SlotUnavailableError extends Error {
+  constructor() {
+    super("One or more slots you selected were just booked by someone else. Please pick a different time.");
+    this.name = "SlotUnavailableError";
+  }
+}
+
 export async function createBooking(data: NewBooking): Promise<string> {
-  const ref = await addDoc(collection(db, "bookings"), {
-    ...data,
-    status: "confirmed",
-    createdAt: Timestamp.now(),
+  const newDocRef = doc(collection(db, "bookings"));
+
+  await runTransaction(db, async (tx) => {
+    // Read all confirmed bookings for this court + date within the transaction
+    const q = query(
+      collection(db, "bookings"),
+      where("businessSlug", "==", data.businessSlug),
+      where("facilityId", "==", data.facilityId),
+      where("date", "==", data.date),
+      where("status", "==", "confirmed")
+    );
+    const snap = await getDocs(q);
+
+    // Collect every hour already booked
+    const takenHours = new Set<number>();
+    snap.docs.forEach((d) => {
+      (d.data().hours as number[]).forEach((h) => takenHours.add(h));
+    });
+
+    // Abort if any requested hour is already taken
+    const conflict = data.hours.some((h) => takenHours.has(h));
+    if (conflict) throw new SlotUnavailableError();
+
+    // No conflict — write the new booking
+    tx.set(newDocRef, {
+      ...data,
+      status: "confirmed",
+      createdAt: Timestamp.now(),
+    });
   });
-  return ref.id;
+
+  return newDocRef.id;
 }
 
 export async function getUserBookings(userId: string): Promise<Booking[]> {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X, CalendarDays, Clock, MapPin } from "lucide-react";
-import { createBooking } from "@/lib/firebase/bookings";
+import { createBooking, SlotUnavailableError } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
 
 interface BookingSelection {
@@ -10,6 +10,9 @@ interface BookingSelection {
   facilityName: string;
   hours: number[];
   pricePerHour: number;
+  primePricePerHour?: number;
+  primeTimeStart?: number;
+  totalPrice: number;
 }
 
 interface BookingConfirmModalProps {
@@ -49,7 +52,14 @@ export default function BookingConfirmModal({
 
   if (!open || !selection) return null;
 
-  const totalPrice = selection.hours.length * selection.pricePerHour;
+  const { pricePerHour, primePricePerHour, primeTimeStart, totalPrice } = selection;
+  const normalHours = primeTimeStart
+    ? selection.hours.filter((h) => h < primeTimeStart)
+    : selection.hours;
+  const primeHours = primeTimeStart && primePricePerHour
+    ? selection.hours.filter((h) => h >= primeTimeStart)
+    : [];
+
   const startHour = selection.hours[0];
   const endHour = selection.hours[selection.hours.length - 1] + 1;
   const dateStr = selectedDate.toISOString().split("T")[0];
@@ -69,12 +79,16 @@ export default function BookingConfirmModal({
         facilityName: selection!.facilityName,
         date: dateStr,
         hours: selection!.hours,
-        totalPrice,
+        totalPrice: selection!.totalPrice,
         currency: "PHP",
       });
       setDone(true);
-    } catch {
-      setError("Failed to save booking. Please try again.");
+    } catch (err) {
+      if (err instanceof SlotUnavailableError) {
+        setError(err.message);
+      } else {
+        setError("Failed to save booking. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -180,13 +194,30 @@ export default function BookingConfirmModal({
 
             {/* Price breakdown */}
             <div className="space-y-1.5">
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>
-                  ₱{selection.pricePerHour.toLocaleString()} × {selection.hours.length} hr
-                  {selection.hours.length > 1 ? "s" : ""}
-                </span>
-                <span>₱{totalPrice.toLocaleString()}</span>
-              </div>
+              {normalHours.length > 0 && (
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>
+                    ₱{pricePerHour.toLocaleString()} × {normalHours.length} hr
+                    {normalHours.length > 1 ? "s" : ""}
+                  </span>
+                  <span>₱{(pricePerHour * normalHours.length).toLocaleString()}</span>
+                </div>
+              )}
+              {primeHours.length > 0 && primePricePerHour && (
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    ₱{primePricePerHour.toLocaleString()} × {primeHours.length} hr
+                    {primeHours.length > 1 ? "s" : ""}
+                    <span
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: `${accentColor}18`, color: accentColor }}
+                    >
+                      Prime
+                    </span>
+                  </span>
+                  <span>₱{(primePricePerHour * primeHours.length).toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-base font-black text-gray-900 pt-1.5 border-t border-gray-100">
                 <span>Total</span>
                 <span>₱{totalPrice.toLocaleString()}</span>

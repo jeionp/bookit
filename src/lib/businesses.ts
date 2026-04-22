@@ -23,6 +23,8 @@ export const businesses: Business[] = [
         description: "Full-size outdoor pickleball court with premium surface and LED lighting for night play.",
         image: "https://images.unsplash.com/photo-1599474924187-334a4ae5bd3c?w=800&q=80",
         pricePerHour: 500,
+        primePricePerHour: 600,
+        primeTimeStart: 17,
         currency: "PHP",
       },
       {
@@ -31,6 +33,8 @@ export const businesses: Business[] = [
         description: "Full-size outdoor pickleball court with premium surface and LED lighting for night play.",
         image: "https://images.unsplash.com/photo-1599474924187-334a4ae5bd3c?w=800&q=80",
         pricePerHour: 500,
+        primePricePerHour: 600,
+        primeTimeStart: 17,
         currency: "PHP",
       },
       {
@@ -39,6 +43,8 @@ export const businesses: Business[] = [
         description: "Climate-controlled indoor court perfect for year-round play regardless of weather.",
         image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80",
         pricePerHour: 700,
+        primePricePerHour: 800,
+        primeTimeStart: 17,
         currency: "PHP",
       },
       {
@@ -47,6 +53,8 @@ export const businesses: Business[] = [
         description: "Climate-controlled indoor court perfect for year-round play regardless of weather.",
         image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80",
         pricePerHour: 700,
+        primePricePerHour: 800,
+        primeTimeStart: 17,
         currency: "PHP",
       },
     ],
