@@ -6,6 +6,7 @@ import { DayPicker, useDayPicker } from "react-day-picker";
 import type { MonthCaptionProps } from "react-day-picker";
 import "react-day-picker/src/style.css";
 import { Business, Facility } from "@/lib/types";
+import { getBookedHours } from "@/lib/firebase/bookings";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -39,30 +40,16 @@ function formatRange(hours: number[]): string {
   return `${formatHour(hours[0])} – ${formatHour(hours[hours.length - 1] + 1)}`;
 }
 
-type SlotStatus = "available" | "booked" | "private";
-
-function getSlotStatus(courtId: string, dateKey: string, hour: number): SlotStatus {
-  let hash = 0;
-  const key = `${courtId}${dateKey}${hour}`;
-  for (let i = 0; i < key.length; i++) {
-    hash = Math.imul(31, hash) + key.charCodeAt(i);
-  }
-  const n = Math.abs(hash) % 20;
-  if (n < 4) return "private";
-  if (n < 10) return "booked";
-  return "available";
-}
-
+// Walk from startHour toward endHour, stopping before the first booked slot.
 function getValidRange(
-  facilityId: string,
-  dateKey: string,
   startHour: number,
-  endHour: number
+  endHour: number,
+  bookedHours: number[]
 ): number[] {
   const step = startHour <= endHour ? 1 : -1;
   const hours: number[] = [];
   for (let h = startHour; step > 0 ? h <= endHour : h >= endHour; h += step) {
-    if (getSlotStatus(facilityId, dateKey, h) !== "available") break;
+    if (bookedHours.includes(h)) break;
     hours.push(h);
   }
   return step > 0 ? hours : hours.reverse();
@@ -159,16 +146,13 @@ export default function AvailabilitySection({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [bookedHours, setBookedHours] = useState<number[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
 
   const facility: Facility =
     business.facilities.find((f) => f.id === selectedFacilityId) ??
     business.facilities[0];
-
-  // Clear selection when the active facility changes
-  useEffect(() => {
-    setSelection(null);
-  }, [selectedFacilityId]);
 
   const dateKey = toDateKey(selectedDate);
   const isToday = dateKey === toDateKey(today);
@@ -185,8 +169,18 @@ export default function AvailabilitySection({
     return d;
   }, [today]);
 
+  // Fetch real booked hours from Firestore whenever facility or date changes
+  useEffect(() => {
+    setSelection(null);
+    setLoadingSlots(true);
+    getBookedHours(business.slug, facility.id, dateKey)
+      .then(setBookedHours)
+      .catch(() => setBookedHours([]))
+      .finally(() => setLoadingSlots(false));
+  }, [facility.id, dateKey, business.slug]);
+
   const previewHours = drag
-    ? getValidRange(drag.facilityId, dateKey, drag.startHour, drag.currentHour)
+    ? getValidRange(drag.startHour, drag.currentHour, bookedHours)
     : [];
 
   // Close calendar on outside click
@@ -204,7 +198,7 @@ export default function AvailabilitySection({
   useEffect(() => {
     function handleMouseUp() {
       if (!drag) return;
-      const hours = getValidRange(drag.facilityId, dateKey, drag.startHour, drag.currentHour);
+      const hours = getValidRange(drag.startHour, drag.currentHour, bookedHours);
       setDrag(null);
 
       if (hours.length === 0) return;
@@ -237,10 +231,10 @@ export default function AvailabilitySection({
 
     window.addEventListener("mouseup", handleMouseUp);
     return () => window.removeEventListener("mouseup", handleMouseUp);
-  }, [drag, dateKey, selection]);
+  }, [drag, bookedHours, selection]);
 
   function handleSlotMouseDown(hour: number) {
-    if (getSlotStatus(facility.id, dateKey, hour) !== "available") return;
+    if (bookedHours.includes(hour)) return;
     setSelection(null);
     setDrag({
       facilityId: facility.id,
@@ -261,13 +255,11 @@ export default function AvailabilitySection({
   function selectDate(date: Date | undefined) {
     if (!date) return;
     setSelectedDate(date);
-    setSelection(null);
     setCalendarOpen(false);
   }
 
-  function slotState(hour: number): "active" | "preview" | "available" | "booked" | "private" {
-    const status = getSlotStatus(facility.id, dateKey, hour);
-    if (status !== "available") return status;
+  function slotState(hour: number): "active" | "preview" | "available" | "booked" {
+    if (bookedHours.includes(hour)) return "booked";
     if (drag?.facilityId === facility.id && previewHours.includes(hour)) return "preview";
     if (!drag && selection?.facilityId === facility.id && selection.hours.includes(hour))
       return "active";
@@ -389,72 +381,75 @@ export default function AvailabilitySection({
             </span>
           </div>
 
-          {groupByPeriod(slots).map(({ key, label, icon: Icon, slots: periodSlots }) => (
-            <div key={key}>
-              <div className="flex items-center gap-1.5 mb-3">
-                <Icon size={12} className="text-gray-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                  {label}
-                </span>
-                {key === "evening" && facility.primePricePerHour && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: `${business.accentColor}18`,
-                      color: business.accentColor,
-                    }}
-                  >
-                    Prime · ₱{facility.primePricePerHour.toLocaleString()}/hr
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
-                {periodSlots.map((hour) => {
-                  const state = slotState(hour);
-                  const unavailable = state === "booked" || state === "private";
-
-                  let cls =
-                    "h-9 rounded-xl text-[11px] font-semibold transition-colors border-2 flex items-center justify-center w-full ";
-                  let style: React.CSSProperties = {};
-
-                  if (state === "active") {
-                    cls += "text-white border-transparent cursor-pointer";
-                    style = { backgroundColor: business.accentColor, borderColor: business.accentColor };
-                  } else if (state === "preview") {
-                    cls += "text-white border-transparent cursor-pointer";
-                    style = { backgroundColor: business.accentColor, opacity: 0.6 };
-                  } else if (state === "available") {
-                    cls += "border-transparent cursor-pointer hover:brightness-95";
-                    style = { backgroundColor: `${business.accentColor}20`, color: business.accentColor };
-                  } else if (state === "booked") {
-                    cls += "border-transparent cursor-not-allowed text-gray-400";
-                    style = { backgroundColor: "#f3f4f6" };
-                  } else {
-                    cls += "border-transparent cursor-not-allowed text-red-400";
-                    style = { backgroundColor: "#fee2e2" };
-                  }
-
-                  return (
-                    <button
-                      key={hour}
-                      disabled={unavailable}
-                      onMouseDown={() => handleSlotMouseDown(hour)}
-                      onMouseEnter={() => handleSlotMouseEnter(hour)}
-                      className={cls}
-                      style={style}
-                      draggable={false}
-                    >
-                      {state === "booked"
-                        ? "Booked"
-                        : state === "private"
-                        ? "Reserved"
-                        : formatHour(hour)}
-                    </button>
-                  );
-                })}
-              </div>
+          {loadingSlots ? (
+            <div className="py-8 flex items-center justify-center gap-2 text-sm text-gray-400">
+              <span
+                className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: `${business.accentColor}40`, borderTopColor: "transparent" }}
+              />
+              Loading availability…
             </div>
-          ))}
+          ) : (
+            groupByPeriod(slots).map(({ key, label, icon: Icon, slots: periodSlots }) => (
+              <div key={key}>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <Icon size={12} className="text-gray-400" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    {label}
+                  </span>
+                  {key === "evening" && facility.primePricePerHour && (
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: `${business.accentColor}18`,
+                        color: business.accentColor,
+                      }}
+                    >
+                      Prime · ₱{facility.primePricePerHour.toLocaleString()}/hr
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
+                  {periodSlots.map((hour) => {
+                    const state = slotState(hour);
+                    const unavailable = state === "booked";
+
+                    let cls =
+                      "h-9 rounded-xl text-[11px] font-semibold transition-colors border-2 flex items-center justify-center w-full ";
+                    let style: React.CSSProperties = {};
+
+                    if (state === "active") {
+                      cls += "text-white border-transparent cursor-pointer";
+                      style = { backgroundColor: business.accentColor, borderColor: business.accentColor };
+                    } else if (state === "preview") {
+                      cls += "text-white border-transparent cursor-pointer";
+                      style = { backgroundColor: business.accentColor, opacity: 0.6 };
+                    } else if (state === "available") {
+                      cls += "border-transparent cursor-pointer hover:brightness-95";
+                      style = { backgroundColor: `${business.accentColor}20`, color: business.accentColor };
+                    } else {
+                      cls += "border-transparent cursor-not-allowed text-gray-400";
+                      style = { backgroundColor: "#f3f4f6" };
+                    }
+
+                    return (
+                      <button
+                        key={hour}
+                        disabled={unavailable}
+                        onMouseDown={() => handleSlotMouseDown(hour)}
+                        onMouseEnter={() => handleSlotMouseEnter(hour)}
+                        className={cls}
+                        style={style}
+                        draggable={false}
+                      >
+                        {state === "booked" ? "Booked" : formatHour(hour)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
