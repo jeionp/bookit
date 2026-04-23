@@ -11,8 +11,6 @@ import {
   runTransaction,
   updateDoc,
   doc,
-  collection,
-  query,
   where,
   orderBy,
 } from "firebase/firestore";

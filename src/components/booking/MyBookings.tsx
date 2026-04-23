@@ -25,12 +25,11 @@ function formatDate(dateStr: string): string {
 export default function MyBookings({ accentColor }: { accentColor: string }) {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!user);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    setLoading(true);
     getUserBookings(user.uid)
       .then(setBookings)
       .finally(() => setLoading(false));

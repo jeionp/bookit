@@ -147,7 +147,7 @@ export default function AvailabilitySection({
   const [selection, setSelection] = useState<Selection | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [bookedHours, setBookedHours] = useState<number[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
 
   const facility: Facility =
@@ -169,15 +169,33 @@ export default function AvailabilitySection({
     return d;
   }, [today]);
 
-  // Fetch real booked hours from Firestore whenever facility or date changes
+  // Fetch real booked hours whenever facility or date changes.
+  // loadedKey tracks which facility+date the current bookedHours belongs to;
+  // when it differs from the current fetchKey we show a loading state.
+  const fetchKey = `${facility.id}:${dateKey}`;
+  const loadingSlots = loadedKey !== fetchKey;
+
   useEffect(() => {
-    setSelection(null);
-    setLoadingSlots(true);
+    let cancelled = false;
     getBookedHours(business.slug, facility.id, dateKey)
-      .then(setBookedHours)
-      .catch(() => setBookedHours([]))
-      .finally(() => setLoadingSlots(false));
+      .then((hours) => {
+        if (!cancelled) {
+          setBookedHours(hours);
+          setLoadedKey(`${facility.id}:${dateKey}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBookedHours([]);
+          setLoadedKey(`${facility.id}:${dateKey}`);
+        }
+      });
+    return () => { cancelled = true; };
   }, [facility.id, dateKey, business.slug]);
+
+  // Derive active selection — discard it if it belongs to a different facility
+  const activeSelection =
+    selection?.facilityId === facility.id ? selection : null;
 
   const previewHours = drag
     ? getValidRange(drag.startHour, drag.currentHour, bookedHours)
@@ -261,12 +279,12 @@ export default function AvailabilitySection({
   function slotState(hour: number): "active" | "preview" | "available" | "booked" {
     if (bookedHours.includes(hour)) return "booked";
     if (drag?.facilityId === facility.id && previewHours.includes(hour)) return "preview";
-    if (!drag && selection?.facilityId === facility.id && selection.hours.includes(hour))
+    if (!drag && activeSelection?.hours.includes(hour))
       return "active";
     return "available";
   }
 
-  const totalPrice = selection?.totalPrice ?? 0;
+  const totalPrice = activeSelection?.totalPrice ?? 0;
 
   return (
     <section className="space-y-5">
@@ -456,16 +474,16 @@ export default function AvailabilitySection({
       {/* Booking action bar */}
       <div
         className={`fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ${
-          selection ? "translate-y-0" : "translate-y-full"
+          activeSelection ? "translate-y-0" : "translate-y-full"
         }`}
       >
         <div className="bg-white border-t border-gray-100 shadow-2xl px-4 py-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            {selection && (
+            {activeSelection && (
               <>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">
-                    {selection.facilityName}
+                    {activeSelection.facilityName}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {selectedDate.toLocaleDateString("en-US", {
@@ -474,9 +492,9 @@ export default function AvailabilitySection({
                       day: "numeric",
                     })}
                     {" · "}
-                    {formatRange(selection.hours)}
+                    {formatRange(activeSelection.hours)}
                     {" · "}
-                    {selection.hours.length} hr{selection.hours.length > 1 ? "s" : ""}
+                    {activeSelection.hours.length} hr{activeSelection.hours.length > 1 ? "s" : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
@@ -489,7 +507,7 @@ export default function AvailabilitySection({
                   <button
                     className="px-5 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-opacity hover:opacity-90 active:scale-95"
                     style={{ backgroundColor: business.accentColor }}
-                    onClick={() => onBook(selection, selectedDate)}
+                    onClick={() => onBook(activeSelection, selectedDate)}
                   >
                     Book Now →
                   </button>
@@ -500,7 +518,7 @@ export default function AvailabilitySection({
         </div>
       </div>
 
-      {selection && <div className="h-20" />}
+      {activeSelection && <div className="h-20" />}
     </section>
   );
 }

@@ -22,8 +22,7 @@ export const db = getFirestore(app);
 // Only runs once — guard against hot-reload double-connect
 if (
   process.env.NEXT_PUBLIC_USE_EMULATOR === "true" &&
-  typeof window !== "undefined" &&
-  !(auth as any)._canInitEmulator === false
+  typeof window !== "undefined"
 ) {
   try {
     connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });

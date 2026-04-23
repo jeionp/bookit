@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import BookingConfirmModal from "@/components/booking/BookingConfirmModal";
-import { createBooking, SlotUnavailableError } from "@/lib/firebase/bookings";
+import { createBooking } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
 import {
   mockSelectionNormal,

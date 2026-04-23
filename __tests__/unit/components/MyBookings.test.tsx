@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MyBookings from "@/components/booking/MyBookings";
 import { getUserBookings, cancelBooking } from "@/lib/firebase/bookings";

@@ -7,12 +7,12 @@
  */
 
 import React, { useState } from "react";
-import { render, screen, fireEvent, within as withinEl } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import BookingConfirmModal from "@/components/booking/BookingConfirmModal";
 import MyBookings from "@/components/booking/MyBookings";
 import AuthModal from "@/components/auth/AuthModal";
-import { createBooking, getUserBookings, cancelBooking, SlotUnavailableError } from "@/lib/firebase/bookings";
+import { createBooking, getUserBookings, cancelBooking } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import {
