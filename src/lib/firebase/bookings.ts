@@ -101,3 +101,12 @@ export async function getBookingsForDate(
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
 }
+
+export async function getBookedHours(
+  businessSlug: string,
+  facilityId: string,
+  date: string
+): Promise<number[]> {
+  const bookings = await getBookingsForDate(businessSlug, facilityId, date);
+  return bookings.flatMap((b) => b.hours);
+}
