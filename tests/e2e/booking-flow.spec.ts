@@ -166,9 +166,10 @@ test.describe('Slot selection', () => {
     await waitForSlots(page)
     await selectSlot(page, '8 AM')
 
-    await expect(page.getByText(COURT_1_NAME)).toBeVisible()
-    await expect(page.getByText('8 AM – 9 AM')).toBeVisible()
-    await expect(page.getByText(`₱${STD_RATE.toLocaleString()}`)).toBeVisible()
+    const bar = page.getByTestId('action-bar')
+    await expect(bar.getByText(COURT_1_NAME)).toBeVisible()
+    await expect(bar.getByText('8 AM – 9 AM', { exact: false })).toBeVisible()
+    await expect(bar.getByText(`₱${STD_RATE.toLocaleString()}`)).toBeVisible()
     await expect(page.getByRole('button', { name: /book now/i })).toBeVisible()
   })
 
@@ -358,12 +359,13 @@ test.describe('Booking confirmation', () => {
     await selectSlot(page, '8 AM')
     await page.getByRole('button', { name: /book now/i }).click()
 
-    await expect(page.getByText('Confirm Booking')).toBeVisible()
-    await expect(page.getByText('PaddleUp')).toBeVisible()
-    await expect(page.getByText(COURT_1_NAME)).toBeVisible()
-    await expect(page.getByText('8 AM – 9 AM')).toBeVisible()
+    const modal = page.getByTestId('booking-modal')
+    await expect(modal.getByText('Confirm Booking')).toBeVisible()
+    await expect(modal.getByText('PaddleUp')).toBeVisible()
+    await expect(modal.getByText(COURT_1_NAME)).toBeVisible()
+    await expect(modal.getByText('8 AM – 9 AM', { exact: false })).toBeVisible()
     // Price line: ₱500 × 1 hr
-    await expect(page.getByText(`₱${STD_RATE.toLocaleString()}`).first()).toBeVisible()
+    await expect(modal.getByText(`₱${STD_RATE.toLocaleString()}`).first()).toBeVisible()
   })
 
   test('confirm modal itemises prime-time hours separately', async ({ page }) => {

@@ -475,6 +475,7 @@ export default function AvailabilitySection({
 
       {/* Booking action bar */}
       <div
+        data-testid="action-bar"
         className={`fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ${
           activeSelection ? "translate-y-0" : "translate-y-full"
         }`}
