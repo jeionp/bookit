@@ -74,11 +74,11 @@ export async function createTestUser(
   displayName: string
 ): Promise<void> {
   const res = await fetch(
-    `${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts?key=fake-api-key`,
+    `${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, displayName }),
+      body: JSON.stringify({ email, password, displayName, returnSecureToken: false }),
     }
   )
   if (!res.ok) {
