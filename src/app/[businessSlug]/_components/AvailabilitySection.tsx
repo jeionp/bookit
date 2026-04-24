@@ -76,6 +76,7 @@ function MonthCaption({ calendarMonth }: MonthCaptionProps) {
   return (
     <div className="flex items-center justify-between px-1 mb-3">
       <button
+        aria-label="Go to previous month"
         onClick={() => previousMonth && goToMonth(previousMonth)}
         disabled={!previousMonth}
         className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"
@@ -89,6 +90,7 @@ function MonthCaption({ calendarMonth }: MonthCaptionProps) {
         })}
       </span>
       <button
+        aria-label="Go to next month"
         onClick={() => nextMonth && goToMonth(nextMonth)}
         disabled={!nextMonth}
         className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"
