@@ -215,6 +215,24 @@ export default function AvailabilitySection({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [calendarOpen]);
 
+  // Track drag position via document mousemove — more reliable than onMouseEnter
+  // on individual buttons in headless browsers where synthetic events may not
+  // trigger mouseenter on child elements during a programmatic drag.
+  useEffect(() => {
+    if (!drag) return;
+    function handleMouseMove(e: MouseEvent) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const btn = el?.closest("[data-slot-hour]");
+      if (!btn) return;
+      const hour = parseInt(btn.getAttribute("data-slot-hour") ?? "", 10);
+      if (!isNaN(hour)) {
+        setDrag((d) => (d ? { ...d, currentHour: hour } : null));
+      }
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [drag]);
+
   // Finalize drag selection on mouseup anywhere in the document
   useEffect(() => {
     function handleMouseUp() {
@@ -268,11 +286,6 @@ export default function AvailabilitySection({
       primePricePerHour: facility.primePricePerHour,
       primeTimeStart: facility.primeTimeStart,
     });
-  }
-
-  function handleSlotMouseEnter(hour: number) {
-    if (!drag || drag.facilityId !== facility.id) return;
-    setDrag((d) => (d ? { ...d, currentHour: hour } : null));
   }
 
   function selectDate(date: Date | undefined) {
@@ -458,9 +471,9 @@ export default function AvailabilitySection({
                     return (
                       <button
                         key={hour}
+                        data-slot-hour={hour}
                         disabled={unavailable}
                         onMouseDown={() => handleSlotMouseDown(hour)}
-                        onMouseEnter={() => handleSlotMouseEnter(hour)}
                         className={cls}
                         style={style}
                         draggable={false}
