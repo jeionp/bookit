@@ -73,9 +73,9 @@ test.describe('Business page', () => {
   test('renders the business name and location', async ({ page }) => {
     await page.goto(BUSINESS)
     await expect(page.getByRole('heading', { name: 'PaddleUp' }).first()).toBeVisible()
-    // The sidebar (visible at desktop viewport) shows the full address; the short
-    // location string lives in an lg:hidden overlay and won't be visible at 1280px.
-    await expect(page.getByText('Katipunan Ave', { exact: false }).first()).toBeVisible()
+    // Scope to the sidebar — the same address text also appears in a lg:hidden
+    // mobile strip that comes first in DOM order and would make .first() resolve hidden.
+    await expect(page.locator('aside').getByText('Katipunan Ave', { exact: false })).toBeVisible()
   })
 
   test('shows all four court tabs in the availability section', async ({ page }) => {
