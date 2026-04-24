@@ -73,9 +73,9 @@ test.describe('Business page', () => {
   test('renders the business name and location', async ({ page }) => {
     await page.goto(BUSINESS)
     await expect(page.getByRole('heading', { name: 'PaddleUp' }).first()).toBeVisible()
-    // Scope to the sidebar — the same address text also appears in a lg:hidden
-    // mobile strip that comes first in DOM order and would make .first() resolve hidden.
-    await expect(page.locator('aside').getByText('Katipunan Ave', { exact: false })).toBeVisible()
+    // Target the sidebar identity-card <span> specifically — the address also appears
+    // in a lg:hidden mobile strip (hidden) and an empty-state <p> inside aside.
+    await expect(page.locator('aside span', { hasText: 'Katipunan Ave' })).toBeVisible()
   })
 
   test('shows all four court tabs in the availability section', async ({ page }) => {
