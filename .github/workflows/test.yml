@@ -1,0 +1,60 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - "feature/**"
+  pull_request:
+    branches:
+      - test
+      - main
+
+jobs:
+  test:
+    name: Unit & E2E Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest unit tests
+        run: npm test
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: test
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: test.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: test
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: test.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:test"
+          NEXT_PUBLIC_USE_EMULATOR: "true"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Start Firebase emulator
+        run: firebase emulators:start --only firestore,auth &
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Wait for emulator to be ready
+        run: npx wait-on http://localhost:4000 --timeout 30000
+
+      # ── Playwright E2E (enable when tests are added) ──────────────────────
+      # - name: Install Playwright browsers
+      #   run: npx playwright install --with-deps chromium
+      #
+      # - name: Run Playwright tests
+      #   run: npx playwright test
+      #   env:
+      #     NEXT_PUBLIC_USE_EMULATOR: "true"
+      # ─────────────────────────────────────────────────────────────────────
