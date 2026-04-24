@@ -178,7 +178,7 @@ test.describe('Slot selection', () => {
     await waitForSlots(page)
     await selectSlot(page, '5 PM') // hour 17 = first prime-time slot for Court 1
 
-    await expect(page.getByText(`₱${PRIME_RATE.toLocaleString()}`)).toBeVisible()
+    await expect(page.getByTestId('action-bar').getByText(`₱${PRIME_RATE.toLocaleString()}`)).toBeVisible()
   })
 
   test('clicking the same slot again clears the selection and hides the action bar', async ({ page }) => {
@@ -198,9 +198,10 @@ test.describe('Slot selection', () => {
     await dragSlots(page, '8 AM', '10 AM')
 
     // 3 × ₱500 = ₱1,500
-    await expect(page.getByText('8 AM – 11 AM')).toBeVisible()
-    await expect(page.getByText('3 hrs')).toBeVisible()
-    await expect(page.getByText('₱1,500')).toBeVisible()
+    const bar3 = page.getByTestId('action-bar')
+    await expect(bar3.getByText('8 AM – 11 AM', { exact: false })).toBeVisible()
+    await expect(bar3.getByText('3 hrs', { exact: false })).toBeVisible()
+    await expect(bar3.getByText('₱1,500')).toBeVisible()
   })
 
   test('drag stops at a booked slot and only selects hours up to it', async ({ page }) => {
@@ -378,9 +379,10 @@ test.describe('Booking confirmation', () => {
     await page.getByRole('button', { name: /book now/i }).click()
 
     // Both rate tiers should appear in the breakdown
-    await expect(page.getByText('Prime')).toBeVisible()
-    await expect(page.getByText(`₱${STD_RATE.toLocaleString()}`).first()).toBeVisible()
-    await expect(page.getByText(`₱${PRIME_RATE.toLocaleString()}`).first()).toBeVisible()
+    const modal2 = page.getByTestId('booking-modal')
+    await expect(modal2.getByText('Prime')).toBeVisible()
+    await expect(modal2.getByText(`₱${STD_RATE.toLocaleString()}`).first()).toBeVisible()
+    await expect(modal2.getByText(`₱${PRIME_RATE.toLocaleString()}`).first()).toBeVisible()
   })
 
   test('confirming a booking shows the success state with 🎉', async ({ page }) => {
