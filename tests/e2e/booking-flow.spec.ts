@@ -73,7 +73,9 @@ test.describe('Business page', () => {
   test('renders the business name and location', async ({ page }) => {
     await page.goto(BUSINESS)
     await expect(page.getByRole('heading', { name: 'PaddleUp' }).first()).toBeVisible()
-    await expect(page.getByText('Quezon City, Metro Manila').first()).toBeVisible()
+    // The sidebar (visible at desktop viewport) shows the full address; the short
+    // location string lives in an lg:hidden overlay and won't be visible at 1280px.
+    await expect(page.getByText('Katipunan Ave', { exact: false }).first()).toBeVisible()
   })
 
   test('shows all four court tabs in the availability section', async ({ page }) => {
