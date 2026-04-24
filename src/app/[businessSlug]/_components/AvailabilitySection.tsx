@@ -151,6 +151,7 @@ export default function AvailabilitySection({
   const [bookedHours, setBookedHours] = useState<number[]>([]);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
+  const prevSelectionRef = useRef<Selection | null>(null);
 
   const facility: Facility =
     business.facilities.find((f) => f.id === selectedFacilityId) ??
@@ -223,11 +224,12 @@ export default function AvailabilitySection({
 
       if (hours.length === 0) return;
 
+      const prev = prevSelectionRef.current;
       if (
         hours.length === 1 &&
-        selection?.facilityId === drag.facilityId &&
-        selection.hours.length === 1 &&
-        selection.hours[0] === hours[0]
+        prev?.facilityId === drag.facilityId &&
+        prev.hours.length === 1 &&
+        prev.hours[0] === hours[0]
       ) {
         setSelection(null);
         return;
@@ -255,6 +257,7 @@ export default function AvailabilitySection({
 
   function handleSlotMouseDown(hour: number) {
     if (bookedHours.includes(hour)) return;
+    prevSelectionRef.current = selection; // capture before the state update clears it
     setSelection(null);
     setDrag({
       facilityId: facility.id,
