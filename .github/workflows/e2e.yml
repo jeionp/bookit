@@ -12,7 +12,7 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -34,18 +34,19 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      - name: Start Firebase emulators
+        run: firebase emulators:start --only auth,firestore --project demo-bookit &
+        env:
+          CI: "true"
+
+      - name: Wait for emulators to be ready
+        run: npx wait-on http://localhost:4000 --timeout 60000
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      # firebase emulators:exec starts the emulators, waits until they are
-      # ready, runs the command, then shuts them down. The demo-* project ID
-      # requires no Google credentials.
-      - name: Run E2E tests (with emulators)
-        run: >
-          firebase emulators:exec
-          --only auth,firestore
-          --project demo-bookit
-          "npm run test:e2e"
+      - name: Run Playwright E2E tests
+        run: npm run test:e2e
         env:
           CI: "true"
           NEXT_PUBLIC_USE_EMULATOR: "true"
