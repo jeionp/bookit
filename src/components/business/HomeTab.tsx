@@ -95,7 +95,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
                 <div
                   key={facility.id}
                   onClick={() => selectFacility(facility.id)}
-                  className="shrink-0 w-52 rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer"
+                  className="shrink-0 w-52 rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer flex flex-col"
                   style={{ borderColor: active ? business.accentColor : "#f3f4f6" }}
                 >
                   <div className="relative h-32 bg-gray-100">
@@ -107,18 +107,17 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
                       sizes="208px"
                     />
                   </div>
-                  <div className="p-3">
-                    <div className="flex items-start justify-between gap-1">
-                      <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
-                      <span className="text-sm font-bold shrink-0" style={{ color: business.accentColor }}>
-                        {facility.primePricePerHour ? "from " : ""}
-                        ₱{facility.pricePerHour.toLocaleString()}
-                        <span className="text-xs font-normal text-gray-400">/hr</span>
-                      </span>
-                    </div>
+                  <div className="p-3 flex flex-col flex-1">
+                    <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
+                    <span className="text-xs font-semibold mt-0.5" style={{ color: business.accentColor }}>
+                      {facility.primePricePerHour ? "from " : ""}
+                      ₱{facility.pricePerHour.toLocaleString()}
+                      <span className="font-normal text-gray-400">/hr</span>
+                    </span>
+                    <div className="mt-auto min-h-3" />
                     <button
                       onClick={(e) => { e.stopPropagation(); selectFacility(facility.id); }}
-                      className="mt-2.5 w-full py-2 rounded-xl text-xs font-bold transition-colors"
+                      className="w-full py-2 rounded-xl text-xs font-bold transition-colors"
                       style={
                         active
                           ? { backgroundColor: business.accentColor, color: "white" }
