@@ -35,7 +35,7 @@ export default function Sidebar({ business }: { business: Business }) {
       {/* Identity card */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
         <div>
-          <h1 className="text-xl font-black text-gray-900 leading-tight">{business.name}</h1>
+          <h1 className="text-2xl font-black text-gray-900 leading-tight">{business.name}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{business.tagline}</p>
         </div>
 
