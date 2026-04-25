@@ -88,8 +88,8 @@ export default function Sidebar({ business }: { business: Business }) {
         ))}
       </div>
 
-      {/* About */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+      {/* About — desktop only; mobile shows description above the courts section */}
+      <div className="hidden xl:block bg-white rounded-2xl border border-gray-100 p-5">
         <h2 className="text-sm font-bold text-gray-900 mb-2">About</h2>
         <p className="text-xs text-gray-500 leading-relaxed">{business.description}</p>
       </div>
