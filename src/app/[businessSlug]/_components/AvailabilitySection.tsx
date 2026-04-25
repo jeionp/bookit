@@ -72,9 +72,12 @@ export default function AvailabilitySection({
   const isToday = dateKey === toDateKey(today);
   const dayName = selectedDate.toLocaleDateString("en-US", { weekday: "long" });
   const todayHours = business.operatingHours.find((h) => h.day === dayName);
+  const currentHour = new Date().getHours();
   const slots =
     todayHours && !todayHours.closed
-      ? generateSlots(todayHours.open, todayHours.close)
+      ? generateSlots(todayHours.open, todayHours.close).filter(
+          (h) => !isToday || h > currentHour
+        )
       : [];
 
   const maxDate = useMemo(() => {
@@ -228,6 +231,13 @@ export default function AvailabilitySection({
         facility={facility}
         accentColor={business.accentColor}
         loadingSlots={loadingSlots}
+        emptyMessage={
+          todayHours?.closed
+            ? "Closed on this day"
+            : isToday
+            ? "No more slots available today"
+            : "Closed on this day"
+        }
         slotsRef={slotsRef}
         slotState={slotState}
         onSlotMouseDown={handleSlotMouseDown}

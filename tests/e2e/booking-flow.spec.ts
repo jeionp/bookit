@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { clearFirestore, createTestUser, seedBooking, todayKey } from './helpers'
+import { clearFirestore, createTestUser, seedBooking, todayKey, dateKeyDelta } from './helpers'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,9 +43,13 @@ async function dragSlots(page: Page, fromLabel: string, toLabel: string) {
   const from = page.getByRole('button', { name: fromLabel }).first()
   const to   = page.getByRole('button', { name: toLabel }).first()
 
-  // Scroll into view before reading bounding boxes — raw mouse coordinates
-  // are viewport-relative and events outside the visible area are not dispatched.
+  // Scroll `to` into view last so it sits at the bottom of the viewport.
+  // Since `from` is above `to` and close by, scrolling `to` to the nearest
+  // edge keeps `from` within the viewport too. Both must be in the viewport
+  // so that document.elementFromPoint() finds them during the drag —
+  // coordinates outside the viewport return null and currentHour never updates.
   await from.scrollIntoViewIfNeeded()
+  await to.scrollIntoViewIfNeeded()
 
   const boxFrom = await from.boundingBox()
   const boxTo   = await to.boundingBox()
@@ -58,6 +62,24 @@ async function dragSlots(page: Page, fromLabel: string, toLabel: string) {
   await page.mouse.down()
   await page.mouse.move(cx(boxTo), cy(boxTo), { steps: 12 })
   await page.mouse.up()
+}
+
+// Navigate to tomorrow so that all time slots are visible regardless of wall-clock time.
+// AvailabilitySection filters today's slots with (h > currentHour); future dates are unfiltered.
+async function selectTomorrow(page: Page) {
+  const now = new Date()
+  const tom = new Date(now)
+  tom.setDate(now.getDate() + 1)
+
+  await page.locator('button').filter({ hasText: 'Today' }).click()
+
+  // Advance the calendar view if tomorrow falls in the next month
+  if (tom.getMonth() !== now.getMonth()) {
+    await page.getByLabel('Go to next month').click()
+  }
+
+  // Click the day number — regex anchors prevent matching "8 AM"-style slot buttons
+  await page.locator('button').filter({ hasText: new RegExp(`^${tom.getDate()}$`) }).first().click()
 }
 
 // ─── Suite setup ─────────────────────────────────────────────────────────────
@@ -104,6 +126,7 @@ test.describe('Business page', () => {
 test.describe('Slot grid', () => {
   test('groups slots into Morning / Afternoon / Evening sections', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await expect(page.getByText('Morning')).toBeVisible()
     await expect(page.getByText('Afternoon')).toBeVisible()
@@ -112,6 +135,7 @@ test.describe('Slot grid', () => {
 
   test('Evening section shows Prime rate badge with the prime hourly price', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await expect(page.getByText(/prime/i).first()).toBeVisible()
     await expect(page.getByText('₱600/hr')).toBeVisible()
@@ -119,6 +143,7 @@ test.describe('Slot grid', () => {
 
   test('available slots are labelled with their hour and are enabled', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     const slot = page.getByRole('button', { name: '8 AM' }).first()
     await expect(slot).toBeVisible()
@@ -126,15 +151,17 @@ test.describe('Slot grid', () => {
   })
 
   test('a fully booked court shows every slot as a disabled "Booked" button', async ({ page }) => {
-    // PaddleUp is open Mon–Thu 6 AM–10 PM → hours 6–21
+    // Seed the full span of possible operating hours (5 AM–10 PM) for tomorrow.
+    // Hours outside the day's actual schedule are ignored by the slot renderer.
     await seedBooking({
       facilityId:   COURT_1,
       facilityName: COURT_1_NAME,
-      date:         todayKey(),
-      hours:        Array.from({ length: 16 }, (_, i) => i + 6),
+      date:         dateKeyDelta(1),
+      hours:        Array.from({ length: 18 }, (_, i) => i + 5),
     })
 
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
 
     const bookedBtns = page.getByRole('button', { name: 'Booked' })
@@ -150,11 +177,12 @@ test.describe('Slot grid', () => {
     await seedBooking({
       facilityId:   COURT_1,
       facilityName: COURT_1_NAME,
-      date:         todayKey(),
+      date:         dateKeyDelta(1),
       hours:        [10],
     })
 
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
 
     await expect(page.getByRole('button', { name: 'Booked' })).toBeVisible()
@@ -163,11 +191,44 @@ test.describe('Slot grid', () => {
   })
 })
 
+// ─── Past slot filtering ──────────────────────────────────────────────────────
+
+test.describe('Past slot filtering', () => {
+  test('slots from earlier today are not shown in the grid', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await waitForSlots(page)
+    // PaddleUp opens at 6 AM on weekdays / 5 AM weekends; both hours are always
+    // past by the time CI runs, so the 6 AM button must not be visible for today.
+    await expect(page.getByRole('button', { name: '6 AM' })).not.toBeVisible()
+  })
+
+  test('switching to a future date reveals early morning slots', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await selectTomorrow(page)
+    await waitForSlots(page)
+    // On a future date the past-slot filter (h > currentHour) is inactive —
+    // all slots render, including the first slot of the day.
+    await expect(page.getByRole('button', { name: '6 AM' }).first()).toBeVisible()
+  })
+
+  test('a future date shows all three period sections including Morning', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await selectTomorrow(page)
+    await waitForSlots(page)
+    // PaddleUp 6 AM–10 PM (or later) always spans Morning (< 12), Afternoon (12–16),
+    // and Evening (≥ 17). All three section headers must appear on a future date.
+    await expect(page.getByText('Morning')).toBeVisible()
+    await expect(page.getByText('Afternoon')).toBeVisible()
+    await expect(page.getByText('Evening')).toBeVisible()
+  })
+})
+
 // ─── Slot selection ───────────────────────────────────────────────────────────
 
 test.describe('Slot selection', () => {
   test('clicking a slot reveals the action bar with court, time range, and price', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await selectSlot(page, '8 AM')
 
@@ -180,6 +241,7 @@ test.describe('Slot selection', () => {
 
   test('selecting a prime-time slot shows the prime hourly rate', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await selectSlot(page, '5 PM') // hour 17 = first prime-time slot for Court 1
 
@@ -188,6 +250,7 @@ test.describe('Slot selection', () => {
 
   test('clicking the same slot again clears the selection and hides the action bar', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await selectSlot(page, '8 AM')
     await expect(page.getByRole('button', { name: /book now/i })).toBeVisible()
@@ -199,6 +262,7 @@ test.describe('Slot selection', () => {
 
   test('dragging across three slots selects all and totals correctly', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await dragSlots(page, '8 AM', '10 AM')
 
@@ -214,11 +278,12 @@ test.describe('Slot selection', () => {
     await seedBooking({
       facilityId:   COURT_1,
       facilityName: COURT_1_NAME,
-      date:         todayKey(),
+      date:         dateKeyDelta(1),
       hours:        [9],
     })
 
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await dragSlots(page, '8 AM', '10 AM')
 
@@ -228,6 +293,7 @@ test.describe('Slot selection', () => {
 
   test('clicking a different slot replaces the existing selection', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
 
     await selectSlot(page, '8 AM')
@@ -240,6 +306,7 @@ test.describe('Slot selection', () => {
 
   test('clicking outside the availability section and action bar clears the selection', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
 
     await selectSlot(page, '8 AM')
@@ -257,6 +324,7 @@ test.describe('Slot selection', () => {
 test.describe('Court switching', () => {
   test('switching to a different court clears the active selection', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
 
     await selectSlot(page, '8 AM')
@@ -341,6 +409,7 @@ test.describe('Calendar – 30-day booking window', () => {
 test.describe('Authentication gate', () => {
   test('clicking Book Now without auth opens the sign-in modal', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await selectSlot(page, '8 AM')
     await page.getByRole('button', { name: /book now/i }).click()
@@ -350,6 +419,7 @@ test.describe('Authentication gate', () => {
 
   test('auth modal shows email / password fields and Google sign-in button', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await selectSlot(page, '8 AM')
     await page.getByRole('button', { name: /book now/i }).click()
@@ -385,6 +455,7 @@ test.describe('Authentication gate', () => {
 test.describe('Booking confirmation', () => {
   test('confirm modal shows venue, court, date, time, and standard price', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await signIn(page)
 
@@ -402,11 +473,12 @@ test.describe('Booking confirmation', () => {
 
   test('confirm modal itemises prime-time hours separately', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await signIn(page)
 
-    // Drag 4 PM (standard) → 6 PM (prime): 1 standard + 2 prime-time hours
-    await dragSlots(page, '4 PM', '6 PM')
+    // Drag 4 PM (standard) → 5 PM (prime): 1 standard + 1 prime-time hour
+    await dragSlots(page, '4 PM', '5 PM')
     await page.getByRole('button', { name: /book now/i }).click()
 
     // Both rate tiers should appear in the breakdown
@@ -418,6 +490,7 @@ test.describe('Booking confirmation', () => {
 
   test('confirming a booking shows the success state with 🎉', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await signIn(page)
 
@@ -431,6 +504,7 @@ test.describe('Booking confirmation', () => {
 
   test('closing the success modal navigates to My Bookings with the new booking', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await signIn(page)
 
@@ -452,6 +526,7 @@ test.describe('Booking confirmation', () => {
 test.describe('Double-booking conflict', () => {
   test('shows an error when the slot is taken between selection and confirmation', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await signIn(page)
 
@@ -464,7 +539,7 @@ test.describe('Double-booking conflict', () => {
     await seedBooking({
       facilityId:   COURT_1,
       facilityName: COURT_1_NAME,
-      date:         todayKey(),
+      date:         dateKeyDelta(1),
       hours:        [8],
     })
 
@@ -589,6 +664,7 @@ test.describe('My Bookings tab', () => {
 
   test('confirmed booking can be cancelled from My Bookings', async ({ page }) => {
     await page.goto(BUSINESS)
+    await selectTomorrow(page)
     await waitForSlots(page)
     await signIn(page)
 
