@@ -10,6 +10,7 @@ interface SlotGridProps {
   facility: Facility;
   accentColor: string;
   loadingSlots: boolean;
+  emptyMessage?: string;
   slotsRef: RefObject<HTMLDivElement | null>;
   slotState: (hour: number) => SlotState;
   onSlotMouseDown: (hour: number) => void;
@@ -21,13 +22,14 @@ export default function SlotGrid({
   facility,
   accentColor,
   loadingSlots,
+  emptyMessage = "Closed on this day",
   slotsRef,
   slotState,
   onSlotMouseDown,
   lastTouchTime,
 }: SlotGridProps) {
   if (slots.length === 0) {
-    return <p className="py-8 text-center text-sm text-gray-400">Closed on this day</p>;
+    return <p className="py-8 text-center text-sm text-gray-400">{emptyMessage}</p>;
   }
 
   return (
