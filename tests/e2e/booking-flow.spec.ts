@@ -82,13 +82,14 @@ test.describe('Business page', () => {
     await expect(page.locator('aside span', { hasText: 'Katipunan Ave' })).toBeVisible()
   })
 
-  test('shows all four court tabs in the availability section', async ({ page }) => {
+  test('shows court selector dropdown in the availability section', async ({ page }) => {
     await page.goto(BUSINESS)
-    // These are the compact tab buttons inside AvailabilitySection
-    await expect(page.getByRole('button', { name: 'Court 1' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Court 2' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Court 3 (Indoor)' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Court 4 (Indoor)' })).toBeVisible()
+    const selector = page.getByTestId('availability-section').locator('select')
+    await expect(selector).toBeVisible()
+    await expect(selector.locator('option', { hasText: 'Court 1' })).toHaveCount(1)
+    await expect(selector.locator('option', { hasText: 'Court 2' })).toHaveCount(1)
+    await expect(selector.locator('option', { hasText: 'Court 3 (Indoor)' })).toHaveCount(1)
+    await expect(selector.locator('option', { hasText: 'Court 4 (Indoor)' })).toHaveCount(1)
   })
 
   test('shows Home and My Bookings navigation tabs', async ({ page }) => {
@@ -236,8 +237,8 @@ test.describe('Court switching', () => {
     await selectSlot(page, '8 AM')
     await expect(page.getByRole('button', { name: /book now/i })).toBeVisible()
 
-    // Switch to Court 2 via the compact tab row in AvailabilitySection
-    await page.getByRole('button', { name: 'Court 2' }).click()
+    // Switch to Court 2 via the court selector dropdown in AvailabilitySection
+    await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 2' })
     await expect(page.getByRole('button', { name: /book now/i })).not.toBeVisible()
   })
 
@@ -246,7 +247,7 @@ test.describe('Court switching', () => {
     await waitForSlots(page)
 
     // Court 3 (Indoor) standard rate = ₱700/hr
-    await page.getByRole('button', { name: 'Court 3 (Indoor)' }).click()
+    await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 3 (Indoor)' })
     await waitForSlots(page)
 
     await expect(page.getByTestId('availability-section').getByText(/₱700/)).toBeVisible()

@@ -29,7 +29,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
     <div className="space-y-8 pb-6">
 
       {/* Description — mobile only (desktop gets sidebar) */}
-      <p className="lg:hidden text-sm text-gray-600 leading-relaxed">
+      <p className="xl:hidden text-sm text-gray-600 leading-relaxed">
         {business.description}
       </p>
 
@@ -41,52 +41,54 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
             {business.facilities.length} available
           </span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {business.facilities.map((facility) => {
-            const active = selectedFacilityId === facility.id;
-            return (
-              <div
-                key={facility.id}
-                onClick={() => selectFacility(facility.id)}
-                className="rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer"
-                style={{ borderColor: active ? business.accentColor : "#f3f4f6" }}
-              >
-                <div className="relative h-36 bg-gray-100">
-                  <Image
-                    src={facility.image}
-                    alt={facility.name}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 100vw, 50vw"
-                  />
-                </div>
-                <div className="p-3.5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gray-900">{facility.name}</h3>
-                    <span className="text-sm font-bold" style={{ color: business.accentColor }}>
-                      {facility.primePricePerHour ? "from " : ""}
-                      ₱{facility.pricePerHour.toLocaleString()}
-                      <span className="text-xs font-normal text-gray-400">/hr</span>
-                    </span>
+        <div className="relative">
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+            {business.facilities.map((facility) => {
+              const active = selectedFacilityId === facility.id;
+              return (
+                <div
+                  key={facility.id}
+                  onClick={() => selectFacility(facility.id)}
+                  className="shrink-0 w-52 rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer"
+                  style={{ borderColor: active ? business.accentColor : "#f3f4f6" }}
+                >
+                  <div className="relative h-32 bg-gray-100">
+                    <Image
+                      src={facility.image}
+                      alt={facility.name}
+                      fill
+                      className="object-cover"
+                      sizes="208px"
+                    />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                    {facility.description}
-                  </p>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); selectFacility(facility.id); }}
-                    className="mt-3 w-full py-2 rounded-xl text-xs font-bold transition-colors"
-                    style={
-                      active
-                        ? { backgroundColor: business.accentColor, color: "white" }
-                        : { backgroundColor: `${business.accentColor}15`, color: business.accentColor }
-                    }
-                  >
-                    {active ? "Selected ✓" : "Check availability →"}
-                  </button>
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-1">
+                      <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
+                      <span className="text-sm font-bold shrink-0" style={{ color: business.accentColor }}>
+                        {facility.primePricePerHour ? "from " : ""}
+                        ₱{facility.pricePerHour.toLocaleString()}
+                        <span className="text-xs font-normal text-gray-400">/hr</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{facility.description}</p>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); selectFacility(facility.id); }}
+                      className="mt-2.5 w-full py-2 rounded-xl text-xs font-bold transition-colors"
+                      style={
+                        active
+                          ? { backgroundColor: business.accentColor, color: "white" }
+                          : { backgroundColor: `${business.accentColor}15`, color: business.accentColor }
+                      }
+                    >
+                      {active ? "Selected ✓" : "Check availability →"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+            <div className="shrink-0 w-2" />
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
         </div>
       </section>
 
