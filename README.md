@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bookit
 
-## Getting Started
+A multi-tenant booking platform for courts, rooms, and appointment-based businesses. Each business gets a public page at `/<business-slug>` where customers can browse facilities, check real-time availability, and book time slots.
 
-First, run the development server:
+## Tech stack
+
+- **Next.js 16** (App Router) — frontend and server components
+- **Firebase** — Firestore for bookings, Firebase Auth for user accounts
+- **Tailwind CSS** — styling
+- **Playwright** — end-to-end tests
+- **Vitest** — unit and security rule tests
+
+## Prerequisites
+
+- Node.js 24+
+- Java 21+ (required by the Firebase emulator)
+- Firebase CLI: `npm install -g firebase-tools`
+
+## Local setup
+
+1. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+2. **Create your env file**
+
+   Copy the example below into `.env.local` at the project root. The emulator values are safe to use locally — they're fake credentials that only work with the emulator.
+
+   ```env
+   NEXT_PUBLIC_USE_EMULATOR=true
+   NEXT_PUBLIC_FIREBASE_API_KEY=demo-key
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-bookit.firebaseapp.com
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-bookit
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-bookit.appspot.com
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
+   NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:demo
+   ```
+
+3. **Start the Firebase emulators** (Auth + Firestore)
+
+   ```bash
+   firebase emulators:start --only auth,firestore --project demo-bookit
+   ```
+
+4. **Start the dev server** (in a second terminal)
+
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000/paddleup](http://localhost:3000/paddleup) to see the demo business.
+
+## Available scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start Next.js dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest unit tests |
+| `npm run test:security` | Firestore security rule tests (emulator required) |
+| `npm run test:e2e` | Playwright end-to-end tests (emulator + dev server required) |
+
+## Running tests
+
+**Security rule tests** — requires the emulator running:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+firebase emulators:start --only auth,firestore --project demo-bookit &
+npm run test:security
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**E2E tests** — requires the emulator and dev server both running:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+firebase emulators:start --only auth,firestore --project demo-bookit &
+npm run dev &
+npm run test:e2e
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Contributing
 
-## Learn More
+All changes go through a feature branch → pull request workflow — never commit directly to `main`.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Branch naming: `feature/<short-description>`
