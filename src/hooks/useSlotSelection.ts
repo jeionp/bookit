@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Facility } from "@/lib/types";
 import { Selection, DragState, SlotState, getValidRange } from "@/lib/slots";
 
@@ -15,9 +15,11 @@ export function useSlotSelection(facility: Facility, bookedHours: number[]) {
   // Mirror props into refs so always-on effects read fresh values without
   // needing to be re-registered whenever bookedHours or selection changes.
   const bookedHoursRef = useRef(bookedHours);
-  bookedHoursRef.current = bookedHours;
   const selectionRef = useRef<Selection | null>(null);
-  selectionRef.current = selection;
+  useLayoutEffect(() => {
+    bookedHoursRef.current = bookedHours;
+    selectionRef.current = selection;
+  });
 
   const activeSelection = selection?.facilityId === facility.id ? selection : null;
   const previewHours = drag
