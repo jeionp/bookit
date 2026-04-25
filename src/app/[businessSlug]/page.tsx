@@ -83,7 +83,7 @@ export default function BusinessPage({
           sizes="100vw"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        <div className="absolute bottom-4 left-4 right-4 lg:hidden">
+        <div className="absolute bottom-4 left-4 right-4 xl:hidden">
           <div className="max-w-7xl mx-auto">
             <h1 className="text-2xl font-black text-white drop-shadow">{business.name}</h1>
             <div className="flex items-center gap-2 mt-1">
@@ -101,7 +101,7 @@ export default function BusinessPage({
       </div>
 
       {/* Mobile info strip — visible on mobile only, desktop gets the sidebar */}
-      <div className="lg:hidden bg-white border-b border-gray-100 px-4 py-3">
+      <div className="xl:hidden bg-white border-b border-gray-100 px-4 py-3">
         <div className="max-w-7xl mx-auto space-y-2.5">
           {/* Open status + stats */}
           <div className="flex items-center gap-3 flex-wrap">
@@ -144,13 +144,13 @@ export default function BusinessPage({
 
       {/* Body */}
       <div className="max-w-7xl mx-auto px-4 py-5">
-        <div className="flex flex-col lg:grid lg:grid-cols-[300px_1fr] lg:gap-6 lg:items-start">
+        <div className="flex flex-col xl:grid xl:grid-cols-[300px_1fr] xl:gap-6 xl:items-start">
 
-          <aside className="order-2 lg:order-1 mt-4 lg:mt-0 lg:sticky lg:top-[72px]">
+          <aside className="order-2 xl:order-1 mt-4 xl:mt-0 xl:sticky xl:top-[72px]">
             <Sidebar business={business} />
           </aside>
 
-          <div className="order-1 lg:order-2 space-y-2">
+          <div className="order-1 xl:order-2 space-y-2 min-w-0">
             {/* Tabs */}
             <div className="flex bg-white rounded-2xl border border-gray-100 overflow-hidden">
               {TABS.map((tab) => (

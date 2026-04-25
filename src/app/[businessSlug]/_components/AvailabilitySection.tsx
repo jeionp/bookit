@@ -155,6 +155,8 @@ export default function AvailabilitySection({
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const prevSelectionRef = useRef<Selection | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const lastTouchTime = useRef(0);
 
   const facility: Facility =
     business.facilities.find((f) => f.id === selectedFacilityId) ??
@@ -232,7 +234,10 @@ export default function AvailabilitySection({
       const btn = el?.closest("[data-slot-hour]");
       if (!btn) return;
       const hour = parseInt(btn.getAttribute("data-slot-hour") ?? "", 10);
-      if (!isNaN(hour)) setDrag((d) => (d ? { ...d, currentHour: hour } : null));
+      if (!isNaN(hour)) {
+        if (dragRef.current) dragRef.current = { ...dragRef.current, currentHour: hour };
+        setDrag((d) => (d ? { ...d, currentHour: hour } : null));
+      }
     }
     function handleMouseMove(e: MouseEvent) { updateHourAt(e.clientX, e.clientY); }
     function handleTouchMove(e: TouchEvent) {
@@ -250,8 +255,10 @@ export default function AvailabilitySection({
   // Finalize drag selection on mouseup / touchend anywhere in the document
   useEffect(() => {
     function finalizeSelection() {
-      if (!drag) return;
-      const hours = getValidRange(drag.startHour, drag.currentHour, bookedHours);
+      const currentDrag = dragRef.current;
+      if (!currentDrag) return;
+      const hours = getValidRange(currentDrag.startHour, currentDrag.currentHour, bookedHours);
+      dragRef.current = null;
       setDrag(null);
 
       if (hours.length === 0) return;
@@ -259,7 +266,7 @@ export default function AvailabilitySection({
       const prev = prevSelectionRef.current;
       if (
         hours.length === 1 &&
-        prev?.facilityId === drag.facilityId &&
+        prev?.facilityId === currentDrag.facilityId &&
         prev.hours.length === 1 &&
         prev.hours[0] === hours[0]
       ) {
@@ -267,14 +274,14 @@ export default function AvailabilitySection({
         return;
       }
 
-      const { pricePerHour, primePricePerHour, primeTimeStart } = drag;
+      const { pricePerHour, primePricePerHour, primeTimeStart } = currentDrag;
       const totalPrice = hours.reduce((sum, h) => {
         const isPrime = primePricePerHour && primeTimeStart && h >= primeTimeStart;
         return sum + (isPrime ? primePricePerHour : pricePerHour);
       }, 0);
       setSelection({
-        facilityId: drag.facilityId,
-        facilityName: drag.facilityName,
+        facilityId: currentDrag.facilityId,
+        facilityName: currentDrag.facilityName,
         hours,
         pricePerHour,
         primePricePerHour,
@@ -293,9 +300,9 @@ export default function AvailabilitySection({
 
   function handleSlotMouseDown(hour: number) {
     if (bookedHours.includes(hour)) return;
-    prevSelectionRef.current = selection; // capture before the state update clears it
+    prevSelectionRef.current = selection;
     setSelection(null);
-    setDrag({
+    const newDrag: DragState = {
       facilityId: facility.id,
       facilityName: facility.name,
       startHour: hour,
@@ -303,7 +310,9 @@ export default function AvailabilitySection({
       pricePerHour: facility.pricePerHour,
       primePricePerHour: facility.primePricePerHour,
       primeTimeStart: facility.primeTimeStart,
-    });
+    };
+    dragRef.current = newDrag;
+    setDrag(newDrag);
   }
 
   function selectDate(date: Date | undefined) {
@@ -399,25 +408,22 @@ export default function AvailabilitySection({
         )}
       </div>
 
-      {/* Court tabs */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-        {business.facilities.map((f) => {
-          const active = f.id === selectedFacilityId;
-          return (
-            <button
-              key={f.id}
-              onClick={() => onFacilityChange(f.id)}
-              className="shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
-              style={
-                active
-                  ? { backgroundColor: business.accentColor, color: "white" }
-                  : { backgroundColor: "#f3f4f6", color: "#6b7280" }
-              }
-            >
-              {f.name}
-            </button>
-          );
-        })}
+      {/* Court selector */}
+      <div className="relative">
+        <select
+          value={selectedFacilityId}
+          onChange={(e) => onFacilityChange(e.target.value)}
+          className="w-full appearance-none px-4 py-2.5 pr-10 rounded-xl border-2 border-gray-100 bg-gray-50 text-sm font-semibold text-gray-900 outline-none transition-colors cursor-pointer focus:border-gray-300"
+        >
+          {business.facilities.map((f) => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
       </div>
 
       {/* Slot grid */}
@@ -491,8 +497,15 @@ export default function AvailabilitySection({
                         key={hour}
                         data-slot-hour={hour}
                         disabled={unavailable}
-                        onMouseDown={() => handleSlotMouseDown(hour)}
-                        onTouchStart={(e) => { e.preventDefault(); handleSlotMouseDown(hour); }}
+                        onMouseDown={() => {
+                          if (Date.now() - lastTouchTime.current < 500) return;
+                          handleSlotMouseDown(hour);
+                        }}
+                        onTouchStart={(e) => {
+                          lastTouchTime.current = Date.now();
+                          e.preventDefault();
+                          handleSlotMouseDown(hour);
+                        }}
                         className={cls}
                         style={style}
                         draggable={false}
@@ -556,7 +569,7 @@ export default function AvailabilitySection({
         </div>
       </div>
 
-      {activeSelection && <div className="h-20" />}
+      <div className="h-20" />
     </section>
   );
 }
