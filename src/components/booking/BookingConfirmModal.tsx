@@ -62,7 +62,11 @@ export default function BookingConfirmModal({
 
   const startHour = selection.hours[0];
   const endHour = selection.hours[selection.hours.length - 1] + 1;
-  const dateStr = selectedDate.toISOString().split("T")[0];
+  const dateStr = [
+    selectedDate.getFullYear(),
+    String(selectedDate.getMonth() + 1).padStart(2, "0"),
+    String(selectedDate.getDate()).padStart(2, "0"),
+  ].join("-");
 
   async function handleConfirm() {
     if (!user) return;
@@ -105,7 +109,7 @@ export default function BookingConfirmModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
+      <div data-testid="booking-modal" className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 flex items-center justify-between">
           <h2 className="text-xl font-black text-gray-900">

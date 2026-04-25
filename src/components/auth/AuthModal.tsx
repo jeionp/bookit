@@ -16,6 +16,9 @@ type Mode = "signin" | "signup";
 
 const FIREBASE_ERRORS: Record<string, string> = {
   "auth/invalid-credential": "Incorrect email or password.",
+  "auth/wrong-password": "Incorrect email or password.",
+  "auth/invalid-login-credentials": "Incorrect email or password.",
+  "auth/user-not-found": "Incorrect email or password.",
   "auth/email-already-in-use": "An account with this email already exists.",
   "auth/weak-password": "Password must be at least 6 characters.",
   "auth/invalid-email": "Please enter a valid email address.",

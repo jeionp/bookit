@@ -6,11 +6,15 @@ import { DayPicker, useDayPicker } from "react-day-picker";
 import type { MonthCaptionProps } from "react-day-picker";
 import "react-day-picker/src/style.css";
 import { Business, Facility } from "@/lib/types";
+import { getBookedHours } from "@/lib/firebase/bookings";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function toDateKey(date: Date): string {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function parseHour(timeStr: string): number {
@@ -39,30 +43,16 @@ function formatRange(hours: number[]): string {
   return `${formatHour(hours[0])} – ${formatHour(hours[hours.length - 1] + 1)}`;
 }
 
-type SlotStatus = "available" | "booked" | "private";
-
-function getSlotStatus(courtId: string, dateKey: string, hour: number): SlotStatus {
-  let hash = 0;
-  const key = `${courtId}${dateKey}${hour}`;
-  for (let i = 0; i < key.length; i++) {
-    hash = Math.imul(31, hash) + key.charCodeAt(i);
-  }
-  const n = Math.abs(hash) % 20;
-  if (n < 4) return "private";
-  if (n < 10) return "booked";
-  return "available";
-}
-
+// Walk from startHour toward endHour, stopping before the first booked slot.
 function getValidRange(
-  facilityId: string,
-  dateKey: string,
   startHour: number,
-  endHour: number
+  endHour: number,
+  bookedHours: number[]
 ): number[] {
   const step = startHour <= endHour ? 1 : -1;
   const hours: number[] = [];
   for (let h = startHour; step > 0 ? h <= endHour : h >= endHour; h += step) {
-    if (getSlotStatus(facilityId, dateKey, h) !== "available") break;
+    if (bookedHours.includes(h)) break;
     hours.push(h);
   }
   return step > 0 ? hours : hours.reverse();
@@ -89,6 +79,7 @@ function MonthCaption({ calendarMonth }: MonthCaptionProps) {
   return (
     <div className="flex items-center justify-between px-1 mb-3">
       <button
+        aria-label="Go to previous month"
         onClick={() => previousMonth && goToMonth(previousMonth)}
         disabled={!previousMonth}
         className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"
@@ -102,6 +93,7 @@ function MonthCaption({ calendarMonth }: MonthCaptionProps) {
         })}
       </span>
       <button
+        aria-label="Go to next month"
         onClick={() => nextMonth && goToMonth(nextMonth)}
         disabled={!nextMonth}
         className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors"
@@ -159,16 +151,14 @@ export default function AvailabilitySection({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [bookedHours, setBookedHours] = useState<number[]>([]);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
+  const prevSelectionRef = useRef<Selection | null>(null);
 
   const facility: Facility =
     business.facilities.find((f) => f.id === selectedFacilityId) ??
     business.facilities[0];
-
-  // Clear selection when the active facility changes
-  useEffect(() => {
-    setSelection(null);
-  }, [selectedFacilityId]);
 
   const dateKey = toDateKey(selectedDate);
   const isToday = dateKey === toDateKey(today);
@@ -185,35 +175,93 @@ export default function AvailabilitySection({
     return d;
   }, [today]);
 
+  // Fetch real booked hours whenever facility or date changes.
+  // loadedKey tracks which facility+date the current bookedHours belongs to;
+  // when it differs from the current fetchKey we show a loading state.
+  const fetchKey = `${facility.id}:${dateKey}`;
+  const loadingSlots = loadedKey !== fetchKey;
+
+  useEffect(() => {
+    let cancelled = false;
+    getBookedHours(business.slug, facility.id, dateKey)
+      .then((hours) => {
+        if (!cancelled) {
+          setBookedHours(hours);
+          setLoadedKey(`${facility.id}:${dateKey}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBookedHours([]);
+          setLoadedKey(`${facility.id}:${dateKey}`);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [facility.id, dateKey, business.slug]);
+
+  // Derive active selection — discard it if it belongs to a different facility
+  const activeSelection =
+    selection?.facilityId === facility.id ? selection : null;
+
   const previewHours = drag
-    ? getValidRange(drag.facilityId, dateKey, drag.startHour, drag.currentHour)
+    ? getValidRange(drag.startHour, drag.currentHour, bookedHours)
     : [];
 
-  // Close calendar on outside click
+  // Close calendar on outside click or touch
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function handleOutside(e: MouseEvent | TouchEvent) {
       if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
         setCalendarOpen(false);
       }
     }
-    if (calendarOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    if (calendarOpen) {
+      document.addEventListener("mousedown", handleOutside);
+      document.addEventListener("touchstart", handleOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
   }, [calendarOpen]);
 
-  // Finalize drag selection on mouseup anywhere in the document
+  // Track drag position via document mousemove / touchmove
   useEffect(() => {
-    function handleMouseUp() {
+    if (!drag) return;
+    function updateHourAt(clientX: number, clientY: number) {
+      const el = document.elementFromPoint(clientX, clientY);
+      const btn = el?.closest("[data-slot-hour]");
+      if (!btn) return;
+      const hour = parseInt(btn.getAttribute("data-slot-hour") ?? "", 10);
+      if (!isNaN(hour)) setDrag((d) => (d ? { ...d, currentHour: hour } : null));
+    }
+    function handleMouseMove(e: MouseEvent) { updateHourAt(e.clientX, e.clientY); }
+    function handleTouchMove(e: TouchEvent) {
+      e.preventDefault(); // prevent page scroll while dragging slots
+      updateHourAt(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [drag]);
+
+  // Finalize drag selection on mouseup / touchend anywhere in the document
+  useEffect(() => {
+    function finalizeSelection() {
       if (!drag) return;
-      const hours = getValidRange(drag.facilityId, dateKey, drag.startHour, drag.currentHour);
+      const hours = getValidRange(drag.startHour, drag.currentHour, bookedHours);
       setDrag(null);
 
       if (hours.length === 0) return;
 
+      const prev = prevSelectionRef.current;
       if (
         hours.length === 1 &&
-        selection?.facilityId === drag.facilityId &&
-        selection.hours.length === 1 &&
-        selection.hours[0] === hours[0]
+        prev?.facilityId === drag.facilityId &&
+        prev.hours.length === 1 &&
+        prev.hours[0] === hours[0]
       ) {
         setSelection(null);
         return;
@@ -235,12 +283,17 @@ export default function AvailabilitySection({
       });
     }
 
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => window.removeEventListener("mouseup", handleMouseUp);
-  }, [drag, dateKey, selection]);
+    window.addEventListener("mouseup", finalizeSelection);
+    window.addEventListener("touchend", finalizeSelection);
+    return () => {
+      window.removeEventListener("mouseup", finalizeSelection);
+      window.removeEventListener("touchend", finalizeSelection);
+    };
+  }, [drag, bookedHours, selection]);
 
   function handleSlotMouseDown(hour: number) {
-    if (getSlotStatus(facility.id, dateKey, hour) !== "available") return;
+    if (bookedHours.includes(hour)) return;
+    prevSelectionRef.current = selection; // capture before the state update clears it
     setSelection(null);
     setDrag({
       facilityId: facility.id,
@@ -253,35 +306,28 @@ export default function AvailabilitySection({
     });
   }
 
-  function handleSlotMouseEnter(hour: number) {
-    if (!drag || drag.facilityId !== facility.id) return;
-    setDrag((d) => (d ? { ...d, currentHour: hour } : null));
-  }
-
   function selectDate(date: Date | undefined) {
     if (!date) return;
     setSelectedDate(date);
-    setSelection(null);
     setCalendarOpen(false);
   }
 
-  function slotState(hour: number): "active" | "preview" | "available" | "booked" | "private" {
-    const status = getSlotStatus(facility.id, dateKey, hour);
-    if (status !== "available") return status;
+  function slotState(hour: number): "active" | "preview" | "available" | "booked" {
+    if (bookedHours.includes(hour)) return "booked";
     if (drag?.facilityId === facility.id && previewHours.includes(hour)) return "preview";
-    if (!drag && selection?.facilityId === facility.id && selection.hours.includes(hour))
+    if (!drag && activeSelection?.hours.includes(hour))
       return "active";
     return "available";
   }
 
-  const totalPrice = selection?.totalPrice ?? 0;
+  const totalPrice = activeSelection?.totalPrice ?? 0;
 
   return (
-    <section className="space-y-5">
+    <section data-testid="availability-section" className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-gray-900">Check Availability</h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          Click a slot or drag across slots to select a time range
+          Tap a slot or drag across slots to select a time range
         </p>
       </div>
 
@@ -389,88 +435,93 @@ export default function AvailabilitySection({
             </span>
           </div>
 
-          {groupByPeriod(slots).map(({ key, label, icon: Icon, slots: periodSlots }) => (
-            <div key={key}>
-              <div className="flex items-center gap-1.5 mb-3">
-                <Icon size={12} className="text-gray-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                  {label}
-                </span>
-                {key === "evening" && facility.primePricePerHour && (
-                  <span
-                    className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: `${business.accentColor}18`,
-                      color: business.accentColor,
-                    }}
-                  >
-                    Prime · ₱{facility.primePricePerHour.toLocaleString()}/hr
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
-                {periodSlots.map((hour) => {
-                  const state = slotState(hour);
-                  const unavailable = state === "booked" || state === "private";
-
-                  let cls =
-                    "h-9 rounded-xl text-[11px] font-semibold transition-colors border-2 flex items-center justify-center w-full ";
-                  let style: React.CSSProperties = {};
-
-                  if (state === "active") {
-                    cls += "text-white border-transparent cursor-pointer";
-                    style = { backgroundColor: business.accentColor, borderColor: business.accentColor };
-                  } else if (state === "preview") {
-                    cls += "text-white border-transparent cursor-pointer";
-                    style = { backgroundColor: business.accentColor, opacity: 0.6 };
-                  } else if (state === "available") {
-                    cls += "border-transparent cursor-pointer hover:brightness-95";
-                    style = { backgroundColor: `${business.accentColor}20`, color: business.accentColor };
-                  } else if (state === "booked") {
-                    cls += "border-transparent cursor-not-allowed text-gray-400";
-                    style = { backgroundColor: "#f3f4f6" };
-                  } else {
-                    cls += "border-transparent cursor-not-allowed text-red-400";
-                    style = { backgroundColor: "#fee2e2" };
-                  }
-
-                  return (
-                    <button
-                      key={hour}
-                      disabled={unavailable}
-                      onMouseDown={() => handleSlotMouseDown(hour)}
-                      onMouseEnter={() => handleSlotMouseEnter(hour)}
-                      className={cls}
-                      style={style}
-                      draggable={false}
-                    >
-                      {state === "booked"
-                        ? "Booked"
-                        : state === "private"
-                        ? "Reserved"
-                        : formatHour(hour)}
-                    </button>
-                  );
-                })}
-              </div>
+          {loadingSlots ? (
+            <div className="py-8 flex items-center justify-center gap-2 text-sm text-gray-400">
+              <span
+                className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: `${business.accentColor}40`, borderTopColor: "transparent" }}
+              />
+              Loading availability…
             </div>
-          ))}
+          ) : (
+            groupByPeriod(slots).map(({ key, label, icon: Icon, slots: periodSlots }) => (
+              <div key={key}>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <Icon size={12} className="text-gray-400" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    {label}
+                  </span>
+                  {key === "evening" && facility.primePricePerHour && (
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: `${business.accentColor}18`,
+                        color: business.accentColor,
+                      }}
+                    >
+                      Prime · ₱{facility.primePricePerHour.toLocaleString()}/hr
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
+                  {periodSlots.map((hour) => {
+                    const state = slotState(hour);
+                    const unavailable = state === "booked";
+
+                    let cls =
+                      "h-9 rounded-xl text-[11px] font-semibold transition-colors border-2 flex items-center justify-center w-full ";
+                    let style: React.CSSProperties = {};
+
+                    if (state === "active") {
+                      cls += "text-white border-transparent cursor-pointer";
+                      style = { backgroundColor: business.accentColor, borderColor: business.accentColor };
+                    } else if (state === "preview") {
+                      cls += "text-white border-transparent cursor-pointer";
+                      style = { backgroundColor: business.accentColor, opacity: 0.6 };
+                    } else if (state === "available") {
+                      cls += "border-transparent cursor-pointer hover:brightness-95";
+                      style = { backgroundColor: `${business.accentColor}20`, color: business.accentColor };
+                    } else {
+                      cls += "border-transparent cursor-not-allowed text-gray-400";
+                      style = { backgroundColor: "#f3f4f6" };
+                    }
+
+                    return (
+                      <button
+                        key={hour}
+                        data-slot-hour={hour}
+                        disabled={unavailable}
+                        onMouseDown={() => handleSlotMouseDown(hour)}
+                        onTouchStart={(e) => { e.preventDefault(); handleSlotMouseDown(hour); }}
+                        className={cls}
+                        style={style}
+                        draggable={false}
+                      >
+                        {state === "booked" ? "Booked" : formatHour(hour)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
       {/* Booking action bar */}
       <div
+        data-testid="action-bar"
         className={`fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ${
-          selection ? "translate-y-0" : "translate-y-full"
+          activeSelection ? "translate-y-0" : "translate-y-full"
         }`}
       >
         <div className="bg-white border-t border-gray-100 shadow-2xl px-4 py-4">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            {selection && (
+            {activeSelection && (
               <>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">
-                    {selection.facilityName}
+                    {activeSelection.facilityName}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {selectedDate.toLocaleDateString("en-US", {
@@ -479,9 +530,9 @@ export default function AvailabilitySection({
                       day: "numeric",
                     })}
                     {" · "}
-                    {formatRange(selection.hours)}
+                    {formatRange(activeSelection.hours)}
                     {" · "}
-                    {selection.hours.length} hr{selection.hours.length > 1 ? "s" : ""}
+                    {activeSelection.hours.length} hr{activeSelection.hours.length > 1 ? "s" : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
@@ -494,7 +545,7 @@ export default function AvailabilitySection({
                   <button
                     className="px-5 py-2.5 rounded-full text-sm font-bold text-white shadow-md transition-opacity hover:opacity-90 active:scale-95"
                     style={{ backgroundColor: business.accentColor }}
-                    onClick={() => onBook(selection, selectedDate)}
+                    onClick={() => onBook(activeSelection, selectedDate)}
                   >
                     Book Now →
                   </button>
@@ -505,7 +556,7 @@ export default function AvailabilitySection({
         </div>
       </div>
 
-      {selection && <div className="h-20" />}
+      {activeSelection && <div className="h-20" />}
     </section>
   );
 }
