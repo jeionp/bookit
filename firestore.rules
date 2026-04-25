@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /bookings/{bookingId} {
+
+      // Single-document fetch: owner only
+      allow get: if request.auth != null
+                 && request.auth.uid == resource.data.userId;
+
+      // Queries:
+      //   - Authenticated users can query their own bookings (any status)
+      //   - Anyone can query confirmed bookings — required for the public
+      //     availability display (getBookedHours). Trade-off: confirmed booking
+      //     documents are visible to any caller who queries with status=="confirmed".
+      //     To eliminate this, move availability reads to a Cloud Function.
+      allow list: if (request.auth != null && resource.data.userId == request.auth.uid)
+                  || resource.data.status == "confirmed";
+
+      // Create: authenticated, booking is for the caller, starts as confirmed,
+      // price must be a positive number
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == "confirmed"
+                    && request.resource.data.totalPrice is number
+                    && request.resource.data.totalPrice > 0;
+
+      // Update: owner can only flip status to "cancelled"; no other field changes
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.userId
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+                    && request.resource.data.status == "cancelled";
+
+      // No deletes ever
+      allow delete: if false;
+    }
+  }
+}

@@ -42,6 +42,11 @@ jobs:
       - name: Wait for emulators to be ready
         run: npx wait-on http://localhost:4000 --timeout 60000
 
+      - name: Run Firestore security rule tests
+        run: npm run test:security
+        env:
+          CI: "true"
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

@@ -33,13 +33,21 @@ export async function clearFirestore(): Promise<void> {
   )
 }
 
+const SEED_EMAIL    = 'seed@bookit-test.internal'
+const SEED_PASSWORD = 'SeedPass1!'
+
 // Write a confirmed booking document so the given hours appear as "Booked" in the UI.
+// Authenticates as a dedicated seed user so the Firestore security rules are satisfied.
 export async function seedBooking(opts: {
   facilityId:   string
   facilityName: string
   date:         string
   hours:        number[]
 }): Promise<void> {
+  // Ensure the seed user exists, then sign in to get a real idToken + UID.
+  await createTestUser(SEED_EMAIL, SEED_PASSWORD, 'Seed User')
+  const { idToken, localId } = await signInUser(SEED_EMAIL, SEED_PASSWORD)
+
   const body = {
     fields: {
       businessSlug:  { stringValue: 'paddleup' },
@@ -53,8 +61,8 @@ export async function seedBooking(opts: {
         },
       },
       status:     { stringValue: 'confirmed' },
-      userId:     { stringValue: 'seed-user' },
-      userEmail:  { stringValue: 'seed@example.com' },
+      userId:     { stringValue: localId },
+      userEmail:  { stringValue: SEED_EMAIL },
       userName:   { stringValue: 'Seed User' },
       totalPrice: { integerValue: String(opts.hours.length * 500) },
       currency:   { stringValue: 'PHP' },
@@ -65,7 +73,10 @@ export async function seedBooking(opts: {
     `${FIRESTORE}/v1/projects/${PROJECT}/databases/(default)/documents/bookings`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
       body: JSON.stringify(body),
     }
   )
@@ -94,4 +105,22 @@ export async function createTestUser(
       throw new Error(`createTestUser failed: ${JSON.stringify(body)}`)
     }
   }
+}
+
+// Signs in via the Auth emulator and returns the idToken + localId (UID).
+async function signInUser(
+  email:    string,
+  password: string
+): Promise<{ idToken: string; localId: string }> {
+  const res = await fetch(
+    `${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    }
+  )
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`signInUser failed: ${JSON.stringify(body)}`)
+  return { idToken: body.idToken, localId: body.localId }
 }
