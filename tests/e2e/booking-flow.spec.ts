@@ -43,6 +43,10 @@ async function dragSlots(page: Page, fromLabel: string, toLabel: string) {
   const from = page.getByRole('button', { name: fromLabel }).first()
   const to   = page.getByRole('button', { name: toLabel }).first()
 
+  // Scroll into view before reading bounding boxes — raw mouse coordinates
+  // are viewport-relative and events outside the visible area are not dispatched.
+  await from.scrollIntoViewIfNeeded()
+
   const boxFrom = await from.boundingBox()
   const boxTo   = await to.boundingBox()
   if (!boxFrom || !boxTo) throw new Error('Could not get bounding box for drag slots')
@@ -245,7 +249,7 @@ test.describe('Court switching', () => {
     await page.getByRole('button', { name: 'Court 3 (Indoor)' }).click()
     await waitForSlots(page)
 
-    await expect(page.getByText(/₱700/)).toBeVisible()
+    await expect(page.getByTestId('availability-section').getByText(/₱700/)).toBeVisible()
   })
 })
 
@@ -256,7 +260,8 @@ test.describe('Calendar – 30-day booking window', () => {
     await page.goto(BUSINESS)
     await page.locator('button').filter({ hasText: 'Today' }).click()
     const monthName = new Date().toLocaleDateString('en-US', { month: 'long' })
-    await expect(page.getByText(new RegExp(monthName))).toBeVisible()
+    // Match "April 2026" (calendar header) but not "April 25, 2026" (date button)
+    await expect(page.getByText(new RegExp(monthName + ' \\d{4}'))).toBeVisible()
   })
 
   test("today's date is selectable", async ({ page }) => {
@@ -481,6 +486,6 @@ test.describe('My Bookings tab', () => {
     await page.getByRole('button', { name: /cancel booking/i }).click()
 
     // Status badge changes to "Cancelled"
-    await expect(page.getByText('Cancelled')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Cancelled' })).toBeVisible({ timeout: 5_000 })
   })
 })

@@ -62,7 +62,11 @@ export default function BookingConfirmModal({
 
   const startHour = selection.hours[0];
   const endHour = selection.hours[selection.hours.length - 1] + 1;
-  const dateStr = selectedDate.toISOString().split("T")[0];
+  const dateStr = [
+    selectedDate.getFullYear(),
+    String(selectedDate.getMonth() + 1).padStart(2, "0"),
+    String(selectedDate.getDate()).padStart(2, "0"),
+  ].join("-");
 
   async function handleConfirm() {
     if (!user) return;

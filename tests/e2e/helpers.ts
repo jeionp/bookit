@@ -7,14 +7,21 @@ const PROJECT  = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'demo-bookit'
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
+function localDateKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function todayKey(): string {
-  return new Date().toISOString().split('T')[0]
+  return localDateKey(new Date())
 }
 
 export function dateKeyDelta(daysFromNow: number): string {
   const d = new Date()
   d.setDate(d.getDate() + daysFromNow)
-  return d.toISOString().split('T')[0]
+  return localDateKey(d)
 }
 
 // ─── Firestore ────────────────────────────────────────────────────────────────

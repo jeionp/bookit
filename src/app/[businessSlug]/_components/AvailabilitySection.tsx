@@ -11,7 +11,10 @@ import { getBookedHours } from "@/lib/firebase/bookings";
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function toDateKey(date: Date): string {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function parseHour(timeStr: string): number {
@@ -305,7 +308,7 @@ export default function AvailabilitySection({
   const totalPrice = activeSelection?.totalPrice ?? 0;
 
   return (
-    <section className="space-y-5">
+    <section data-testid="availability-section" className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-gray-900">Check Availability</h2>
         <p className="text-sm text-gray-500 mt-0.5">
