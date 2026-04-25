@@ -207,38 +207,49 @@ export default function AvailabilitySection({
     ? getValidRange(drag.startHour, drag.currentHour, bookedHours)
     : [];
 
-  // Close calendar on outside click
+  // Close calendar on outside click or touch
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function handleOutside(e: MouseEvent | TouchEvent) {
       if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
         setCalendarOpen(false);
       }
     }
-    if (calendarOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    if (calendarOpen) {
+      document.addEventListener("mousedown", handleOutside);
+      document.addEventListener("touchstart", handleOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
   }, [calendarOpen]);
 
-  // Track drag position via document mousemove — more reliable than onMouseEnter
-  // on individual buttons in headless browsers where synthetic events may not
-  // trigger mouseenter on child elements during a programmatic drag.
+  // Track drag position via document mousemove / touchmove
   useEffect(() => {
     if (!drag) return;
-    function handleMouseMove(e: MouseEvent) {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
+    function updateHourAt(clientX: number, clientY: number) {
+      const el = document.elementFromPoint(clientX, clientY);
       const btn = el?.closest("[data-slot-hour]");
       if (!btn) return;
       const hour = parseInt(btn.getAttribute("data-slot-hour") ?? "", 10);
-      if (!isNaN(hour)) {
-        setDrag((d) => (d ? { ...d, currentHour: hour } : null));
-      }
+      if (!isNaN(hour)) setDrag((d) => (d ? { ...d, currentHour: hour } : null));
+    }
+    function handleMouseMove(e: MouseEvent) { updateHourAt(e.clientX, e.clientY); }
+    function handleTouchMove(e: TouchEvent) {
+      e.preventDefault(); // prevent page scroll while dragging slots
+      updateHourAt(e.touches[0].clientX, e.touches[0].clientY);
     }
     window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("touchmove", handleTouchMove);
+    };
   }, [drag]);
 
-  // Finalize drag selection on mouseup anywhere in the document
+  // Finalize drag selection on mouseup / touchend anywhere in the document
   useEffect(() => {
-    function handleMouseUp() {
+    function finalizeSelection() {
       if (!drag) return;
       const hours = getValidRange(drag.startHour, drag.currentHour, bookedHours);
       setDrag(null);
@@ -272,8 +283,12 @@ export default function AvailabilitySection({
       });
     }
 
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => window.removeEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mouseup", finalizeSelection);
+    window.addEventListener("touchend", finalizeSelection);
+    return () => {
+      window.removeEventListener("mouseup", finalizeSelection);
+      window.removeEventListener("touchend", finalizeSelection);
+    };
   }, [drag, bookedHours, selection]);
 
   function handleSlotMouseDown(hour: number) {
@@ -312,7 +327,7 @@ export default function AvailabilitySection({
       <div>
         <h2 className="text-xl font-bold text-gray-900">Check Availability</h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          Click a slot or drag across slots to select a time range
+          Tap a slot or drag across slots to select a time range
         </p>
       </div>
 
@@ -477,6 +492,7 @@ export default function AvailabilitySection({
                         data-slot-hour={hour}
                         disabled={unavailable}
                         onMouseDown={() => handleSlotMouseDown(hour)}
+                        onTouchStart={(e) => { e.preventDefault(); handleSlotMouseDown(hour); }}
                         className={cls}
                         style={style}
                         draggable={false}
