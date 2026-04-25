@@ -43,9 +43,13 @@ async function dragSlots(page: Page, fromLabel: string, toLabel: string) {
   const from = page.getByRole('button', { name: fromLabel }).first()
   const to   = page.getByRole('button', { name: toLabel }).first()
 
-  // Scroll into view before reading bounding boxes — raw mouse coordinates
-  // are viewport-relative and events outside the visible area are not dispatched.
+  // Scroll `to` into view last so it sits at the bottom of the viewport.
+  // Since `from` is above `to` and close by, scrolling `to` to the nearest
+  // edge keeps `from` within the viewport too. Both must be in the viewport
+  // so that document.elementFromPoint() finds them during the drag —
+  // coordinates outside the viewport return null and currentHour never updates.
   await from.scrollIntoViewIfNeeded()
+  await to.scrollIntoViewIfNeeded()
 
   const boxFrom = await from.boundingBox()
   const boxTo   = await to.boundingBox()
