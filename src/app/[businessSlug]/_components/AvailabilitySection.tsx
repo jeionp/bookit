@@ -154,6 +154,7 @@ export default function AvailabilitySection({
   const [bookedHours, setBookedHours] = useState<number[]>([]);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
+  const slotsRef = useRef<HTMLDivElement>(null);
   const prevSelectionRef = useRef<Selection | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const lastTouchTime = useRef(0);
@@ -225,6 +226,19 @@ export default function AvailabilitySection({
       document.removeEventListener("touchstart", handleOutside);
     };
   }, [calendarOpen]);
+
+  // Clear selection when user clicks/taps outside the slot grid and action bar
+  useEffect(() => {
+    function handleOutside(e: MouseEvent | TouchEvent) {
+      if (dragRef.current) return;
+      const target = e.target as Node;
+      const inSlots = slotsRef.current?.contains(target);
+      const inActionBar = (document.querySelector("[data-testid='action-bar']") as HTMLElement | null)?.contains(target);
+      if (!inSlots && !inActionBar) setSelection(null);
+    }
+    document.addEventListener("pointerdown", handleOutside);
+    return () => document.removeEventListener("pointerdown", handleOutside);
+  }, []);
 
   // Track drag position via document mousemove / touchmove
   useEffect(() => {
@@ -430,15 +444,20 @@ export default function AvailabilitySection({
       {slots.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">Closed on this day</p>
       ) : (
-        <div className="space-y-5 select-none">
+        <div ref={slotsRef} className="space-y-5 select-none">
           {/* Selected court header */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-800">{facility.name}</span>
-            <span className="text-sm font-semibold" style={{ color: business.accentColor }}>
-              {facility.primePricePerHour ? "from " : ""}
-              ₱{facility.pricePerHour.toLocaleString()}
-              <span className="font-normal text-gray-400">/hr</span>
-            </span>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-800">{facility.name}</span>
+              <span className="text-sm font-semibold" style={{ color: business.accentColor }}>
+                {facility.primePricePerHour ? "from " : ""}
+                ₱{facility.pricePerHour.toLocaleString()}
+                <span className="font-normal text-gray-400">/hr</span>
+              </span>
+            </div>
+            {facility.description && (
+              <p className="text-xs text-gray-500 leading-relaxed">{facility.description}</p>
+            )}
           </div>
 
           {loadingSlots ? (
