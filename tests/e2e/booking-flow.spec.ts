@@ -225,6 +225,31 @@ test.describe('Slot selection', () => {
     await expect(page.getByText('8 AM – 9 AM')).toBeVisible()
     await expect(page.getByText('1 hr')).toBeVisible()
   })
+
+  test('clicking a different slot replaces the existing selection', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await waitForSlots(page)
+
+    await selectSlot(page, '8 AM')
+    await expect(page.getByTestId('action-bar').getByText('8 AM – 9 AM', { exact: false })).toBeVisible()
+
+    await selectSlot(page, '10 AM')
+    await expect(page.getByTestId('action-bar').getByText('10 AM – 11 AM', { exact: false })).toBeVisible()
+    await expect(page.getByTestId('action-bar').getByText('8 AM – 9 AM', { exact: false })).not.toBeVisible()
+  })
+
+  test('clicking outside the availability section and action bar clears the selection', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await waitForSlots(page)
+
+    await selectSlot(page, '8 AM')
+    await expect(page.getByRole('button', { name: /book now/i })).toBeVisible()
+
+    // Click the page header — outside both the slot grid and the action bar
+    await page.locator('header').getByText('bookit').click()
+
+    await expect(page.getByRole('button', { name: /book now/i })).not.toBeVisible()
+  })
 })
 
 // ─── Court switching ──────────────────────────────────────────────────────────
@@ -449,6 +474,97 @@ test.describe('Double-booking conflict', () => {
     await expect(
       page.getByText(/just booked by someone else/i)
     ).toBeVisible({ timeout: 10_000 })
+  })
+})
+
+// ─── Court occupancy badges ───────────────────────────────────────────────────
+
+// Returns today's bookable slots for PaddleUp, derived from businesses.ts operating hours.
+// Used to compute dynamic seeding counts so badge thresholds hold on any day of the week.
+function paddleUpTodaySlots(): number[] {
+  const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
+  const schedule: Record<string, { open: number; close: number }> = {
+    Monday:    { open: 6, close: 22 },
+    Tuesday:   { open: 6, close: 22 },
+    Wednesday: { open: 6, close: 22 },
+    Thursday:  { open: 6, close: 22 },
+    Friday:    { open: 6, close: 23 },
+    Saturday:  { open: 5, close: 23 },
+    Sunday:    { open: 5, close: 22 },
+  }
+  const { open, close } = schedule[dayName] ?? { open: 6, close: 22 }
+  return Array.from({ length: close - open }, (_, i) => i + open)
+}
+
+test.describe('Court occupancy badges', () => {
+  test('no badge when a court has no bookings today', async ({ page }) => {
+    // clearFirestore in beforeEach ensures zero bookings — no seed needed
+    await page.goto(BUSINESS)
+    await waitForSlots(page)
+    await expect(page.getByText('Busy', { exact: true })).not.toBeVisible()
+    await expect(page.getByText('Almost full', { exact: true })).not.toBeVisible()
+  })
+
+  test('no badge when occupancy is below 60%', async ({ page }) => {
+    const slots = paddleUpTodaySlots()
+    await seedBooking({
+      facilityId:   COURT_1,
+      facilityName: COURT_1_NAME,
+      date:         todayKey(),
+      hours:        slots.slice(0, Math.floor(slots.length * 0.5)), // 50% — below threshold
+    })
+
+    await page.goto(BUSINESS)
+    await waitForSlots(page)
+    await expect(page.getByText('Busy', { exact: true })).not.toBeVisible()
+    await expect(page.getByText('Almost full', { exact: true })).not.toBeVisible()
+  })
+
+  test('shows amber Busy badge when court is 60–79% booked today', async ({ page }) => {
+    const slots = paddleUpTodaySlots()
+    await seedBooking({
+      facilityId:   COURT_1,
+      facilityName: COURT_1_NAME,
+      date:         todayKey(),
+      hours:        slots.slice(0, Math.round(slots.length * 0.65)), // 65% — safely inside Busy band
+    })
+
+    await page.goto(BUSINESS)
+    await expect(page.getByText('Busy', { exact: true })).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Almost full', { exact: true })).not.toBeVisible()
+  })
+
+  test('shows red Almost full badge when court is ≥80% booked today', async ({ page }) => {
+    const slots = paddleUpTodaySlots()
+    await seedBooking({
+      facilityId:   COURT_1,
+      facilityName: COURT_1_NAME,
+      date:         todayKey(),
+      hours:        slots.slice(0, Math.ceil(slots.length * 0.85)), // 85% — above Almost full threshold
+    })
+
+    await page.goto(BUSINESS)
+    await expect(page.getByText('Almost full', { exact: true })).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Busy', { exact: true })).not.toBeVisible()
+  })
+
+  test('badge is per-court: heavily booked court shows badge while others show none', async ({ page }) => {
+    const slots = paddleUpTodaySlots()
+    // Court 1 at 85% → "Almost full"; all other courts have no bookings
+    await seedBooking({
+      facilityId:   COURT_1,
+      facilityName: COURT_1_NAME,
+      date:         todayKey(),
+      hours:        slots.slice(0, Math.ceil(slots.length * 0.85)),
+    })
+
+    await page.goto(BUSINESS)
+    // Court 1's badge appears
+    await expect(page.getByText('Almost full', { exact: true })).toBeVisible({ timeout: 8_000 })
+    // Exactly one "Almost full" badge — confirms other courts did not inherit it
+    await expect(page.getByText('Almost full', { exact: true })).toHaveCount(1)
+    // No court is in the Busy band
+    await expect(page.getByText('Busy', { exact: true })).not.toBeVisible()
   })
 })
 

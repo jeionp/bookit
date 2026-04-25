@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Business } from "@/lib/types";
+import { toDateKey, generateSlots } from "@/lib/slots";
+import { getBookedHours } from "@/lib/firebase/bookings";
 import AvailabilitySection, { Selection } from "@/app/[businessSlug]/_components/AvailabilitySection";
 
 interface HomeTabProps {
@@ -19,6 +21,42 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
   const carouselRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const [todayBookedCounts, setTodayBookedCounts] = useState<Record<string, number>>({});
+
+  const todayKey = useMemo(() => toDateKey(new Date()), []);
+  const todayDayName = useMemo(
+    () => new Date().toLocaleDateString("en-US", { weekday: "long" }),
+    []
+  );
+  const totalSlotsToday = useMemo(() => {
+    const hours = business.operatingHours.find((h) => h.day === todayDayName);
+    if (!hours || hours.closed) return 0;
+    return generateSlots(hours.open, hours.close).length;
+  }, [business.operatingHours, todayDayName]);
+
+  useEffect(() => {
+    if (totalSlotsToday === 0) return;
+    Promise.all(
+      business.facilities.map((f) =>
+        getBookedHours(business.slug, f.id, todayKey)
+          .then((hours) => ({ id: f.id, count: hours.length }))
+          .catch(() => ({ id: f.id, count: 0 }))
+      )
+    ).then((results) => {
+      const map: Record<string, number> = {};
+      results.forEach(({ id, count }) => { map[id] = count; });
+      setTodayBookedCounts(map);
+    });
+  }, [business.facilities, business.slug, todayKey, totalSlotsToday]);
+
+  function occupancyBadge(facilityId: string): { label: string; bg: string; text: string } | null {
+    if (totalSlotsToday === 0 || !(facilityId in todayBookedCounts)) return null;
+    const ratio = todayBookedCounts[facilityId] / totalSlotsToday;
+    if (ratio >= 0.8) return { label: "Almost full", bg: "#fee2e2", text: "#991b1b" };
+    if (ratio >= 0.6) return { label: "Busy", bg: "#fef3c7", text: "#92400e" };
+    return null;
+  }
 
   const updateScrollState = useCallback(() => {
     const el = carouselRef.current;
@@ -106,6 +144,17 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
                       className="object-cover"
                       sizes="208px"
                     />
+                    {(() => {
+                      const badge = occupancyBadge(facility.id);
+                      return badge ? (
+                        <span
+                          className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          style={{ backgroundColor: badge.bg, color: badge.text }}
+                        >
+                          {badge.label}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                   <div className="p-3 flex flex-col flex-1">
                     <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
