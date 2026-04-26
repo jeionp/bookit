@@ -450,6 +450,62 @@ test.describe('Authentication gate', () => {
   })
 })
 
+// ─── Auth modal — password visibility toggle ──────────────────────────────────
+
+test.describe('Auth modal — password visibility', () => {
+  async function openSignInModal(page: Page) {
+    await page.goto(BUSINESS)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect(page.getByText('Welcome back')).toBeVisible()
+  }
+
+  test('password field is hidden by default', async ({ page }) => {
+    await openSignInModal(page)
+
+    await expect(page.getByPlaceholder('••••••••')).toHaveAttribute('type', 'password')
+  })
+
+  test('"Show password" button reveals the password as plain text', async ({ page }) => {
+    await openSignInModal(page)
+    await page.getByPlaceholder('••••••••').fill('mySecret1!')
+
+    await page.getByLabel('Show password').click()
+
+    await expect(page.getByPlaceholder('••••••••')).toHaveAttribute('type', 'text')
+  })
+
+  test('"Hide password" button re-masks the password after it was revealed', async ({ page }) => {
+    await openSignInModal(page)
+
+    await page.getByLabel('Show password').click()
+    await page.getByLabel('Hide password').click()
+
+    await expect(page.getByPlaceholder('••••••••')).toHaveAttribute('type', 'password')
+  })
+
+  test('toggle button aria-label updates to "Hide password" when password is visible', async ({ page }) => {
+    await openSignInModal(page)
+
+    await expect(page.getByLabel('Show password')).toBeVisible()
+
+    await page.getByLabel('Show password').click()
+
+    await expect(page.getByLabel('Hide password')).toBeVisible()
+    await expect(page.getByLabel('Show password')).not.toBeAttached()
+  })
+
+  test('toggle works in Sign Up mode', async ({ page }) => {
+    await openSignInModal(page)
+    await page.getByRole('button', { name: 'Sign Up' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Create account' })).toBeVisible()
+
+    await page.getByLabel('Show password').click()
+
+    await expect(page.getByPlaceholder('••••••••')).toHaveAttribute('type', 'text')
+  })
+})
+
 // ─── Booking confirmation ─────────────────────────────────────────────────────
 
 test.describe('Booking confirmation', () => {

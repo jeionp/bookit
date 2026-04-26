@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:security": "vitest run --config vitest.security.config.ts"
+    "test:security": "vitest run --config vitest.security.config.ts",
+    "seed:admin": "node scripts/seed-admin-emulator.mjs",
+    "grant:admin": "node scripts/grant-admin.mjs",
+    "revoke:admin": "node scripts/grant-admin.mjs --revoke"
   },
   "dependencies": {
     "firebase": "^12.12.1",
@@ -33,6 +36,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "firebase-admin": "^13.8.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5",

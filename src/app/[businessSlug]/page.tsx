@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { use, useState } from "react";
-import { MapPin, LogOut, Clock } from "lucide-react";
+import { MapPin, LogOut, Clock, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
 import { getBusinessBySlug } from "@/lib/businesses";
 import { useAuth } from "@/context/AuthContext";
 import { Selection } from "./_components/AvailabilitySection";
@@ -24,7 +25,7 @@ export default function BusinessPage({
 }) {
   const { businessSlug } = use(params);
   const business = getBusinessBySlug(businessSlug);
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, isAdminOf } = useAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>("Home");
   const [authOpen, setAuthOpen] = useState(false);
@@ -53,6 +54,19 @@ export default function BusinessPage({
                 <span className="text-sm text-gray-600 hidden sm:block">
                   {user.displayName ?? user.email}
                 </span>
+                {isAdminOf(businessSlug) && (
+                  <Link
+                    href={`/${businessSlug}/admin`}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-colors"
+                    style={{
+                      backgroundColor: `${business.accentColor}15`,
+                      color: business.accentColor,
+                    }}
+                  >
+                    <LayoutDashboard size={13} />
+                    Admin
+                  </Link>
+                )}
                 <button
                   onClick={signOut}
                   className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"

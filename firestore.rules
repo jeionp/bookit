@@ -1,11 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Returns true if the authenticated user is an admin of the given business slug.
+    // Uses a cross-document read — counted toward Firestore read quotas.
+    function isAdminOfSlug(slug) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.slugs.hasAny([slug]);
+    }
+
+    match /admins/{uid} {
+      // Only the user themselves can read their own admin record
+      allow get: if request.auth != null && request.auth.uid == uid;
+      // No client writes — admin records are managed out-of-band (Firebase Console / Cloud Functions)
+      allow write: if false;
+    }
+
     match /bookings/{bookingId} {
 
-      // Single-document fetch: owner only
+      // Single-document fetch: owner OR admin of that booking's business
       allow get: if request.auth != null
-                 && request.auth.uid == resource.data.userId;
+                 && (request.auth.uid == resource.data.userId
+                     || isAdminOfSlug(resource.data.businessSlug));
 
       // Queries:
       //   - Authenticated users can query their own bookings (any status)
@@ -13,22 +29,31 @@ service cloud.firestore {
       //     availability display (getBookedHours). Trade-off: confirmed booking
       //     documents are visible to any caller who queries with status=="confirmed".
       //     To eliminate this, move availability reads to a Cloud Function.
+      //   - Admins can query all bookings for their business slug
       allow list: if (request.auth != null && resource.data.userId == request.auth.uid)
-                  || resource.data.status == "confirmed";
+                  || resource.data.status == "confirmed"
+                  || isAdminOfSlug(resource.data.businessSlug);
 
       // Create: authenticated, booking is for the caller, starts as confirmed,
-      // price must be a positive number
+      // price must be a positive number.
+      // Admins may also create bookings on behalf of others (walk-ins).
       allow create: if request.auth != null
-                    && request.resource.data.userId == request.auth.uid
                     && request.resource.data.status == "confirmed"
                     && request.resource.data.totalPrice is number
-                    && request.resource.data.totalPrice > 0;
+                    && request.resource.data.totalPrice > 0
+                    && (request.resource.data.userId == request.auth.uid
+                        || isAdminOfSlug(request.resource.data.businessSlug));
 
-      // Update: owner can only flip status to "cancelled"; no other field changes
+      // Update:
+      //   - Owner can only flip status to "cancelled"; no other field changes
+      //   - Admins can update any field on bookings for their business
       allow update: if request.auth != null
-                    && request.auth.uid == resource.data.userId
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-                    && request.resource.data.status == "cancelled";
+                    && (
+                      (request.auth.uid == resource.data.userId
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+                        && request.resource.data.status == "cancelled")
+                      || isAdminOfSlug(resource.data.businessSlug)
+                    );
 
       // No deletes ever
       allow delete: if false;

@@ -200,6 +200,127 @@ describe('bookings — read', () => {
   })
 })
 
+// ─── Admins collection ────────────────────────────────────────────────────────
+
+async function seedAdmin(uid: string, slugs: string[]) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'admins', uid), { slugs })
+  })
+}
+
+describe('admins — read', () => {
+  beforeEach(async () => {
+    await seedAdmin('alice', ['paddleup'])
+  })
+
+  test('user can read their own admin record', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertSucceeds(getDoc(doc(db, 'admins', 'alice')))
+  })
+
+  test('user cannot read another user\'s admin record', async () => {
+    const db = testEnv.authenticatedContext('bob').firestore()
+    await assertFails(getDoc(doc(db, 'admins', 'alice')))
+  })
+
+  test('unauthenticated user cannot read any admin record', async () => {
+    const db = testEnv.unauthenticatedContext().firestore()
+    await assertFails(getDoc(doc(db, 'admins', 'alice')))
+  })
+})
+
+describe('admins — write', () => {
+  test('no one can write to the admins collection', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertFails(setDoc(doc(db, 'admins', 'alice'), { slugs: ['paddleup'] }))
+  })
+})
+
+// ─── Admin booking permissions ────────────────────────────────────────────────
+
+describe('bookings — admin reads', () => {
+  beforeEach(async () => {
+    await seedAdmin('admin-user', ['paddleup'])
+    await seedDoc('alice-b1', booking('alice', 'confirmed'))
+    await seedDoc('alice-b2', booking('alice', 'cancelled'))
+  })
+
+  test('admin can fetch a booking for their business slug', async () => {
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertSucceeds(getDoc(doc(db, 'bookings', 'alice-b1')))
+  })
+
+  test('admin can list all bookings for their business (including cancelled)', async () => {
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, 'bookings'),
+          where('businessSlug', '==', 'paddleup'),
+        )
+      )
+    )
+  })
+
+  test('admin cannot fetch a booking for a different business slug', async () => {
+    // admin-user is only admin of 'paddleup'; seed a booking for 'other-biz'
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'bookings', 'other-b1'), {
+        ...booking('charlie'),
+        businessSlug: 'other-biz',
+      })
+    })
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertFails(getDoc(doc(db, 'bookings', 'other-b1')))
+  })
+})
+
+describe('bookings — admin writes', () => {
+  beforeEach(async () => {
+    await seedAdmin('admin-user', ['paddleup'])
+    await seedDoc('alice-b1', booking('alice', 'confirmed'))
+  })
+
+  test('admin can create a booking on behalf of another user (walk-in)', async () => {
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertSucceeds(
+      setDoc(doc(db, 'bookings', 'walkin-b1'), booking('walk-in-customer'))
+    )
+  })
+
+  test('admin can update any field on a booking for their business', async () => {
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertSucceeds(
+      updateDoc(doc(db, 'bookings', 'alice-b1'), {
+        facilityId: 'court-2',
+        facilityName: 'Court 2',
+        hours: [14, 15],
+        totalPrice: 1000,
+      })
+    )
+  })
+
+  test('admin can cancel a booking for their business', async () => {
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertSucceeds(
+      updateDoc(doc(db, 'bookings', 'alice-b1'), { status: 'cancelled' })
+    )
+  })
+
+  test('admin cannot update a booking for a different business slug', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'bookings', 'other-b1'), {
+        ...booking('charlie'),
+        businessSlug: 'other-biz',
+      })
+    })
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertFails(
+      updateDoc(doc(db, 'bookings', 'other-b1'), { status: 'cancelled' })
+    )
+  })
+})
+
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 describe('bookings — delete', () => {
