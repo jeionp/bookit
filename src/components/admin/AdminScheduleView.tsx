@@ -39,12 +39,20 @@ export default function AdminScheduleView({ business }: { business: Business }) 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
+    let active = true;
+    getAllBookingsForDay(business.slug, toDateString(date)).then((data) => {
+      if (!active) return;
+      setBookings(data);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [business.slug, date]);
+
+  function navigate(days: number) {
     setLoading(true);
     setSelectedBooking(null);
-    getAllBookingsForDay(business.slug, toDateString(date))
-      .then(setBookings)
-      .finally(() => setLoading(false));
-  }, [business.slug, date]);
+    setDate((d) => addDays(d, days));
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -82,7 +90,7 @@ export default function AdminScheduleView({ business }: { business: Business }) 
       {/* Date navigation */}
       <div className="bg-white border-b border-gray-100 shrink-0 px-4 py-2.5 flex items-center justify-between">
         <button
-          onClick={() => setDate((d) => addDays(d, -1))}
+          onClick={() => navigate(-1)}
           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
           aria-label="Previous day"
         >
@@ -90,7 +98,7 @@ export default function AdminScheduleView({ business }: { business: Business }) 
         </button>
         <span className="text-sm font-bold text-gray-900">{formatNavDate(date)}</span>
         <button
-          onClick={() => setDate((d) => addDays(d, 1))}
+          onClick={() => navigate(1)}
           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
           aria-label="Next day"
         >
