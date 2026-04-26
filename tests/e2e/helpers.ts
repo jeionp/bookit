@@ -108,7 +108,7 @@ export async function createTestUser(
 }
 
 // Signs in via the Auth emulator and returns the idToken + localId (UID).
-async function signInUser(
+export async function signInUser(
   email:    string,
   password: string
 ): Promise<{ idToken: string; localId: string }> {
@@ -123,4 +123,29 @@ async function signInUser(
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(`signInUser failed: ${JSON.stringify(body)}`)
   return { idToken: body.idToken, localId: body.localId }
+}
+
+// ─── Admin seeding ────────────────────────────────────────────────────────────
+
+// Writes /admins/{uid} with the given slugs, bypassing Firestore security rules.
+// "Bearer owner" is the Firebase emulator's admin-bypass token.
+export async function seedAdminDoc(uid: string, slugs: string[]): Promise<void> {
+  const res = await fetch(
+    `${FIRESTORE}/v1/projects/${PROJECT}/databases/(default)/documents/admins/${uid}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer owner',
+      },
+      body: JSON.stringify({
+        fields: {
+          slugs: {
+            arrayValue: { values: slugs.map((s) => ({ stringValue: s })) },
+          },
+        },
+      }),
+    }
+  )
+  if (!res.ok) throw new Error(`seedAdminDoc failed: ${await res.text()}`)
 }

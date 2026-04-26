@@ -110,3 +110,19 @@ export async function getBookedHours(
   const bookings = await getBookingsForDate(businessSlug, facilityId, date);
   return bookings.flatMap((b) => b.hours);
 }
+
+// Requires a composite index: businessSlug ASC, date ASC, status ASC
+// Firebase will surface a link to auto-create it on first run if missing.
+export async function getAllBookingsForDay(
+  businessSlug: string,
+  date: string
+): Promise<Booking[]> {
+  const q = query(
+    collection(db, "bookings"),
+    where("businessSlug", "==", businessSlug),
+    where("date", "==", date),
+    where("status", "==", "confirmed")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
+}

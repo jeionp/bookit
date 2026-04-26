@@ -52,6 +52,46 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
 
    Open [http://localhost:3000/paddleup](http://localhost:3000/paddleup) to see the demo business.
 
+## Admin access
+
+The admin dashboard is at `/<business-slug>/admin` (e.g. `/paddleup/admin`). Only users with an entry in the `admins` Firestore collection can access it. Admins see an **Admin** link in the storefront nav after signing in.
+
+### Granting access locally (emulator)
+
+With the emulator running, create an admin account in one step:
+
+```bash
+npm run seed:admin -- <email> <password> <slug>
+
+# Example — creates the account if it doesn't exist, then writes the admin doc:
+npm run seed:admin -- admin@paddleup.test Admin1234! paddleup
+```
+
+Sign in at [http://localhost:3000/paddleup](http://localhost:3000/paddleup) with those credentials.
+
+### Granting access in production
+
+**One-time setup:**
+
+1. Go to Firebase Console → **jidoka-pixels** → Project Settings → Service Accounts
+2. Click **Generate new private key** and save the file as `service-account.json` in the project root
+3. `service-account.json` is gitignored — never commit it
+
+**Grant admin access** (user must have signed up first):
+
+```bash
+npm run grant:admin -- <email> <slug>
+
+# Example:
+npm run grant:admin -- paguio.ja@gmail.com paddleup
+```
+
+**Revoke admin access:**
+
+```bash
+npm run revoke:admin -- <email> <slug>
+```
+
 ## Available scripts
 
 | Command | Description |
@@ -62,6 +102,9 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
 | `npm test` | Vitest unit tests |
 | `npm run test:security` | Firestore security rule tests (emulator required) |
 | `npm run test:e2e` | Playwright end-to-end tests (emulator + dev server required) |
+| `npm run seed:admin` | Create an admin account in the local emulator |
+| `npm run grant:admin` | Grant production admin access by email |
+| `npm run revoke:admin` | Revoke production admin access by email |
 
 ## Running tests
 
