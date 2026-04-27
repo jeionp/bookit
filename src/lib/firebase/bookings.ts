@@ -163,6 +163,24 @@ export async function rescheduleBooking(
   });
 }
 
+// Requires composite index: businessSlug ASC, date ASC
+// Firebase will surface a link to auto-create it on first run if missing.
+export async function getBookingsInRange(
+  businessSlug: string,
+  startDate: string,
+  endDate: string,
+): Promise<Booking[]> {
+  const q = query(
+    collection(db, "bookings"),
+    where("businessSlug", "==", businessSlug),
+    where("date", ">=", startDate),
+    where("date", "<=", endDate),
+    orderBy("date", "asc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
+}
+
 // Requires a composite index: businessSlug ASC, date ASC, status ASC
 // Firebase will surface a link to auto-create it on first run if missing.
 export async function getAllBookingsForDay(

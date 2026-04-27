@@ -4,7 +4,7 @@ import { use } from "react";
 import { notFound } from "next/navigation";
 import { getBusinessBySlug } from "@/lib/businesses";
 import AdminGuard from "@/components/admin/AdminGuard";
-import AdminScheduleView from "@/components/admin/AdminScheduleView";
+import AdminView from "@/components/admin/AdminView";
 
 export default function AdminPage({
   params,
@@ -17,7 +17,7 @@ export default function AdminPage({
 
   return (
     <AdminGuard slug={businessSlug}>
-      <AdminScheduleView business={business} />
+      <AdminView business={business} />
     </AdminGuard>
   );
 }

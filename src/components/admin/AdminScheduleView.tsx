@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, LogOut, ExternalLink, Search } from "lucide-react";
-import Link from "next/link";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Business } from "@/lib/types";
 import { Booking, getAllBookingsForDay } from "@/lib/firebase/bookings";
-import { useAuth } from "@/context/AuthContext";
 import ScheduleGrid from "./ScheduleGrid";
 import BookingDetailPanel from "./BookingDetailPanel";
 
@@ -32,7 +30,6 @@ function formatNavDate(date: Date): string {
 }
 
 export default function AdminScheduleView({ business }: { business: Business }) {
-  const { signOut } = useAuth();
   const [date, setDate] = useState(() => new Date());
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,38 +78,7 @@ export default function AdminScheduleView({ business }: { business: Business }) 
     : bookings;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 shrink-0 h-14 flex items-center px-4 justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-base font-black tracking-tight text-gray-900">bookit</span>
-          <span className="text-gray-300">/</span>
-          <span className="text-sm font-semibold text-gray-600">{business.name}</span>
-          <span
-            className="text-xs font-bold px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: `${business.accentColor}15`, color: business.accentColor }}
-          >
-            Admin
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/${business.slug}`}
-            className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            <ExternalLink size={13} />
-            Public view
-          </Link>
-          <button
-            onClick={signOut}
-            className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            <LogOut size={15} />
-            Sign out
-          </button>
-        </div>
-      </header>
-
+    <div className="flex flex-col flex-1 overflow-hidden">
       {/* Date navigation */}
       <div className="bg-white border-b border-gray-100 shrink-0 px-4 py-2.5 flex items-center justify-between">
         <button
