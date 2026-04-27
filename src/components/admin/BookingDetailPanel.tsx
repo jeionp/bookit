@@ -161,6 +161,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
         </span>
         <button
           onClick={onClose}
+          aria-label="Close"
           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700"
         >
           <X size={16} />

@@ -5,6 +5,7 @@ import {
   signInUser,
   seedAdminDoc,
   seedBooking,
+  seedBookingForUser,
   todayKey,
   dateKeyDelta,
 } from './helpers'
@@ -156,8 +157,7 @@ test.describe('Admin schedule view', () => {
     await page.getByText('Seed User').click()
     await expect(page.getByText('Booking Detail')).toBeVisible()
 
-    // The X button is the only button inside the panel header
-    await page.getByTestId('booking-detail-panel').locator('button').click()
+    await page.getByTestId('booking-detail-panel').getByRole('button', { name: /close/i }).click()
 
     await expect(page.getByText('Booking Detail')).not.toBeAttached()
   })
@@ -325,6 +325,56 @@ test.describe('Admin booking management', () => {
 
     await page.getByPlaceholder('Search bookings…').fill('')
     await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('rescheduling to a different date removes the booking from today\'s grid', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+    await expect(page.getByText('Reschedule Booking')).toBeVisible()
+
+    // Move to tomorrow — hour 9 stays selected (not taken on that day)
+    await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+    await page.getByTestId('confirm-reschedule-btn').click()
+
+    // Booking moved to tomorrow — must not appear on today's grid
+    await expect(page.getByText('Seed User')).not.toBeAttached({ timeout: 8_000 })
+  })
+
+  test('a slot booked by another booking appears disabled in the reschedule picker', async ({ page }) => {
+    // Alpha books court-1 at 9 AM; Beta books court-1 at 2 PM (hour 14)
+    await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9], userId: 'uid-alpha', userEmail: 'alpha@bookit-test.internal', userName: 'Alpha User' })
+    await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [14], userId: 'uid-beta', userEmail: 'beta@bookit-test.internal', userName: 'Beta User' })
+    await goToScheduleView(page, adminUid)
+
+    // Open Alpha's detail panel and enter reschedule mode
+    await page.getByText('Alpha User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    // Wait for slot availability to finish loading
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+
+    // Beta's 2 PM slot must be disabled; Alpha's own 9 AM slot is excluded and stays selectable
+    await expect(panel.getByRole('button', { name: '2 PM' })).toBeDisabled()
+    await expect(panel.getByRole('button', { name: '9 AM' })).not.toBeDisabled()
+  })
+
+  test('search filter shows only the matching booking when multiple users have bookings', async ({ page }) => {
+    await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9], userId: 'uid-alpha', userEmail: 'alpha@bookit-test.internal', userName: 'Alpha User' })
+    await seedBookingForUser({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [9], userId: 'uid-beta', userEmail: 'beta@bookit-test.internal', userName: 'Beta User' })
+    await goToScheduleView(page, adminUid)
+
+    await expect(page.getByText('Alpha User')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Beta User')).toBeVisible({ timeout: 8_000 })
+
+    await page.getByPlaceholder('Search bookings…').fill('Alpha')
+
+    await expect(page.getByText('Alpha User')).toBeVisible()
+    await expect(page.getByText('Beta User')).not.toBeAttached()
   })
 })
 
