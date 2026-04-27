@@ -154,6 +154,7 @@ export async function seedBookingForUser(opts: {
       userName:   { stringValue: opts.userName },
       totalPrice: { integerValue: String(opts.hours.length * 500) },
       currency:   { stringValue: 'PHP' },
+      createdAt:  { timestampValue: new Date().toISOString() },
     },
   }
 
