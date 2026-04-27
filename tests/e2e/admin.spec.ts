@@ -215,6 +215,119 @@ test.describe('Admin schedule view', () => {
   })
 })
 
+// ─── Phase 3: Booking Management ─────────────────────────────────────────────
+
+test.describe('Admin booking management', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('admin can cancel a confirmed booking and it is removed from the grid', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+    await page.getByTestId('confirm-cancel-btn').click()
+
+    await expect(page.getByText('Seed User')).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByText('Booking Detail')).not.toBeAttached()
+  })
+
+  test('cancel shows a confirmation dialog before cancelling', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+
+    // Confirmation dialog is shown
+    await expect(page.getByText('Cancel this booking?')).toBeVisible()
+    // Booking is still on the grid
+    await expect(page.getByText('Seed User')).toBeAttached()
+
+    // Dismiss with "No"
+    await page.getByRole('button', { name: 'No' }).click()
+    await expect(page.getByText('Cancel this booking?')).not.toBeAttached()
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('admin can reschedule a booking to a different court', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    // Change to Court 2 (no existing bookings — hours stay selected)
+    await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+
+    await page.getByTestId('confirm-reschedule-btn').click()
+
+    // Detail panel now shows Court 2
+    const panel = page.getByTestId('booking-detail-panel')
+    await expect(panel.getByText('Court 2')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('reschedule back button returns to detail view without saving', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+    await expect(page.getByText('Reschedule Booking')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Back' }).click()
+
+    await expect(page.getByText('Booking Detail')).toBeVisible()
+    await expect(page.getByTestId('booking-detail-panel').getByText('Court 1')).toBeVisible()
+  })
+
+  test('search filter hides non-matching booking blocks', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await expect(page.getByText('Seed User')).toBeVisible({ timeout: 8_000 })
+
+    await page.getByPlaceholder('Search bookings…').fill('nonexistent')
+
+    await expect(page.getByText('Seed User')).not.toBeAttached()
+  })
+
+  test('search filter shows matching bookings by name', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByPlaceholder('Search bookings…').fill('Seed')
+
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('search filter shows matching bookings by email', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByPlaceholder('Search bookings…').fill('seed@bookit')
+
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('clearing the search restores all booking blocks', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByPlaceholder('Search bookings…').fill('nonexistent')
+    await expect(page.getByText('Seed User')).not.toBeAttached()
+
+    await page.getByPlaceholder('Search bookings…').fill('')
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+})
+
 // ─── Storefront — admin link ──────────────────────────────────────────────────
 
 test.describe('Storefront — admin link', () => {

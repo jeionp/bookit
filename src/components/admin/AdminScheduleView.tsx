@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, LogOut, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, ExternalLink, Search } from "lucide-react";
 import Link from "next/link";
 import { Business } from "@/lib/types";
 import { Booking, getAllBookingsForDay } from "@/lib/firebase/bookings";
@@ -37,6 +37,7 @@ export default function AdminScheduleView({ business }: { business: Business }) 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -53,6 +54,31 @@ export default function AdminScheduleView({ business }: { business: Business }) 
     setSelectedBooking(null);
     setDate((d) => addDays(d, days));
   }
+
+  function handleAdminCancel() {
+    if (!selectedBooking) return;
+    setBookings((prev) => prev.filter((b) => b.id !== selectedBooking.id));
+    setSelectedBooking(null);
+  }
+
+  function handleReschedule(updated: Booking) {
+    const dateStr = toDateString(date);
+    if (updated.date === dateStr) {
+      setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      setSelectedBooking(updated);
+    } else {
+      setBookings((prev) => prev.filter((b) => b.id !== updated.id));
+      setSelectedBooking(null);
+    }
+  }
+
+  const filteredBookings = search.trim()
+    ? bookings.filter(
+        (b) =>
+          b.userName.toLowerCase().includes(search.toLowerCase()) ||
+          b.userEmail.toLowerCase().includes(search.toLowerCase())
+      )
+    : bookings;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -106,12 +132,27 @@ export default function AdminScheduleView({ business }: { business: Business }) 
         </button>
       </div>
 
+      {/* Search bar */}
+      <div className="bg-white border-b border-gray-100 shrink-0 px-4 py-2">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search bookings…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+            style={{ "--tw-ring-color": business.accentColor } as React.CSSProperties}
+          />
+        </div>
+      </div>
+
       {/* Body: grid + panel */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-hidden">
           <ScheduleGrid
             business={business}
-            bookings={bookings}
+            bookings={filteredBookings}
             date={date}
             loading={loading}
             selectedBookingId={selectedBooking?.id ?? null}
@@ -120,9 +161,12 @@ export default function AdminScheduleView({ business }: { business: Business }) 
         </div>
         {selectedBooking && (
           <BookingDetailPanel
+            key={selectedBooking.id}
             booking={selectedBooking}
-            accentColor={business.accentColor}
+            business={business}
             onClose={() => setSelectedBooking(null)}
+            onCancel={handleAdminCancel}
+            onReschedule={handleReschedule}
           />
         )}
       </div>
