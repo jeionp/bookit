@@ -248,13 +248,13 @@ test.describe('Admin booking management', () => {
 
     // Confirmation dialog is shown
     await expect(page.getByText('Cancel this booking?')).toBeVisible()
-    // Booking is still on the grid
-    await expect(page.getByText('Seed User')).toBeAttached()
+    // Grid block is still present (panel is also open, so scope to the button)
+    await expect(page.getByRole('button', { name: /Seed User/ })).toBeAttached()
 
     // Dismiss with "No"
     await page.getByRole('button', { name: 'No' }).click()
     await expect(page.getByText('Cancel this booking?')).not.toBeAttached()
-    await expect(page.getByText('Seed User')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Seed User/ })).toBeVisible()
   })
 
   test('admin can reschedule a booking to a different court', async ({ page }) => {
