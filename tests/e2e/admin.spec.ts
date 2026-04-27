@@ -233,7 +233,9 @@ test.describe('Admin booking management', () => {
     await page.getByTestId('cancel-booking-btn').click()
     await page.getByTestId('confirm-cancel-btn').click()
 
-    await expect(page.getByText('Seed User')).not.toBeAttached({ timeout: 8_000 })
+    // Target the grid block button specifically — the panel also contains "Seed User"
+    // text, so getByText would hit two elements while the async cancel is in flight.
+    await expect(page.getByRole('button', { name: /Seed User/ })).not.toBeAttached({ timeout: 8_000 })
     await expect(page.getByText('Booking Detail')).not.toBeAttached()
   })
 
