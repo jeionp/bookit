@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { clearFirestore, createTestUser, seedBooking, todayKey, dateKeyDelta } from './helpers'
+import { clearFirestore, createTestUser, seedBooking, seedBookingForUser, signInUser, todayKey, dateKeyDelta } from './helpers'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -716,6 +716,42 @@ test.describe('My Bookings tab', () => {
     await page.getByRole('button', { name: 'My Bookings' }).click()
 
     await expect(page.getByText('No bookings yet')).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('past confirmed booking appears in Completed section without a cancel button', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: dateKeyDelta(-1), hours: [9, 10],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Completed' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Completed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel booking/i })).not.toBeAttached()
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).not.toBeAttached()
+  })
+
+  test('future booking appears in Upcoming section with a cancel button', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: dateKeyDelta(1), hours: [9, 10],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Confirmed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel booking/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Completed' })).not.toBeAttached()
   })
 
   test('confirmed booking can be cancelled from My Bookings', async ({ page }) => {

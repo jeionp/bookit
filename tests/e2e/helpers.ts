@@ -125,6 +125,52 @@ export async function signInUser(
   return { idToken: body.idToken, localId: body.localId }
 }
 
+// Seeds a confirmed booking for a specific user using the emulator admin-bypass
+// token so that My Bookings tests can control which user owns the booking.
+export async function seedBookingForUser(opts: {
+  facilityId:   string
+  facilityName: string
+  date:         string
+  hours:        number[]
+  userId:       string
+  userEmail:    string
+  userName:     string
+}): Promise<void> {
+  const body = {
+    fields: {
+      businessSlug:  { stringValue: 'paddleup' },
+      businessName:  { stringValue: 'PaddleUp' },
+      facilityId:    { stringValue: opts.facilityId },
+      facilityName:  { stringValue: opts.facilityName },
+      date:          { stringValue: opts.date },
+      hours: {
+        arrayValue: {
+          values: opts.hours.map((h) => ({ integerValue: String(h) })),
+        },
+      },
+      status:     { stringValue: 'confirmed' },
+      userId:     { stringValue: opts.userId },
+      userEmail:  { stringValue: opts.userEmail },
+      userName:   { stringValue: opts.userName },
+      totalPrice: { integerValue: String(opts.hours.length * 500) },
+      currency:   { stringValue: 'PHP' },
+    },
+  }
+
+  const res = await fetch(
+    `${FIRESTORE}/v1/projects/${PROJECT}/databases/(default)/documents/bookings`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer owner',
+      },
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) throw new Error(`seedBookingForUser failed: ${await res.text()}`)
+}
+
 // ─── Admin seeding ────────────────────────────────────────────────────────────
 
 // Writes /admins/{uid} with the given slugs, bypassing Firestore security rules.
