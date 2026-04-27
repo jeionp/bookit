@@ -361,8 +361,8 @@ test.describe('Admin booking management', () => {
     await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
 
     // Beta's 2 PM slot must be disabled; Alpha's own 9 AM slot is excluded and stays selectable
-    await expect(panel.getByRole('button', { name: '2 PM' })).toBeDisabled()
-    await expect(panel.getByRole('button', { name: '9 AM' })).not.toBeDisabled()
+    await expect(panel.getByRole('button', { name: '2 PM', exact: true })).toBeDisabled()
+    await expect(panel.getByRole('button', { name: '9 AM', exact: true })).not.toBeDisabled()
   })
 
   test('search filter shows only the matching booking when multiple users have bookings', async ({ page }) => {
