@@ -136,36 +136,39 @@ export async function signInUser(
 // Seeds a booking for a specific user using the emulator admin-bypass token.
 // Pass status: 'cancelled' to seed a cancelled booking (defaults to 'confirmed').
 export async function seedBookingForUser(opts: {
-  facilityId:   string
-  facilityName: string
-  date:         string
-  hours:        number[]
-  userId:       string
-  userEmail:    string
-  userName:     string
-  status?:      string
+  facilityId:     string
+  facilityName:   string
+  date:           string
+  hours:          number[]
+  userId:         string
+  userEmail:      string
+  userName:       string
+  status?:        string
+  paymentStatus?: 'unpaid' | 'paid' | 'refunded'
 }): Promise<void> {
-  const body = {
-    fields: {
-      businessSlug:  { stringValue: 'paddleup' },
-      businessName:  { stringValue: 'PaddleUp' },
-      facilityId:    { stringValue: opts.facilityId },
-      facilityName:  { stringValue: opts.facilityName },
-      date:          { stringValue: opts.date },
-      hours: {
-        arrayValue: {
-          values: opts.hours.map((h) => ({ integerValue: String(h) })),
-        },
+  const fields: Record<string, unknown> = {
+    businessSlug:  { stringValue: 'paddleup' },
+    businessName:  { stringValue: 'PaddleUp' },
+    facilityId:    { stringValue: opts.facilityId },
+    facilityName:  { stringValue: opts.facilityName },
+    date:          { stringValue: opts.date },
+    hours: {
+      arrayValue: {
+        values: opts.hours.map((h) => ({ integerValue: String(h) })),
       },
-      status:     { stringValue: opts.status ?? 'confirmed' },
-      userId:     { stringValue: opts.userId },
-      userEmail:  { stringValue: opts.userEmail },
-      userName:   { stringValue: opts.userName },
-      totalPrice: { integerValue: String(opts.hours.length * 500) },
-      currency:   { stringValue: 'PHP' },
-      createdAt:  { timestampValue: new Date().toISOString() },
     },
+    status:     { stringValue: opts.status ?? 'confirmed' },
+    userId:     { stringValue: opts.userId },
+    userEmail:  { stringValue: opts.userEmail },
+    userName:   { stringValue: opts.userName },
+    totalPrice: { integerValue: String(opts.hours.length * 500) },
+    currency:   { stringValue: 'PHP' },
+    createdAt:  { timestampValue: new Date().toISOString() },
   }
+  if (opts.paymentStatus) {
+    fields.paymentStatus = { stringValue: opts.paymentStatus }
+  }
+  const body = { fields }
 
   const res = await fetch(
     `${FIRESTORE}/v1/projects/${PROJECT}/databases/(default)/documents/bookings`,
