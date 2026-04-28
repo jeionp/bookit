@@ -63,7 +63,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
   const [date, setDate] = useState(initialDate || todayString());
   const [selectedHours, setSelectedHours] = useState<number[]>([]);
   const [takenHours, setTakenHours] = useState<Set<number>>(new Set());
-  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(true);
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -92,7 +92,12 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
   }
 
   useEffect(() => {
-    loadSlots(facilityId, date);
+    const reqId = ++slotReqRef.current;
+    getBookedHours(business.slug, facilityId, date).then((taken) => {
+      if (reqId !== slotReqRef.current) return;
+      setTakenHours(new Set(taken));
+      setLoadingSlots(false);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
