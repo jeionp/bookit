@@ -54,6 +54,24 @@ function computePrice(business: Business, facilityId: string, hours: number[]): 
   }, 0);
 }
 
+function PaymentBadge({ status }: { status?: "unpaid" | "paid" | "refunded" }) {
+  if (!status || status === "unpaid") return null;
+  const styles = {
+    paid:     { bg: "#f0fdf4", color: "#16a34a", label: "Paid" },
+    refunded: { bg: "#fef9c3", color: "#854d0e", label: "Refunded" },
+  } as const;
+  const { bg, color, label } = styles[status];
+  return (
+    <span
+      className="inline-block text-xs font-bold px-3 py-1 rounded-full"
+      style={{ backgroundColor: bg, color }}
+      data-testid="payment-badge"
+    >
+      {label}
+    </span>
+  );
+}
+
 interface Props {
   booking: Booking;
   business: Business;
@@ -272,12 +290,15 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
           </>
         ) : (
           <>
-            <span
-              className="inline-block text-xs font-bold px-3 py-1 rounded-full"
-              style={{ backgroundColor: `${accentColor}15`, color: accentColor }}
-            >
-              Confirmed
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className="inline-block text-xs font-bold px-3 py-1 rounded-full"
+                style={{ backgroundColor: `${accentColor}15`, color: accentColor }}
+              >
+                Confirmed
+              </span>
+              <PaymentBadge status={booking.paymentStatus} />
+            </div>
 
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
