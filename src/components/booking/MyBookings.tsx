@@ -22,6 +22,17 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function isBookingPast(booking: Booking): boolean {
+  const now = new Date();
+  const [y, m, d] = booking.date.split("-").map(Number);
+  const bookingDay = new Date(y, m - 1, d);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (bookingDay < today) return true;
+  if (bookingDay > today) return false;
+  // Same day — past once the last booked hour has ended
+  return now.getHours() >= booking.hours[booking.hours.length - 1] + 1;
+}
+
 export default function MyBookings({ accentColor }: { accentColor: string }) {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -79,22 +90,24 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
     );
   }
 
-  const active = bookings.filter((b) => b.status === "confirmed");
-  const past = bookings.filter((b) => b.status === "cancelled");
+  const upcoming   = bookings.filter((b) => b.status === "confirmed" && !isBookingPast(b));
+  const completed  = bookings.filter((b) => b.status === "confirmed" &&  isBookingPast(b));
+  const cancelled  = bookings.filter((b) => b.status === "cancelled");
 
   return (
     <div className="space-y-6 pb-6">
-      {active.length > 0 && (
+      {upcoming.length > 0 && (
         <section>
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
             Upcoming
           </h3>
           <div className="space-y-3">
-            {active.map((booking) => (
+            {upcoming.map((booking) => (
               <BookingCard
                 key={booking.id}
                 booking={booking}
                 accentColor={accentColor}
+                variant="upcoming"
                 onCancel={() => handleCancel(booking.id)}
                 cancelling={cancelling === booking.id}
               />
@@ -103,17 +116,38 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
         </section>
       )}
 
-      {past.length > 0 && (
+      {completed.length > 0 && (
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
+            Completed
+          </h3>
+          <div className="space-y-3 opacity-60">
+            {completed.map((booking) => (
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                accentColor={accentColor}
+                variant="completed"
+                onCancel={() => {}}
+                cancelling={false}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {cancelled.length > 0 && (
         <section>
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
             Cancelled
           </h3>
           <div className="space-y-3 opacity-60">
-            {past.map((booking) => (
+            {cancelled.map((booking) => (
               <BookingCard
                 key={booking.id}
                 booking={booking}
                 accentColor={accentColor}
+                variant="cancelled"
                 onCancel={() => {}}
                 cancelling={false}
               />
@@ -125,28 +159,36 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
   );
 }
 
+const BADGE: Record<string, { label: string; style: React.CSSProperties }> = {
+  upcoming:  { label: "Confirmed", style: {} },
+  completed: { label: "Completed", style: { backgroundColor: "#f3f4f6", color: "#6b7280" } },
+  cancelled: { label: "Cancelled", style: { backgroundColor: "#f3f4f6", color: "#9ca3af" } },
+};
+
 function BookingCard({
   booking,
   accentColor,
+  variant,
   onCancel,
   cancelling,
 }: {
   booking: Booking;
   accentColor: string;
+  variant: "upcoming" | "completed" | "cancelled";
   onCancel: () => void;
   cancelling: boolean;
 }) {
   const startHour = booking.hours[0];
   const endHour = booking.hours[booking.hours.length - 1] + 1;
-  const confirmed = booking.status === "confirmed";
+  const badge = BADGE[variant];
+  const barColor = variant === "upcoming" ? accentColor : "#d1d5db";
+  const badgeStyle = variant === "upcoming"
+    ? { backgroundColor: `${accentColor}15`, color: accentColor }
+    : badge.style;
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
-      {/* Status bar */}
-      <div
-        className="h-1"
-        style={{ backgroundColor: confirmed ? accentColor : "#d1d5db" }}
-      />
+      <div className="h-1" style={{ backgroundColor: barColor }} />
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-2 min-w-0">
@@ -172,20 +214,13 @@ function BookingCard({
             <p className="text-base font-black text-gray-900">
               ₱{booking.totalPrice.toLocaleString()}
             </p>
-            <span
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-              style={
-                confirmed
-                  ? { backgroundColor: `${accentColor}15`, color: accentColor }
-                  : { backgroundColor: "#f3f4f6", color: "#9ca3af" }
-              }
-            >
-              {confirmed ? "Confirmed" : "Cancelled"}
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={badgeStyle}>
+              {badge.label}
             </span>
           </div>
         </div>
 
-        {confirmed && (
+        {variant === "upcoming" && (
           <button
             onClick={onCancel}
             disabled={cancelling}

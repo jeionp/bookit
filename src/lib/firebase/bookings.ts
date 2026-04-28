@@ -111,6 +111,76 @@ export async function getBookedHours(
   return bookings.flatMap((b) => b.hours);
 }
 
+export async function getBookedHoursExcluding(
+  businessSlug: string,
+  facilityId: string,
+  date: string,
+  excludeBookingId: string,
+): Promise<number[]> {
+  const bookings = await getBookingsForDate(businessSlug, facilityId, date);
+  return bookings
+    .filter((b) => b.id !== excludeBookingId)
+    .flatMap((b) => b.hours);
+}
+
+export async function rescheduleBooking(
+  bookingId: string,
+  businessSlug: string,
+  newFacilityId: string,
+  newFacilityName: string,
+  newDate: string,
+  newHours: number[],
+  newTotalPrice: number,
+): Promise<void> {
+  const bookingRef = doc(db, "bookings", bookingId);
+
+  await runTransaction(db, async (tx) => {
+    const q = query(
+      collection(db, "bookings"),
+      where("businessSlug", "==", businessSlug),
+      where("facilityId", "==", newFacilityId),
+      where("date", "==", newDate),
+      where("status", "==", "confirmed")
+    );
+    const snap = await getDocs(q);
+
+    const takenHours = new Set<number>();
+    snap.docs
+      .filter((d) => d.id !== bookingId)
+      .forEach((d) => {
+        (d.data().hours as number[]).forEach((h) => takenHours.add(h));
+      });
+
+    if (newHours.some((h) => takenHours.has(h))) throw new SlotUnavailableError();
+
+    tx.update(bookingRef, {
+      facilityId: newFacilityId,
+      facilityName: newFacilityName,
+      date: newDate,
+      hours: newHours,
+      totalPrice: newTotalPrice,
+    });
+  });
+}
+
+// Requires composite index: businessSlug ASC, date ASC
+// Firebase will surface a link to auto-create it on first run if missing.
+export async function getBookingsInRange(
+  businessSlug: string,
+  startDate: string,
+  endDate: string,
+): Promise<Booking[]> {
+  const q = query(
+    collection(db, "bookings"),
+    where("businessSlug", "==", businessSlug),
+    where("date", ">=", startDate),
+    where("date", "<=", endDate),
+    orderBy("date", "asc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
+}
+
 // Requires a composite index: businessSlug ASC, date ASC, status ASC
 // Firebase will surface a link to auto-create it on first run if missing.
 export async function getAllBookingsForDay(

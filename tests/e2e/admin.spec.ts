@@ -5,6 +5,7 @@ import {
   signInUser,
   seedAdminDoc,
   seedBooking,
+  seedBookingForUser,
   todayKey,
   dateKeyDelta,
 } from './helpers'
@@ -156,8 +157,7 @@ test.describe('Admin schedule view', () => {
     await page.getByText('Seed User').click()
     await expect(page.getByText('Booking Detail')).toBeVisible()
 
-    // The X button is the only button inside the panel header
-    await page.getByTestId('booking-detail-panel').locator('button').click()
+    await page.getByTestId('booking-detail-panel').getByRole('button', { name: /close/i }).click()
 
     await expect(page.getByText('Booking Detail')).not.toBeAttached()
   })
@@ -212,6 +212,285 @@ test.describe('Admin schedule view', () => {
     await page.getByLabel('Next day').click()
 
     await expect(page.getByText('Booking Detail')).not.toBeAttached({ timeout: 8_000 })
+  })
+})
+
+// ─── Phase 3: Booking Management ─────────────────────────────────────────────
+
+test.describe('Admin booking management', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('admin can cancel a confirmed booking and it is removed from the grid', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+    await page.getByTestId('confirm-cancel-btn').click()
+
+    // Target the grid block button specifically — the panel also contains "Seed User"
+    // text, so getByText would hit two elements while the async cancel is in flight.
+    await expect(page.getByRole('button', { name: /Seed User/ })).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByText('Booking Detail')).not.toBeAttached()
+  })
+
+  test('cancel shows a confirmation dialog before cancelling', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+
+    // Confirmation dialog is shown
+    await expect(page.getByText('Cancel this booking?')).toBeVisible()
+    // Grid block is still present (panel is also open, so scope to the button)
+    await expect(page.getByRole('button', { name: /Seed User/ })).toBeAttached()
+
+    // Dismiss with "No"
+    await page.getByRole('button', { name: 'No' }).click()
+    await expect(page.getByText('Cancel this booking?')).not.toBeAttached()
+    await expect(page.getByRole('button', { name: /Seed User/ })).toBeVisible()
+  })
+
+  test('admin can reschedule a booking to a different court', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    // Change to Court 2 (no existing bookings — hours stay selected)
+    await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+
+    await page.getByTestId('confirm-reschedule-btn').click()
+
+    // Detail panel now shows Court 2
+    const panel = page.getByTestId('booking-detail-panel')
+    await expect(panel.getByText('Court 2')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('reschedule back button returns to detail view without saving', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+    await expect(page.getByText('Reschedule Booking')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Back' }).click()
+
+    await expect(page.getByText('Booking Detail')).toBeVisible()
+    await expect(page.getByTestId('booking-detail-panel').getByText('Court 1')).toBeVisible()
+  })
+
+  test('search filter hides non-matching booking blocks', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await expect(page.getByText('Seed User')).toBeVisible({ timeout: 8_000 })
+
+    await page.getByPlaceholder('Search bookings…').fill('nonexistent')
+
+    await expect(page.getByText('Seed User')).not.toBeAttached()
+  })
+
+  test('search filter shows matching bookings by name', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByPlaceholder('Search bookings…').fill('Seed')
+
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('search filter shows matching bookings by email', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByPlaceholder('Search bookings…').fill('seed@bookit')
+
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('clearing the search restores all booking blocks', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByPlaceholder('Search bookings…').fill('nonexistent')
+    await expect(page.getByText('Seed User')).not.toBeAttached()
+
+    await page.getByPlaceholder('Search bookings…').fill('')
+    await expect(page.getByText('Seed User')).toBeVisible()
+  })
+
+  test('rescheduling to a different date removes the booking from today\'s grid', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+    await expect(page.getByText('Reschedule Booking')).toBeVisible()
+
+    // Move to tomorrow — hour 9 stays selected (not taken on that day)
+    await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+    await page.getByTestId('confirm-reschedule-btn').click()
+
+    // Booking moved to tomorrow — must not appear on today's grid
+    await expect(page.getByText('Seed User')).not.toBeAttached({ timeout: 8_000 })
+  })
+
+  test('a slot booked by another booking appears disabled in the reschedule picker', async ({ page }) => {
+    // Alpha books court-1 at 9 AM; Beta books court-1 at 2 PM (hour 14)
+    await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9], userId: 'uid-alpha', userEmail: 'alpha@bookit-test.internal', userName: 'Alpha User' })
+    await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [14], userId: 'uid-beta', userEmail: 'beta@bookit-test.internal', userName: 'Beta User' })
+    await goToScheduleView(page, adminUid)
+
+    // Open Alpha's detail panel and enter reschedule mode
+    await page.getByText('Alpha User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    // Wait for slot availability to finish loading
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+
+    // Beta's 2 PM slot must be disabled; Alpha's own 9 AM slot is excluded and stays selectable
+    await expect(panel.getByRole('button', { name: '2 PM', exact: true })).toBeDisabled()
+    await expect(panel.getByRole('button', { name: '9 AM', exact: true })).not.toBeDisabled()
+  })
+
+  test('search filter shows only the matching booking when multiple users have bookings', async ({ page }) => {
+    await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9], userId: 'uid-alpha', userEmail: 'alpha@bookit-test.internal', userName: 'Alpha User' })
+    await seedBookingForUser({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [9], userId: 'uid-beta', userEmail: 'beta@bookit-test.internal', userName: 'Beta User' })
+    await goToScheduleView(page, adminUid)
+
+    await expect(page.getByText('Alpha User')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Beta User')).toBeVisible({ timeout: 8_000 })
+
+    await page.getByPlaceholder('Search bookings…').fill('Alpha')
+
+    await expect(page.getByText('Alpha User')).toBeVisible()
+    await expect(page.getByText('Beta User')).not.toBeAttached()
+  })
+})
+
+// ─── Phase 4: Analytics Dashboard ────────────────────────────────────────────
+
+async function goToAnalyticsView(page: Page, uid: string) {
+  await goToScheduleView(page, uid)
+  await page.getByRole('button', { name: 'Analytics' }).click()
+  // Revenue stat card confirms the analytics view has finished loading
+  await expect(page.getByTestId('stat-revenue')).toBeVisible({ timeout: 8_000 })
+}
+
+test.describe('Admin analytics dashboard', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('Analytics tab is accessible from the schedule view', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByRole('button', { name: 'Analytics' }).click()
+    await expect(page.getByTestId('stat-revenue')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('shows empty state when no bookings exist in the selected period', async ({ page }) => {
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText('No bookings in this period')).toBeVisible()
+  })
+
+  test('revenue stat reflects total price of confirmed bookings', async ({ page }) => {
+    // 2 bookings × 2 hours × ₱500/h = ₱2,000 total
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await seedBooking({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14, 15] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱2,000')
+  })
+
+  test('cancelled bookings are excluded from bookings count and revenue', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await seedBookingForUser({
+      facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14],
+      userId: 'uid-x', userEmail: 'x@bookit-test.internal', userName: 'Cancelled User',
+      status: 'cancelled',
+    })
+    await goToAnalyticsView(page, adminUid)
+    // Only the confirmed booking counts toward revenue and bookings count
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
+    await expect(page.getByTestId('stat-bookings')).toContainText('1')
+  })
+
+  test('hours booked stat sums hours across confirmed bookings', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10, 11] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByTestId('stat-hours')).toContainText('3')
+  })
+
+  test('cancellation rate reflects the proportion of cancelled bookings', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await seedBookingForUser({
+      facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14],
+      userId: 'uid-x', userEmail: 'x@bookit-test.internal', userName: 'Cancelled User',
+      status: 'cancelled',
+    })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByTestId('stat-cancellation-rate')).toContainText('50%')
+  })
+
+  test('court utilization section shows booking hours per court', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText('Court Utilization')).toBeVisible()
+    await expect(page.getByText('2h · 1 booking')).toBeVisible()
+  })
+
+  test('peak hours section lists each booked hour', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText('Peak Hours')).toBeVisible()
+    await expect(page.getByText('9 AM')).toBeVisible()
+  })
+
+  test('avg booking value is displayed when bookings exist', async ({ page }) => {
+    // 2 × 1h × ₱500 = ₱1,000 total; avg = ₱500
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await seedBooking({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText(/Avg booking value/)).toContainText('₱500')
+  })
+
+  test('switching to Today period excludes bookings from earlier in the month', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: dateKeyDelta(-1), hours: [9] })
+    await goToAnalyticsView(page, adminUid)
+    // Month view includes yesterday's booking
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
+    // Switch to Today — booking disappears
+    await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page.getByText('No bookings in this period')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('switching to Year to Date includes bookings outside the current month', async ({ page }) => {
+    // 40 days ago: outside current month but within current year (safe for any date after Feb 10)
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: dateKeyDelta(-40), hours: [9],
+      userId: 'uid-old', userEmail: 'old@bookit-test.internal', userName: 'Old User',
+    })
+    await goToAnalyticsView(page, adminUid)
+    // Month view: no bookings in the current month
+    await expect(page.getByText('No bookings in this period')).toBeVisible()
+    // Year to Date: the booking is included
+    await page.getByRole('button', { name: 'Year to Date' }).click()
+    await expect(page.getByText('No bookings in this period')).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
   })
 })
 

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { clearFirestore, createTestUser, seedBooking, todayKey, dateKeyDelta } from './helpers'
+import { clearFirestore, createTestUser, seedBooking, seedBookingForUser, signInUser, todayKey, dateKeyDelta } from './helpers'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -16,9 +16,9 @@ const PRIME_RATE   = 600
 // ─── Page helpers ─────────────────────────────────────────────────────────────
 
 async function waitForSlots(page: Page) {
-  await expect(page.getByText('Loading availability…')).not.toBeVisible({
-    timeout: 10_000,
-  })
+  // Loading may already be done by the time we check — swallow the timeout if so
+  await page.getByText('Loading availability…').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
+  await expect(page.getByText('Loading availability…')).not.toBeVisible({ timeout: 10_000 })
 }
 
 async function signIn(page: Page, email = TEST_EMAIL, password = TEST_PASSWORD) {
@@ -718,6 +718,42 @@ test.describe('My Bookings tab', () => {
     await expect(page.getByText('No bookings yet')).toBeVisible({ timeout: 5_000 })
   })
 
+  test('past confirmed booking appears in Completed section without a cancel button', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: dateKeyDelta(-1), hours: [9, 10],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Completed' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Completed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel booking/i })).not.toBeAttached()
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).not.toBeAttached()
+  })
+
+  test('future booking appears in Upcoming section with a cancel button', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: dateKeyDelta(1), hours: [9, 10],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Confirmed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel booking/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Completed' })).not.toBeAttached()
+  })
+
   test('confirmed booking can be cancelled from My Bookings', async ({ page }) => {
     await page.goto(BUSINESS)
     await selectTomorrow(page)
@@ -736,5 +772,69 @@ test.describe('My Bookings tab', () => {
 
     // Status badge changes to "Cancelled"
     await expect(page.locator('span', { hasText: 'Cancelled' })).toBeVisible({ timeout: 5_000 })
+  })
+
+  // The three tests below specifically exercise the same-day time logic in isBookingPast:
+  //   now.getHours() >= booking.hours[last] + 1
+  // Hours [2] (2 AM – 3 AM) are always elapsed by 3 AM — safe for any CI run.
+  // Hours [23] (11 PM – midnight) end at hour 24, which now.getHours() never reaches.
+
+  test('same-day booking whose hours have already elapsed is shown as Completed', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: todayKey(), hours: [2],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Completed' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Completed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel booking/i })).not.toBeAttached()
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).not.toBeAttached()
+  })
+
+  test('same-day booking whose hours have not yet elapsed is shown as Upcoming', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: todayKey(), hours: [23],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('span', { hasText: 'Confirmed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /cancel booking/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Completed' })).not.toBeAttached()
+  })
+
+  test('past and upcoming bookings appear in their respective sections simultaneously', async ({ page }) => {
+    const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: dateKeyDelta(-1), hours: [9, 10],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+    await seedBookingForUser({
+      facilityId: COURT_1, facilityName: COURT_1_NAME,
+      date: dateKeyDelta(1), hours: [9, 10],
+      userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
+    })
+
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('button', { name: 'My Bookings' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Upcoming' })).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByRole('heading', { name: 'Completed' })).toBeVisible()
+    await expect(page.locator('span', { hasText: 'Confirmed' })).toHaveCount(1)
+    await expect(page.locator('span', { hasText: 'Completed' })).toHaveCount(1)
   })
 })
