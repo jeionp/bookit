@@ -27,10 +27,18 @@ export function dateKeyDelta(daysFromNow: number): string {
 // ─── Firestore ────────────────────────────────────────────────────────────────
 
 export async function clearFirestore(): Promise<void> {
-  await fetch(
-    `${FIRESTORE}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`,
-    { method: 'DELETE' }
-  )
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8_000)
+  try {
+    await fetch(
+      `${FIRESTORE}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`,
+      { method: 'DELETE', signal: controller.signal }
+    )
+  } catch {
+    // Emulator slow or unavailable — continue so the test can still run
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 const SEED_EMAIL    = 'seed@bookit-test.internal'
@@ -125,8 +133,8 @@ export async function signInUser(
   return { idToken: body.idToken, localId: body.localId }
 }
 
-// Seeds a confirmed booking for a specific user using the emulator admin-bypass
-// token so that My Bookings tests can control which user owns the booking.
+// Seeds a booking for a specific user using the emulator admin-bypass token.
+// Pass status: 'cancelled' to seed a cancelled booking (defaults to 'confirmed').
 export async function seedBookingForUser(opts: {
   facilityId:   string
   facilityName: string
@@ -135,6 +143,7 @@ export async function seedBookingForUser(opts: {
   userId:       string
   userEmail:    string
   userName:     string
+  status?:      string
 }): Promise<void> {
   const body = {
     fields: {
@@ -148,7 +157,7 @@ export async function seedBookingForUser(opts: {
           values: opts.hours.map((h) => ({ integerValue: String(h) })),
         },
       },
-      status:     { stringValue: 'confirmed' },
+      status:     { stringValue: opts.status ?? 'confirmed' },
       userId:     { stringValue: opts.userId },
       userEmail:  { stringValue: opts.userEmail },
       userName:   { stringValue: opts.userName },

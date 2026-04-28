@@ -134,13 +134,14 @@ export default function AdminAnalyticsView({ business }: { business: Business })
           <>
             {/* Stat cards */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard label="Revenue" value={`₱${stats.revenue.toLocaleString()}`} />
-              <StatCard label="Bookings" value={String(stats.bookingCount)} />
-              <StatCard label="Hours Booked" value={String(stats.totalHours)} />
+              <StatCard label="Revenue" value={`₱${stats.revenue.toLocaleString()}`} testId="stat-revenue" />
+              <StatCard label="Bookings" value={String(stats.bookingCount)} testId="stat-bookings" />
+              <StatCard label="Hours Booked" value={String(stats.totalHours)} testId="stat-hours" />
               <StatCard
                 label="Cancellation Rate"
                 value={`${Math.round(stats.cancellationRate * 100)}%`}
                 muted={stats.cancellationRate > 0.15}
+                testId="stat-cancellation-rate"
               />
             </div>
 
@@ -230,13 +231,15 @@ function StatCard({
   label,
   value,
   muted = false,
+  testId,
 }: {
   label: string;
   value: string;
   muted?: boolean;
+  testId?: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4">
+    <div className="bg-white rounded-2xl border border-gray-100 p-4" data-testid={testId}>
       <p className="text-xs font-semibold text-gray-400 mb-1">{label}</p>
       <p
         className="text-2xl font-black"

@@ -30,8 +30,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        const slugs = await getAdminSlugs(firebaseUser.uid);
-        setAdminSlugs(slugs);
+        try {
+          const slugs = await getAdminSlugs(firebaseUser.uid);
+          setAdminSlugs(slugs);
+        } catch {
+          setAdminSlugs([]);
+        }
       } else {
         setAdminSlugs([]);
       }

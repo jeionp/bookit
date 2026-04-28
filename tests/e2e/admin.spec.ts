@@ -380,6 +380,120 @@ test.describe('Admin booking management', () => {
   })
 })
 
+// ─── Phase 4: Analytics Dashboard ────────────────────────────────────────────
+
+async function goToAnalyticsView(page: Page, uid: string) {
+  await goToScheduleView(page, uid)
+  await page.getByRole('button', { name: 'Analytics' }).click()
+  // Revenue stat card confirms the analytics view has finished loading
+  await expect(page.getByTestId('stat-revenue')).toBeVisible({ timeout: 8_000 })
+}
+
+test.describe('Admin analytics dashboard', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('Analytics tab is accessible from the schedule view', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByRole('button', { name: 'Analytics' }).click()
+    await expect(page.getByTestId('stat-revenue')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('shows empty state when no bookings exist in the selected period', async ({ page }) => {
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText('No bookings in this period')).toBeVisible()
+  })
+
+  test('revenue stat reflects total price of confirmed bookings', async ({ page }) => {
+    // 2 bookings × 2 hours × ₱500/h = ₱2,000 total
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await seedBooking({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14, 15] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱2,000')
+  })
+
+  test('cancelled bookings are excluded from bookings count and revenue', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await seedBookingForUser({
+      facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14],
+      userId: 'uid-x', userEmail: 'x@bookit-test.internal', userName: 'Cancelled User',
+      status: 'cancelled',
+    })
+    await goToAnalyticsView(page, adminUid)
+    // Only the confirmed booking counts toward revenue and bookings count
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
+    await expect(page.getByTestId('stat-bookings')).toContainText('1')
+  })
+
+  test('hours booked stat sums hours across confirmed bookings', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10, 11] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByTestId('stat-hours')).toContainText('3')
+  })
+
+  test('cancellation rate reflects the proportion of cancelled bookings', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await seedBookingForUser({
+      facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14],
+      userId: 'uid-x', userEmail: 'x@bookit-test.internal', userName: 'Cancelled User',
+      status: 'cancelled',
+    })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByTestId('stat-cancellation-rate')).toContainText('50%')
+  })
+
+  test('court utilization section shows booking hours per court', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText('Court Utilization')).toBeVisible()
+    await expect(page.getByText('2h · 1 booking')).toBeVisible()
+  })
+
+  test('peak hours section lists each booked hour', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText('Peak Hours')).toBeVisible()
+    await expect(page.getByText('9 AM')).toBeVisible()
+  })
+
+  test('avg booking value is displayed when bookings exist', async ({ page }) => {
+    // 2 × 1h × ₱500 = ₱1,000 total; avg = ₱500
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await seedBooking({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14] })
+    await goToAnalyticsView(page, adminUid)
+    await expect(page.getByText(/Avg booking value/)).toContainText('₱500')
+  })
+
+  test('switching to Today period excludes bookings from earlier in the month', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: dateKeyDelta(-1), hours: [9] })
+    await goToAnalyticsView(page, adminUid)
+    // Month view includes yesterday's booking
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
+    // Switch to Today — booking disappears
+    await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page.getByText('No bookings in this period')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('switching to Year to Date includes bookings outside the current month', async ({ page }) => {
+    // 40 days ago: outside current month but within current year (safe for any date after Feb 10)
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: dateKeyDelta(-40), hours: [9],
+      userId: 'uid-old', userEmail: 'old@bookit-test.internal', userName: 'Old User',
+    })
+    await goToAnalyticsView(page, adminUid)
+    // Month view: no bookings in the current month
+    await expect(page.getByText('No bookings in this period')).toBeVisible()
+    // Year to Date: the booking is included
+    await page.getByRole('button', { name: 'Year to Date' }).click()
+    await expect(page.getByText('No bookings in this period')).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
+  })
+})
+
 // ─── Storefront — admin link ──────────────────────────────────────────────────
 
 test.describe('Storefront — admin link', () => {
