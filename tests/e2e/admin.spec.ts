@@ -251,7 +251,7 @@ test.describe('Admin booking management', () => {
     // Grid block is still present (panel is also open, so scope to the button)
     await expect(page.getByRole('button', { name: /Seed User/ })).toBeAttached()
 
-    // Dismiss with "Back"
+    // Dismiss with "Back" (button was renamed from "No" in Phase 5c)
     await page.getByRole('button', { name: 'Back' }).click()
     await expect(page.getByText('Cancel this booking?')).not.toBeAttached()
     await expect(page.getByRole('button', { name: /Seed User/ })).toBeVisible()
@@ -491,6 +491,238 @@ test.describe('Admin analytics dashboard', () => {
     await page.getByRole('button', { name: 'Year to Date' }).click()
     await expect(page.getByText('No bookings in this period')).not.toBeAttached({ timeout: 8_000 })
     await expect(page.getByTestId('stat-revenue')).toContainText('₱500')
+  })
+})
+
+// ─── Phase 5: Walk-in booking ─────────────────────────────────────────────────
+
+test.describe('Admin walk-in booking', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('"New booking" button opens the walk-in modal', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-modal')).toBeVisible()
+  })
+
+  test('Book button is disabled when no slot is selected', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-modal')).toBeVisible()
+    await expect(page.getByTestId('walkin-book-btn')).toBeDisabled()
+  })
+
+  test('a pre-seeded slot appears disabled in the walk-in modal', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    // Wait for slots to finish loading before checking disabled state
+    await expect(page.getByTestId('walkin-slot-9')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('walkin-slot-9')).toBeDisabled()
+  })
+
+  test('submitting a walk-in booking adds it to the schedule grid', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-slot-9')).toBeVisible({ timeout: 8_000 })
+    await page.getByTestId('walkin-name-input').fill('Walk-in Guest')
+    await page.getByTestId('walkin-slot-9').click()
+    await page.getByTestId('walkin-book-btn').click()
+    // Modal closes and the new booking appears on the grid under the entered name
+    await expect(page.getByTestId('walkin-modal')).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByText('Walk-in Guest')).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('slot conflict during walk-in submission shows the unavailable error', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-slot-9')).toBeVisible({ timeout: 8_000 })
+    // Select the slot before anyone else books it
+    await page.getByTestId('walkin-slot-9').click()
+    // Simulate a concurrent booking being created for that same slot
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    // Now submit — the transaction detects the conflict
+    await page.getByTestId('walkin-book-btn').click()
+    await expect(page.getByText(/One or more slots you selected were just booked/)).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('closing the modal with Cancel does not create a booking', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-modal')).toBeVisible()
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByTestId('walkin-modal')).not.toBeAttached()
+    await expect(page.getByText('Walk-in')).not.toBeAttached()
+  })
+
+  test('email lookup pre-fills name when an existing customer is found', async ({ page }) => {
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: dateKeyDelta(-1), hours: [9],
+      userId: 'uid-known', userEmail: 'known@bookit-test.internal', userName: 'Known Customer',
+    })
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await page.getByTestId('walkin-email-input').fill('known@bookit-test.internal')
+    await page.getByTestId('walkin-lookup-btn').click()
+    await expect(page.getByText(/Existing customer found/)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('walkin-name-input')).toHaveValue('Known Customer')
+    // Invite checkbox must not appear — customer already has an account
+    await expect(page.getByTestId('walkin-invite-checkbox')).not.toBeAttached()
+  })
+
+  test('invite checkbox appears when lookup finds no existing customer', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.getByTestId('new-walkin-btn').click()
+    await page.getByTestId('walkin-email-input').fill('newperson@bookit-test.internal')
+    await page.getByTestId('walkin-lookup-btn').click()
+    await expect(page.getByText('No existing customer found')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('walkin-invite-checkbox')).toBeVisible()
+  })
+})
+
+// ─── Phase 5: Refund prompt ────────────────────────────────────────────────────
+
+test.describe('Admin refund prompt', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('cancelling an unpaid booking goes directly to the confirm step', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+    // No refund choice for unpaid bookings
+    await expect(page.getByTestId('refund-choice')).not.toBeAttached()
+    await expect(page.getByText('Cancel this booking?')).toBeVisible()
+  })
+
+  test('cancelling a paid booking shows the refund choice step first', async ({ page }) => {
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9],
+      userId: 'uid-paid', userEmail: 'paid@bookit-test.internal', userName: 'Paid User',
+      paymentStatus: 'paid',
+    })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Paid User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+    // Refund choice appears before the final confirm
+    await expect(page.getByTestId('refund-choice')).toBeVisible()
+    await expect(page.getByText('Cancel this booking?')).not.toBeAttached()
+  })
+
+  test('Back button on confirm step returns to refund choice for paid bookings', async ({ page }) => {
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9],
+      userId: 'uid-paid', userEmail: 'paid@bookit-test.internal', userName: 'Paid User',
+      paymentStatus: 'paid',
+    })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Paid User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+    await expect(page.getByTestId('refund-choice')).toBeVisible()
+    // Advance to confirm step
+    await page.getByTestId('refund-choice-next-btn').click()
+    await expect(page.getByText('Cancel this booking?')).toBeVisible()
+    // Back must return to refund_choice (not idle) for paid bookings
+    await page.getByTestId('booking-detail-panel').getByRole('button', { name: 'Back' }).click()
+    await expect(page.getByTestId('refund-choice')).toBeVisible()
+  })
+
+  test('completing a paid cancellation removes the booking from the grid', async ({ page }) => {
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9],
+      userId: 'uid-paid', userEmail: 'paid@bookit-test.internal', userName: 'Paid User',
+      paymentStatus: 'paid',
+    })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Paid User').click()
+    await page.getByTestId('cancel-booking-btn').click()
+    await page.getByTestId('refund-choice-next-btn').click()
+    await page.getByTestId('confirm-cancel-btn').click()
+    await expect(page.getByRole('button', { name: /Paid User/ })).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByText('Booking Detail')).not.toBeAttached()
+  })
+})
+
+// ─── Phase 5: Customer history ─────────────────────────────────────────────────
+
+test.describe('Admin customer history', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('customer history section is hidden when the customer has no previous bookings', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    const panel = page.getByTestId('booking-detail-panel')
+    // Wait for the panel to fully render before asserting absence
+    await expect(panel.getByText('Booking ID')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('customer-history')).not.toBeAttached()
+  })
+
+  test('customer history shows other bookings for the same customer and excludes the current one', async ({ page }) => {
+    const HISTORY_EMAIL = 'history@bookit-test.internal'
+    // Yesterday's booking (will appear in history)
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: dateKeyDelta(-1), hours: [9],
+      userId: 'uid-history', userEmail: HISTORY_EMAIL, userName: 'History User',
+    })
+    // Today's booking (will be open in the panel — must be excluded from history)
+    await seedBookingForUser({
+      facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [14],
+      userId: 'uid-history', userEmail: HISTORY_EMAIL, userName: 'History User',
+    })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('History User').click()
+    // History section must show the other booking (court-1, yesterday)
+    await expect(page.getByTestId('customer-history')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('customer-history')).toContainText('Court 1')
+    // And must not include the currently-open booking (court-2)
+    await expect(page.getByTestId('customer-history')).not.toContainText('Court 2')
+  })
+})
+
+// ─── Phase 5: Payment status display ──────────────────────────────────────────
+
+test.describe('Admin payment status display', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('"Paid" badge is shown in the detail panel for paid bookings', async ({ page }) => {
+    await seedBookingForUser({
+      facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9],
+      userId: 'uid-paid', userEmail: 'paid@bookit-test.internal', userName: 'Paid User',
+      paymentStatus: 'paid',
+    })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Paid User').click()
+    await expect(page.getByTestId('payment-badge')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByTestId('payment-badge')).toContainText('Paid')
+  })
+
+  test('no payment badge is shown for unpaid bookings', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await expect(page.getByTestId('booking-detail-panel')).toBeVisible()
+    await expect(page.getByTestId('payment-badge')).not.toBeAttached()
   })
 })
 

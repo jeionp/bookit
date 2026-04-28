@@ -146,7 +146,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
     const totalPrice = computePrice(business, facilityId, sorted);
 
     try {
-      await createWalkInBooking({
+      const walkinData: Parameters<typeof createWalkInBooking>[0] = {
         facilityId,
         facilityName: facility.name,
         date,
@@ -157,9 +157,10 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
         currency: facility.currency,
         userName: name.trim() || "Walk-in",
         userEmail: email.trim(),
-        userPhone: phone.trim() || undefined,
         userId: linkedUserId,
-      });
+      };
+      if (phone.trim()) walkinData.userPhone = phone.trim();
+      await createWalkInBooking(walkinData);
 
       if (sendInvite && email.trim()) {
         await fetch("/api/invite", {
