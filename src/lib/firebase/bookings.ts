@@ -87,6 +87,21 @@ export async function cancelBooking(bookingId: string): Promise<void> {
   await updateDoc(doc(db, "bookings", bookingId), { status: "cancelled" });
 }
 
+export async function cancelBookingWithRefund(
+  bookingId: string,
+  refundMethod: "refund" | "credit",
+): Promise<void> {
+  await updateDoc(doc(db, "bookings", bookingId), {
+    status: "cancelled",
+    paymentStatus: "refunded",
+  });
+  await fetch("/api/refund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bookingId, method: refundMethod }),
+  });
+}
+
 export async function getBookingsForDate(
   businessSlug: string,
   facilityId: string,
