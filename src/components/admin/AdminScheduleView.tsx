@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Plus } from "lucide-react";
 import { Business } from "@/lib/types";
 import { Booking, getAllBookingsForDay } from "@/lib/firebase/bookings";
 import ScheduleGrid from "./ScheduleGrid";
 import BookingDetailPanel from "./BookingDetailPanel";
+import WalkInModal from "./WalkInModal";
 
 function toDateString(date: Date): string {
   const y = date.getFullYear();
@@ -35,6 +36,7 @@ export default function AdminScheduleView({ business }: { business: Business }) 
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [search, setSearch] = useState("");
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -56,6 +58,15 @@ export default function AdminScheduleView({ business }: { business: Business }) 
     if (!selectedBooking) return;
     setBookings((prev) => prev.filter((b) => b.id !== selectedBooking.id));
     setSelectedBooking(null);
+  }
+
+  function handleWalkInBooked() {
+    setWalkInOpen(false);
+    setLoading(true);
+    getAllBookingsForDay(business.slug, toDateString(date)).then((data) => {
+      setBookings(data);
+      setLoading(false);
+    });
   }
 
   function handleReschedule(updated: Booking) {
@@ -80,7 +91,7 @@ export default function AdminScheduleView({ business }: { business: Business }) 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Date navigation */}
-      <div className="bg-white border-b border-gray-100 shrink-0 px-4 py-2.5 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-100 shrink-0 px-4 py-2.5 flex items-center justify-between gap-2">
         <button
           onClick={() => navigate(-1)}
           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
@@ -89,13 +100,25 @@ export default function AdminScheduleView({ business }: { business: Business }) 
           <ChevronLeft size={18} />
         </button>
         <span className="text-sm font-bold text-gray-900">{formatNavDate(date)}</span>
-        <button
-          onClick={() => navigate(1)}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
-          aria-label="Next day"
-        >
-          <ChevronRight size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate(1)}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+            aria-label="Next day"
+          >
+            <ChevronRight size={18} />
+          </button>
+          <button
+            onClick={() => setWalkInOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors ml-1"
+            style={{ backgroundColor: business.accentColor }}
+            aria-label="New walk-in booking"
+            data-testid="new-walkin-btn"
+          >
+            <Plus size={13} />
+            New booking
+          </button>
+        </div>
       </div>
 
       {/* Search bar */}
@@ -136,6 +159,15 @@ export default function AdminScheduleView({ business }: { business: Business }) 
           />
         )}
       </div>
+
+      {walkInOpen && (
+        <WalkInModal
+          business={business}
+          initialDate={toDateString(date)}
+          onClose={() => setWalkInOpen(false)}
+          onBooked={handleWalkInBooked}
+        />
+      )}
     </div>
   );
 }
