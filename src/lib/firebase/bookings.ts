@@ -3,6 +3,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   getDocs,
   updateDoc,
   doc,
@@ -195,6 +196,27 @@ export async function getBookingsInRange(
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
+}
+
+// Returns the last 5 bookings for a customer at a business, excluding the current booking.
+// Requires composite index: businessSlug ASC, userEmail ASC, createdAt DESC (firestore.indexes.json).
+export async function getCustomerHistory(
+  businessSlug: string,
+  userEmail: string,
+  excludeBookingId: string,
+): Promise<Booking[]> {
+  const q = query(
+    collection(db, "bookings"),
+    where("businessSlug", "==", businessSlug),
+    where("userEmail", "==", userEmail),
+    orderBy("createdAt", "desc"),
+    limit(6),
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Booking))
+    .filter((b) => b.id !== excludeBookingId)
+    .slice(0, 5);
 }
 
 // Requires a composite index: businessSlug ASC, date ASC, status ASC
