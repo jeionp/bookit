@@ -264,8 +264,10 @@ test.describe('Admin booking management', () => {
     await page.getByText('Seed User').click()
     await page.getByTestId('reschedule-btn').click()
 
-    // Change to Court 2 (no existing bookings — hours stay selected)
+    // Change to Court 2 and select a new time slot
     await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeDisabled({ timeout: 5_000 })
+    await page.getByTestId('reschedule-slot-9').click()
     await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
 
     await page.getByTestId('confirm-reschedule-btn').click()
@@ -337,8 +339,9 @@ test.describe('Admin booking management', () => {
     await page.getByTestId('reschedule-btn').click()
     await expect(page.getByText('Reschedule Booking')).toBeVisible()
 
-    // Move to tomorrow — hour 9 stays selected (not taken on that day)
+    // Move to tomorrow and select a slot
     await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await page.getByTestId('reschedule-slot-9').click()
     await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
     await page.getByTestId('confirm-reschedule-btn').click()
 
@@ -358,7 +361,7 @@ test.describe('Admin booking management', () => {
 
     const panel = page.getByTestId('booking-detail-panel')
     // Wait for slot availability to finish loading
-    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
 
     // Beta's 2 PM slot must be disabled; Alpha's own 9 AM slot is excluded and stays selectable
     await expect(panel.getByRole('button', { name: '2 PM', exact: true })).toBeDisabled()

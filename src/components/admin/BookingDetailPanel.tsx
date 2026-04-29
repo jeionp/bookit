@@ -112,13 +112,13 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
   // Incremented on each new request so stale responses are discarded
   const slotRequestRef = useRef(0);
 
-  function loadSlots(facilityId: string, date: string) {
+  function loadSlots(facilityId: string, date: string, clearSelection = false) {
     const reqId = ++slotRequestRef.current;
     setLoadingSlots(true);
+    if (clearSelection) setNewHours([]);
     getBookedHoursExcluding(business.slug, facilityId, date, booking.id).then((taken) => {
       if (reqId !== slotRequestRef.current) return;
       setTakenHours(new Set(taken));
-      setNewHours((prev) => prev.filter((h) => !taken.includes(h)));
       setLoadingSlots(false);
     });
   }
@@ -126,17 +126,17 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
   function openReschedule() {
     setRescheduleMode(true);
     setError(null);
-    loadSlots(newFacilityId, newDate);
+    loadSlots(newFacilityId, newDate, true);
   }
 
   function handleCourtChange(facilityId: string) {
     setNewFacilityId(facilityId);
-    loadSlots(facilityId, newDate);
+    loadSlots(facilityId, newDate, true);
   }
 
   function handleDateChange(date: string) {
     setNewDate(date);
-    loadSlots(newFacilityId, date);
+    loadSlots(newFacilityId, date, true);
   }
 
   function startCancel() {
@@ -258,6 +258,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
                         type="button"
                         disabled={taken}
                         onClick={() => toggleHour(h)}
+                        data-testid={`reschedule-slot-${h}`}
                         className="text-xs py-1.5 px-2 rounded-md border font-medium transition-colors"
                         style={
                           selected
