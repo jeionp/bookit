@@ -27,6 +27,8 @@ export interface Booking {
   currency: string;
   status: "confirmed" | "cancelled";
   paymentStatus?: "unpaid" | "paid" | "refunded";
+  source?: "online" | "walk_in";
+  userPhone?: string;
   createdAt: Timestamp;
 }
 
@@ -233,4 +235,68 @@ export async function getAllBookingsForDay(
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
+}
+
+// Looks up a customer's most recent booking by email to pre-fill their name.
+export async function lookupCustomerByEmail(
+  businessSlug: string,
+  userEmail: string,
+): Promise<{ userName: string; userId: string } | null> {
+  const q = query(
+    collection(db, "bookings"),
+    where("businessSlug", "==", businessSlug),
+    where("userEmail", "==", userEmail),
+    orderBy("createdAt", "desc"),
+    limit(1),
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const data = snap.docs[0].data();
+  return { userName: data.userName as string, userId: data.userId as string };
+}
+
+export interface WalkInBookingData {
+  facilityId:   string;
+  facilityName: string;
+  date:         string;
+  hours:        number[];
+  businessSlug: string;
+  businessName: string;
+  totalPrice:   number;
+  currency:     string;
+  userName:     string;
+  userEmail:    string;
+  userPhone?:   string;
+  userId:       string;
+}
+
+export async function createWalkInBooking(data: WalkInBookingData): Promise<string> {
+  const newDocRef = doc(collection(db, "bookings"));
+
+  await runTransaction(db, async (tx) => {
+    const q = query(
+      collection(db, "bookings"),
+      where("businessSlug", "==", data.businessSlug),
+      where("facilityId", "==", data.facilityId),
+      where("date", "==", data.date),
+      where("status", "==", "confirmed")
+    );
+    const snap = await getDocs(q);
+
+    const takenHours = new Set<number>();
+    snap.docs.forEach((d) => {
+      (d.data().hours as number[]).forEach((h) => takenHours.add(h));
+    });
+
+    if (data.hours.some((h) => takenHours.has(h))) throw new SlotUnavailableError();
+
+    tx.set(newDocRef, {
+      ...data,
+      status: "confirmed",
+      source: "walk_in",
+      createdAt: Timestamp.now(),
+    });
+  });
+
+  return newDocRef.id;
 }

@@ -84,9 +84,9 @@ describe('bookings — create', () => {
     await assertFails(setDoc(doc(db, 'bookings', 'b1'), booking('bob')))
   })
 
-  test('cannot create a booking with totalPrice of 0', async () => {
+  test('can create a booking with totalPrice of 0 (comp/free slot)', async () => {
     const db = testEnv.authenticatedContext('alice').firestore()
-    await assertFails(
+    await assertSucceeds(
       setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), totalPrice: 0 })
     )
   })
@@ -285,6 +285,13 @@ describe('bookings — admin writes', () => {
     const db = testEnv.authenticatedContext('admin-user').firestore()
     await assertSucceeds(
       setDoc(doc(db, 'bookings', 'walkin-b1'), booking('walk-in-customer'))
+    )
+  })
+
+  test('admin can create a walk-in booking with totalPrice 0 (comp slot)', async () => {
+    const db = testEnv.authenticatedContext('admin-user').firestore()
+    await assertSucceeds(
+      setDoc(doc(db, 'bookings', 'walkin-comp'), { ...booking('walk-in-customer'), totalPrice: 0 })
     )
   })
 
