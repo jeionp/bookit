@@ -251,8 +251,8 @@ test.describe('Admin booking management', () => {
     // Grid block is still present (panel is also open, so scope to the button)
     await expect(page.getByRole('button', { name: /Seed User/ })).toBeAttached()
 
-    // Dismiss with "No"
-    await page.getByRole('button', { name: 'No' }).click()
+    // Dismiss with "Back"
+    await page.getByRole('button', { name: 'Back' }).click()
     await expect(page.getByText('Cancel this booking?')).not.toBeAttached()
     await expect(page.getByRole('button', { name: /Seed User/ })).toBeVisible()
   })
