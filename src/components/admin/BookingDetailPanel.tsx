@@ -258,6 +258,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
                         type="button"
                         disabled={taken}
                         onClick={() => toggleHour(h)}
+                        data-testid={`reschedule-slot-${h}`}
                         className="text-xs py-1.5 px-2 rounded-md border font-medium transition-colors"
                         style={
                           selected
