@@ -27,7 +27,7 @@ function lazyProxy<T extends object>(factory: () => T): T {
     get(_target, prop) {
       const instance = factory();
       const value = Reflect.get(instance, prop, instance);
-      return typeof value === "function" ? (value as Function).bind(instance) : value;
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(instance) : value;
     },
   });
 }
