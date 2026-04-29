@@ -217,7 +217,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
               <select
                 value={newFacilityId}
                 onChange={(e) => handleCourtChange(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                 data-testid="reschedule-court-select"
               >
                 {business.facilities.map((f) => (
@@ -234,7 +234,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
                 type="date"
                 value={newDate}
                 onChange={(e) => handleDateChange(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                 data-testid="reschedule-date-input"
               />
             </div>
