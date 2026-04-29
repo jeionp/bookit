@@ -212,7 +212,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
             <select
               value={facilityId}
               onChange={(e) => handleFacilityChange(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+              className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
               data-testid="walkin-court-select"
             >
               {business.facilities.map((f) => (
@@ -228,7 +228,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
               type="date"
               value={date}
               onChange={(e) => handleDateChange(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+              className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
               data-testid="walkin-date-input"
             />
           </div>
@@ -282,7 +282,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                   placeholder="customer@email.com"
                   value={email}
                   onChange={(e) => handleEmailChange(e.target.value)}
-                  className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                  className="flex-1 text-sm text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                   data-testid="walkin-email-input"
                 />
                 <button
@@ -312,7 +312,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                 placeholder="Walk-in"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                className="w-full text-sm text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                 data-testid="walkin-name-input"
               />
             </div>
@@ -325,7 +325,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                 placeholder="+63 9XX XXX XXXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                className="w-full text-sm text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                 data-testid="walkin-phone-input"
               />
             </div>
