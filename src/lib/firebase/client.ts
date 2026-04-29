@@ -12,8 +12,14 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Prevent re-initializing on hot reload
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+// Prevent re-initializing on hot reload.
+// Guard against missing env vars during static build-time rendering (e.g. /_not-found)
+// where NEXT_PUBLIC_* vars may not be present in the Vercel Preview environment.
+const app = getApps().length
+  ? getApps()[0]
+  : firebaseConfig.apiKey
+  ? initializeApp(firebaseConfig)
+  : initializeApp({ ...firebaseConfig, apiKey: "__build_placeholder__" });
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
