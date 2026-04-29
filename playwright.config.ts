@@ -34,11 +34,11 @@ export default defineConfig({
       NEXT_PUBLIC_FIREBASE_API_KEY:
         process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? 'demo-key',
       NEXT_PUBLIC_FIREBASE_PROJECT_ID:
-        process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'demo-bookit',
+        process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'jidoka-pixels',
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:
-        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? 'demo-bookit.firebaseapp.com',
+        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? 'jidoka-pixels.firebaseapp.com',
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:
-        process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'demo-bookit.appspot.com',
+        process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'jidoka-pixels.appspot.com',
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:
         process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '000000000000',
       NEXT_PUBLIC_FIREBASE_APP_ID:

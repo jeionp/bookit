@@ -588,6 +588,67 @@ test.describe('Admin walk-in booking', () => {
   })
 })
 
+// ─── Phase 5: Walk-in past-slot visual hint ───────────────────────────────────
+
+test.describe('Admin walk-in past-slot hint', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  // Returns a Date set to today at the given hour (local time), so the mocked
+  // date string always matches what AdminScheduleView already holds in state.
+  function todayAt(hour: number): Date {
+    const d = new Date()
+    d.setHours(hour, 0, 0, 0)
+    return d
+  }
+
+  test('slots before the current hour on today are dimmed but not disabled', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    // Lock the browser clock to 2 PM — every slot before hour 14 becomes "past"
+    await page.clock.setFixedTime(todayAt(14))
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-slot-6')).toBeVisible({ timeout: 8_000 })
+
+    // 6 AM is before 2 PM → past hint colour (#9ca3af) and still enabled
+    const pastSlot = page.getByTestId('walkin-slot-6')
+    await expect(pastSlot).toHaveCSS('color', 'rgb(156, 163, 175)')
+    await expect(pastSlot).not.toBeDisabled()
+
+    // 2 PM is the current hour → normal dark colour (#374151)
+    const currentSlot = page.getByTestId('walkin-slot-14')
+    await expect(currentSlot).toHaveCSS('color', 'rgb(55, 65, 81)')
+    await expect(currentSlot).not.toBeDisabled()
+  })
+
+  test('no slots are grayed out when viewing a future date', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.clock.setFixedTime(todayAt(14))
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-slot-6')).toBeVisible({ timeout: 8_000 })
+
+    // Switch to tomorrow — isToday becomes false, past hint must disappear
+    await page.getByTestId('walkin-date-input').fill(dateKeyDelta(1))
+    await expect(page.getByTestId('walkin-slot-6')).toHaveCSS('color', 'rgb(55, 65, 81)', { timeout: 8_000 })
+  })
+
+  test('a past-hint slot can still be selected and submitted', async ({ page }) => {
+    await goToScheduleView(page, adminUid)
+    await page.clock.setFixedTime(todayAt(14))
+    await page.getByTestId('new-walkin-btn').click()
+    await expect(page.getByTestId('walkin-slot-6')).toBeVisible({ timeout: 8_000 })
+
+    // Slot 6 AM is grayed out but must still be clickable
+    await expect(page.getByTestId('walkin-slot-6')).not.toBeDisabled()
+    await page.getByTestId('walkin-slot-6').click()
+    await page.getByTestId('walkin-book-btn').click()
+    await expect(page.getByTestId('walkin-modal')).not.toBeAttached({ timeout: 8_000 })
+  })
+})
+
 // ─── Phase 5: Refund prompt ────────────────────────────────────────────────────
 
 test.describe('Admin refund prompt', () => {

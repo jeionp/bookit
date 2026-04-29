@@ -190,6 +190,11 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
   const operatingHours = getOperatingHours(business, date);
   const totalPrice = computePrice(business, facilityId, selectedHours);
 
+  // For today only: slots before the current hour get a subtle "past" hint.
+  // They stay selectable so admins can record retroactive walk-ins.
+  const isToday = date === todayString();
+  const currentHour = new Date().getHours();
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -212,7 +217,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
             <select
               value={facilityId}
               onChange={(e) => handleFacilityChange(e.target.value)}
-              className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+              className="w-full text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
               data-testid="walkin-court-select"
             >
               {business.facilities.map((f) => (
@@ -228,7 +233,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
               type="date"
               value={date}
               onChange={(e) => handleDateChange(e.target.value)}
-              className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+              className="w-full text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
               data-testid="walkin-date-input"
             />
           </div>
@@ -236,15 +241,19 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
           {/* Time slots */}
           <div>
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-2">Time Slots</label>
-            {loadingSlots ? (
-              <p className="text-xs text-gray-400 py-2">Loading availability…</p>
-            ) : operatingHours.length === 0 ? (
-              <p className="text-xs text-gray-400 py-2">Closed on this day</p>
+            {operatingHours.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">
+                {loadingSlots ? "Loading availability…" : "Closed on this day"}
+              </p>
             ) : (
-              <div className="grid grid-cols-3 gap-1.5">
+              <div
+                className="grid grid-cols-3 gap-1.5 transition-opacity duration-150"
+                style={{ opacity: loadingSlots ? 0.4 : 1, pointerEvents: loadingSlots ? "none" : "auto" }}
+              >
                 {operatingHours.map((h) => {
                   const taken = takenHours.has(h);
                   const sel = selectedHours.includes(h);
+                  const isPast = isToday && h < currentHour;
                   return (
                     <button
                       key={h}
@@ -257,6 +266,8 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                           ? { backgroundColor: accentColor, borderColor: accentColor, color: "white" }
                           : taken
                           ? { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#d1d5db", cursor: "not-allowed" }
+                          : isPast
+                          ? { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#9ca3af" }
                           : { backgroundColor: "white", borderColor: "#e5e7eb", color: "#374151" }
                       }
                       data-testid={`walkin-slot-${h}`}
@@ -282,7 +293,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                   placeholder="customer@email.com"
                   value={email}
                   onChange={(e) => handleEmailChange(e.target.value)}
-                  className="flex-1 text-sm text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                  className="flex-1 text-sm text-gray-900 bg-white placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                   data-testid="walkin-email-input"
                 />
                 <button
@@ -312,7 +323,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                 placeholder="Walk-in"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full text-sm text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                className="w-full text-sm text-gray-900 bg-white placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                 data-testid="walkin-name-input"
               />
             </div>
@@ -325,7 +336,7 @@ export default function WalkInModal({ business, initialDate, onClose, onBooked }
                 placeholder="+63 9XX XXX XXXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full text-sm text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
+                className="w-full text-sm text-gray-900 bg-white placeholder:text-gray-400 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
                 data-testid="walkin-phone-input"
               />
             </div>
