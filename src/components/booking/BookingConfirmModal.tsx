@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { X, CalendarDays, Clock, MapPin } from "lucide-react";
-import { createBooking, SlotUnavailableError } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
 
 interface BookingSelection {
@@ -73,26 +72,32 @@ export default function BookingConfirmModal({
     setError("");
     setLoading(true);
     try {
-      await createBooking({
-        userId: user.uid,
-        userEmail: user.email ?? "",
-        userName: user.displayName ?? user.email ?? "",
-        businessSlug,
-        businessName,
-        facilityId: selection!.facilityId,
-        facilityName: selection!.facilityName,
-        date: dateStr,
-        hours: selection!.hours,
-        totalPrice: selection!.totalPrice,
-        currency: "PHP",
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          businessSlug,
+          facilityId: selection!.facilityId,
+          date: dateStr,
+          hours: selection!.hours,
+        }),
       });
-      setDone(true);
-    } catch (err) {
-      if (err instanceof SlotUnavailableError) {
-        setError(err.message);
-      } else {
-        setError("Failed to save booking. Please try again.");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.error === "SLOT_UNAVAILABLE") {
+          setError("One or more slots you selected were just booked by someone else. Please pick a different time.");
+        } else {
+          setError("Failed to save booking. Please try again.");
+        }
+        return;
       }
+      setDone(true);
+    } catch {
+      setError("Failed to save booking. Please try again.");
     } finally {
       setLoading(false);
     }

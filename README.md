@@ -36,6 +36,17 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-bookit.appspot.com
    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
    NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:demo
+
+   # Server-side Admin SDK — points to the local emulators
+   FIRESTORE_EMULATOR_HOST=localhost:8080
+   FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+   ```
+
+   For **production**, add these Vercel environment variables instead (no emulator vars):
+   ```env
+   FIREBASE_PROJECT_ID=<your-project-id>
+   FIREBASE_CLIENT_EMAIL=<service-account-email>
+   FIREBASE_PRIVATE_KEY=<service-account-private-key>
    ```
 
 3. **Start the Firebase emulators** (Auth + Firestore)
