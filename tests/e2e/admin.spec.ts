@@ -339,8 +339,9 @@ test.describe('Admin booking management', () => {
     await page.getByTestId('reschedule-btn').click()
     await expect(page.getByText('Reschedule Booking')).toBeVisible()
 
-    // Move to tomorrow — hour 9 stays selected (not taken on that day)
+    // Move to tomorrow and select a slot
     await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await page.getByTestId('reschedule-slot-9').click()
     await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
     await page.getByTestId('confirm-reschedule-btn').click()
 
