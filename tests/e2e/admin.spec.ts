@@ -361,7 +361,7 @@ test.describe('Admin booking management', () => {
 
     const panel = page.getByTestId('booking-detail-panel')
     // Wait for slot availability to finish loading
-    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
 
     // Beta's 2 PM slot must be disabled; Alpha's own 9 AM slot is excluded and stays selectable
     await expect(panel.getByRole('button', { name: '2 PM', exact: true })).toBeDisabled()
