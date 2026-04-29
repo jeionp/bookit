@@ -43,6 +43,9 @@ export default defineConfig({
         process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '000000000000',
       NEXT_PUBLIC_FIREBASE_APP_ID:
         process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '1:000000000000:web:demo',
+      // Server-side Admin SDK must connect to the local emulators
+      FIRESTORE_EMULATOR_HOST: 'localhost:8080',
+      FIREBASE_AUTH_EMULATOR_HOST: 'localhost:9099',
     },
   },
 })
