@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { X, CalendarDays, Clock, User, Mail, Hash, AlertCircle } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { X, CalendarDays, Clock, User, Mail, Hash, AlertCircle, History } from "lucide-react";
 import {
   Booking,
   cancelBooking,
   cancelBookingWithRefund,
   rescheduleBooking,
   getBookedHoursExcluding,
+  getCustomerHistory,
   SlotUnavailableError,
 } from "@/lib/firebase/bookings";
 import { Business } from "@/lib/types";
@@ -101,6 +102,12 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [history, setHistory] = useState<Booking[]>([]);
+
+  useEffect(() => {
+    getCustomerHistory(business.slug, booking.userEmail, booking.id).then(setHistory);
+  }, [business.slug, booking.userEmail, booking.id]);
 
   // Incremented on each new request so stale responses are discarded
   const slotRequestRef = useRef(0);
@@ -371,6 +378,30 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
                 {booking.id}
               </div>
             </div>
+
+            {history.length > 0 && (
+              <div data-testid="customer-history">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <History size={13} className="text-gray-400 shrink-0" />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    Past bookings
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  {history.map((b) => (
+                    <div key={b.id} className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5">
+                      <span>{b.facilityName} · {b.date}</span>
+                      <span
+                        className="font-semibold"
+                        style={{ color: b.status === "cancelled" ? "#ef4444" : "#16a34a" }}
+                      >
+                        {b.status === "cancelled" ? "Cancelled" : "Confirmed"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="pt-2 space-y-2 border-t border-gray-100">
               <button
