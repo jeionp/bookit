@@ -2,7 +2,7 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
-function initAdminApp() {
+function getAdminApp() {
   if (getApps().length > 0) return getApps()[0];
 
   // In emulator mode (FIRESTORE_EMULATOR_HOST set), no credentials are required —
@@ -22,7 +22,15 @@ function initAdminApp() {
   });
 }
 
-const adminApp = initAdminApp();
+function lazyProxy<T extends object>(factory: () => T): T {
+  return new Proxy({} as T, {
+    get(_target, prop) {
+      const instance = factory();
+      const value = Reflect.get(instance, prop, instance);
+      return typeof value === "function" ? (value as Function).bind(instance) : value;
+    },
+  });
+}
 
-export const adminAuth = getAuth(adminApp);
-export const adminDb = getFirestore(adminApp);
+export const adminAuth = lazyProxy(() => getAuth(getAdminApp()));
+export const adminDb   = lazyProxy(() => getFirestore(getAdminApp()));
