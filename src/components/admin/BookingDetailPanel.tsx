@@ -178,6 +178,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
       onReschedule({ ...booking, facilityId: newFacilityId, facilityName: newFacility.name, date: newDate, hours: sorted, totalPrice: newTotalPrice });
     } catch (e) {
       setError(e instanceof SlotUnavailableError ? e.message : "Failed to reschedule. Please try again.");
+    } finally {
       setSaving(false);
     }
   }
