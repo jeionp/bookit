@@ -3,6 +3,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { businesses } from "@/lib/businesses";
 
+export const dynamic = "force-dynamic";
+
 export interface CreateBookingRequest {
   facilityId: string;
   date: string;

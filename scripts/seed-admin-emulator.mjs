@@ -13,9 +13,27 @@
  *   firebase emulators:start --only auth,firestore
  */
 
+import { readFileSync } from 'fs'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
 const AUTH_URL = 'http://localhost:9099'
 const FS_URL   = 'http://localhost:8080'
-const PROJECT  = 'demo-bookit'
+
+// Read project ID from .env.local so this script stays in sync with the app
+function readProjectId() {
+  try {
+    const envPath = resolve(dirname(fileURLToPath(import.meta.url)), '../.env.local')
+    const lines = readFileSync(envPath, 'utf8').split('\n')
+    for (const line of lines) {
+      const m = line.match(/^NEXT_PUBLIC_FIREBASE_PROJECT_ID=(.+)/)
+      if (m) return m[1].trim()
+    }
+  } catch { /* fall through */ }
+  return 'demo-bookit'
+}
+
+const PROJECT = readProjectId()
 
 const email    = process.argv[2] ?? 'admin@paddleup.test'
 const password = process.argv[3] ?? 'Admin1234!'
