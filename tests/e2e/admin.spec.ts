@@ -264,20 +264,22 @@ test.describe('Admin booking management', () => {
     await page.getByText('Seed User').click()
     await page.getByTestId('reschedule-btn').click()
 
-    // Change to Court 2 and select a new time slot
+    const panel = page.getByTestId('booking-detail-panel')
+    // Step 1: change to Court 2
     await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
-    await expect(page.getByTestId('confirm-reschedule-btn')).toBeDisabled({ timeout: 5_000 })
+    await panel.getByRole('button', { name: 'Next' }).click()
+    // Step 2: slots load; Next is disabled until a slot is chosen
+    await expect(panel.getByRole('button', { name: 'Next' })).toBeDisabled({ timeout: 5_000 })
     await page.getByTestId('reschedule-slot-9').click()
-    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
-
+    await expect(panel.getByRole('button', { name: 'Next' })).toBeEnabled()
+    await panel.getByRole('button', { name: 'Next' }).click()
+    // Step 3: confirm
     await page.getByTestId('confirm-reschedule-btn').click()
 
-    // Detail panel now shows Court 2
-    const panel = page.getByTestId('booking-detail-panel')
     await expect(panel.getByText('Court 2')).toBeVisible({ timeout: 8_000 })
   })
 
-  test('reschedule back button returns to detail view without saving', async ({ page }) => {
+  test('reschedule Cancel in step 1 returns to detail view without saving', async ({ page }) => {
     await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
     await goToScheduleView(page, adminUid)
 
@@ -285,7 +287,7 @@ test.describe('Admin booking management', () => {
     await page.getByTestId('reschedule-btn').click()
     await expect(page.getByText('Reschedule Booking')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Back' }).click()
+    await page.getByRole('button', { name: 'Cancel' }).click()
 
     await expect(page.getByText('Booking Detail')).toBeVisible()
     await expect(page.getByTestId('booking-detail-panel').getByText('Court 1')).toBeVisible()
@@ -339,14 +341,19 @@ test.describe('Admin booking management', () => {
     await page.getByTestId('reschedule-btn').click()
     await expect(page.getByText('Reschedule Booking')).toBeVisible()
 
-    // Move to tomorrow and select a slot
+    const panel = page.getByTestId('booking-detail-panel')
+    // Step 1: move to tomorrow
     await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await panel.getByRole('button', { name: 'Next' }).click()
+    // Step 2: select a slot (selection was cleared on date change)
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
     await page.getByTestId('reschedule-slot-9').click()
-    await expect(page.getByTestId('confirm-reschedule-btn')).toBeEnabled({ timeout: 5_000 })
+    await panel.getByRole('button', { name: 'Next' }).click()
+    // Step 3: confirm
     await page.getByTestId('confirm-reschedule-btn').click()
 
     // Booking moved to tomorrow — must not appear on today's grid
-    await expect(page.getByText('Seed User')).not.toBeAttached({ timeout: 8_000 })
+    await expect(page.getByRole('button', { name: /Seed User/ })).not.toBeAttached({ timeout: 8_000 })
   })
 
   test('a slot booked by another booking appears disabled in the reschedule picker', async ({ page }) => {
@@ -355,11 +362,12 @@ test.describe('Admin booking management', () => {
     await seedBookingForUser({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [14], userId: 'uid-beta', userEmail: 'beta@bookit-test.internal', userName: 'Beta User' })
     await goToScheduleView(page, adminUid)
 
-    // Open Alpha's detail panel and enter reschedule mode
+    // Open Alpha's detail panel and advance to the slot-picker step
     await page.getByText('Alpha User').click()
     await page.getByTestId('reschedule-btn').click()
-
     const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+
     // Wait for slot availability to finish loading
     await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
 
@@ -790,6 +798,157 @@ test.describe('Admin payment status display', () => {
   })
 })
 
+// ─── Phase 5: Reschedule 3-step flow UX ──────────────────────────────────────
+
+test.describe('Admin reschedule — 3-step flow UX', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('"Currently booked" card is visible at every reschedule step', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+
+    // Step 1
+    await expect(panel.getByText(/currently booked/i)).toBeVisible()
+
+    // Step 2
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+    await expect(panel.getByText(/currently booked/i)).toBeVisible()
+
+    // Step 3
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('confirm-reschedule-btn')).toBeVisible()
+    await expect(panel.getByText(/currently booked/i)).toBeVisible()
+  })
+
+  test('re-selecting a deselected original slot switches back to solid fill', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    await page.getByTestId('reschedule-slot-9').click() // deselect → dashed
+    await page.getByTestId('reschedule-slot-9').click() // re-select → solid
+
+    await expect(page.getByTestId('reschedule-slot-9')).toHaveCSS('border-style', 'solid')
+  })
+
+  test('advisory text is grey when selected count matches original booking', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    // Advance to step 2 with same court/date — newHours is pre-filled from the booking
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    // 1 slot selected == 1 original → grey with "matches original"
+    await expect(page.getByTestId('reschedule-advisory')).toContainText('matches original')
+    await expect(page.getByTestId('reschedule-advisory')).toHaveCSS('color', 'rgb(107, 114, 128)')
+  })
+
+  test('advisory text is amber when selected count differs from original', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    // Deselect one slot: 1 of 2 selected → count mismatch → amber
+    await page.getByTestId('reschedule-slot-9').click()
+
+    await expect(page.getByTestId('reschedule-advisory')).toContainText('of 2 hours selected')
+    await expect(page.getByTestId('reschedule-advisory')).toHaveCSS('color', 'rgb(245, 158, 11)')
+  })
+
+  test('changing date on step 1 clears the slot selection', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    // 0 of 1 selected after date change → shows the "Select" prompt (amber)
+    await expect(page.getByTestId('reschedule-advisory')).toContainText('Select 1 hour to match original')
+  })
+
+  test('step 3 shows a green price note when the new booking is cheaper', async ({ page }) => {
+    // 2 hours = ₱1,000; reschedule to 1 hour = ₱500 → diff −₱500 (green)
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+    // Both slots are pre-selected; deselect slot 10 to leave only 1 hour
+    await page.getByTestId('reschedule-slot-10').click()
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByTestId('reschedule-price-diff')).toContainText('-₱500 less than original')
+    await expect(page.getByTestId('reschedule-price-diff')).toHaveCSS('color', 'rgb(22, 163, 74)')
+  })
+
+  test('step 3 shows a red price note when the new booking is more expensive', async ({ page }) => {
+    // 1 hour = ₱500; add a second hour = ₱1,000 → diff +₱500 (red)
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+    // Add a second slot
+    await page.getByTestId('reschedule-slot-10').click()
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByTestId('reschedule-price-diff')).toContainText('+₱500 more than original')
+    await expect(page.getByTestId('reschedule-price-diff')).toHaveCSS('color', 'rgb(220, 38, 38)')
+  })
+
+  test('step 3 shows no price diff note when price is unchanged', async ({ page }) => {
+    // Swap slot 9 → slot 10; both non-prime at ₱500/h → same total
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('reschedule-slot-9').click()  // deselect
+    await page.getByTestId('reschedule-slot-10').click() // select
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    await expect(page.getByTestId('reschedule-price-diff')).not.toBeAttached()
+  })
+
+})
+
 // ─── Storefront — admin link ──────────────────────────────────────────────────
 
 test.describe('Storefront — admin link', () => {
@@ -831,5 +990,266 @@ test.describe('Storefront — admin link', () => {
 
     await expect(page).toHaveURL(ADMIN_PAGE, { timeout: 8_000 })
     await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
+  })
+})
+
+// ─── Guided reschedule flow ───────────────────────────────────────────────────
+
+test.describe('Guided reschedule flow', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  // Advances through all 3 steps and submits. Caller provides any step-1
+  // overrides (court label / date) and the slot to pick in step 2.
+  async function completeReschedule(page: Page, opts: {
+    courtLabel?: string
+    date?:       string
+    slotId:      string
+  }) {
+    const panel = page.getByTestId('booking-detail-panel')
+    if (opts.courtLabel) await page.getByTestId('reschedule-court-select').selectOption({ label: opts.courtLabel })
+    if (opts.date)       await page.getByTestId('reschedule-date-input').fill(opts.date)
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId(opts.slotId)).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId(opts.slotId).click()
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await page.getByTestId('confirm-reschedule-btn').click()
+  }
+
+  test('opening reschedule shows the "Currently booked" summary and step indicator', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await expect(panel.getByText('Step 1 of 3')).toBeVisible()
+    await expect(panel.getByText('Currently booked')).toBeVisible()
+    await expect(panel.getByTestId('reschedule-current-facility')).toHaveText('Court 1')
+  })
+
+  test('step 1 pre-fills the original court and date', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    await expect(page.getByTestId('reschedule-court-select')).toHaveValue('court-1')
+    await expect(page.getByTestId('reschedule-date-input')).toHaveValue(todayKey())
+  })
+
+  test('Next advances to step 2 and shows the time slot grid', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    await expect(panel.getByText('Step 2 of 3')).toBeVisible()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('original hours are pre-selected when keeping the same court and date', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    // Slot 9 is pre-selected — Next is enabled immediately without any click
+    await expect(panel.getByRole('button', { name: 'Next' })).toBeEnabled({ timeout: 5_000 })
+    await expect(panel.getByText(/matches original/)).toBeVisible()
+  })
+
+  test('deselecting the pre-selected original slot shows the dashed "was here" hint', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    // Deselect the pre-selected original slot
+    await page.getByTestId('reschedule-slot-9').click()
+
+    // Slot should now show the dashed "was here" style and Next should be disabled
+    await expect(page.getByTestId('reschedule-slot-9')).toHaveCSS('border-style', 'dashed')
+    await expect(panel.getByRole('button', { name: 'Next' })).toBeDisabled()
+  })
+
+  test('hour count advisory warns when selected count differs from original', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    // Original is 1h; add a second slot so count becomes 2
+    await page.getByTestId('reschedule-slot-10').click()
+
+    await expect(panel.getByText(/2 of 1 hour/)).toBeVisible()
+  })
+
+  test('changing court in step 1 clears the hour selection in step 2', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    // No hours pre-selected after court change — Next stays disabled until a slot is chosen
+    await expect(panel.getByRole('button', { name: 'Next' })).toBeDisabled({ timeout: 5_000 })
+    await expect(panel.getByText(/Select 1 hour/)).toBeVisible()
+  })
+
+  test('Cancel in step 1 exits reschedule and shows the original detail view', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+    await expect(page.getByText('Step 1 of 3')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(page.getByText('Booking Detail')).toBeVisible()
+    await expect(page.getByTestId('booking-detail-panel').getByText('Court 1')).toBeVisible()
+  })
+
+  test('re-opening reschedule after cancelling resets court and date to original values', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    // Change the date then cancel
+    await page.getByTestId('reschedule-date-input').fill(dateKeyDelta(1))
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
+    // Re-open — date must be reset to the original booking date
+    await page.getByTestId('reschedule-btn').click()
+    await expect(page.getByTestId('reschedule-date-input')).toHaveValue(todayKey())
+  })
+
+  test('step 2 Back returns to step 1', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(panel.getByText('Step 2 of 3')).toBeVisible()
+
+    await panel.getByRole('button', { name: 'Back' }).click()
+
+    await expect(panel.getByText('Step 1 of 3')).toBeVisible()
+    await expect(page.getByTestId('reschedule-court-select')).toBeVisible()
+  })
+
+  test('step 3 shows before/after comparison and step indicator', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-10')).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('reschedule-slot-10').click()
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    await expect(panel.getByText('Step 3 of 3')).toBeVisible()
+    await expect(panel.getByText('Before')).toBeVisible()
+    await expect(panel.getByText('After')).toBeVisible()
+    await expect(panel.getByTestId('reschedule-before-facility')).toHaveText('Court 1')
+    await expect(panel.getByTestId('reschedule-after-facility')).toHaveText('Court 2')
+  })
+
+  test('step 3 Back returns to step 2 with slots still visible', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(panel.getByText('Step 3 of 3')).toBeVisible()
+
+    await panel.getByRole('button', { name: 'Back' }).click()
+
+    await expect(panel.getByText('Step 2 of 3')).toBeVisible()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible()
+  })
+
+  test('slot conflict in step 3 shows the unavailable error without closing the form', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    // Use Court 2 so we have a free slot to pick
+    await page.getByTestId('reschedule-court-select').selectOption({ label: 'Court 2' })
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-10')).toBeVisible({ timeout: 5_000 })
+    await page.getByTestId('reschedule-slot-10').click()
+    await panel.getByRole('button', { name: 'Next' }).click()
+
+    // Race: another booking claims the same slot before we confirm
+    await seedBookingForUser({ facilityId: 'court-2', facilityName: 'Court 2', date: todayKey(), hours: [10], userId: 'uid-race', userEmail: 'race@bookit-test.internal', userName: 'Race User' })
+
+    await page.getByTestId('confirm-reschedule-btn').click()
+
+    await expect(panel.getByText(/slots you selected were just booked/)).toBeVisible({ timeout: 8_000 })
+    // Form stays open so the admin can pick a different slot
+    await expect(panel.getByText('Step 3 of 3')).toBeVisible()
+  })
+
+  test('full flow: reschedule to different court updates the detail panel', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    await completeReschedule(page, { courtLabel: 'Court 2', slotId: 'reschedule-slot-9' })
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await expect(panel.getByText('Court 2')).toBeVisible({ timeout: 8_000 })
+    await expect(panel.getByText('Booking Detail')).toBeVisible()
+  })
+
+  test('full flow: multi-hour booking pre-selects all original hours and matching hint is shown', async ({ page }) => {
+    await seedBooking({ facilityId: 'court-1', facilityName: 'Court 1', date: todayKey(), hours: [9, 10] })
+    await goToScheduleView(page, adminUid)
+    await page.getByText('Seed User').click()
+    await page.getByTestId('reschedule-btn').click()
+
+    const panel = page.getByTestId('booking-detail-panel')
+    await panel.getByRole('button', { name: 'Next' }).click()
+    await expect(page.getByTestId('reschedule-slot-9')).toBeVisible({ timeout: 5_000 })
+
+    // Both original hours pre-selected → "matches original" (2h)
+    await expect(panel.getByText(/2 hours? selected — matches original/)).toBeVisible()
+    // Next enabled without any manual selection
+    await expect(panel.getByRole('button', { name: 'Next' })).toBeEnabled()
   })
 })
