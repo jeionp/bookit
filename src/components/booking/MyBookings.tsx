@@ -38,11 +38,13 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(!!user);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getUserBookings(user.uid)
       .then(setBookings)
+      .catch(() => setFetchError(true))
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -74,6 +76,15 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
           className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
           style={{ borderColor: `${accentColor} transparent transparent transparent` }}
         />
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="py-16 text-center space-y-2">
+        <p className="text-sm font-semibold text-gray-700">Couldn&apos;t load bookings</p>
+        <p className="text-xs text-gray-400">Please try refreshing the page</p>
       </div>
     );
   }
