@@ -196,7 +196,7 @@ export default function AvailabilitySection({
                 week: "flex",
                 day: "flex-1 aspect-square flex items-center justify-center",
                 day_button:
-                  "w-9 h-9 rounded-xl text-sm font-medium transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed",
+                  "w-9 h-9 rounded-xl text-sm font-medium text-gray-900 transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed",
                 selected: "!bg-[var(--rdp-accent-color)] !text-white rounded-xl font-bold hover:opacity-90",
                 today: "font-bold text-[var(--rdp-accent-color)]",
                 outside: "opacity-0 pointer-events-none",
