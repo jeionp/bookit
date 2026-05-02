@@ -462,3 +462,53 @@ The platform currently supports only `paddleup` via static config in `src/lib/bu
 ### Address security backlog before launch
 
 See §11 for the four deferred security gaps. Gap 1 (client-side price) and Gap 3 (webhook verification) are blockers before PayMongo goes live.
+
+---
+
+## 13. Production Deploy Checklist
+
+Run through this whenever deploying to a new environment or after infrastructure changes.
+
+### Vercel environment variables
+
+Set all of these under **Project Settings → Environment Variables** for the **Production** (and Preview if needed) scope:
+
+| Variable | Where to get it |
+|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase Console → Project Settings → Your apps → Web app config |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | same |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | same |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | same |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | same |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | same |
+| `FIREBASE_PROJECT_ID` | Firebase Console → Project Settings → Service Accounts → Generate new private key |
+| `FIREBASE_CLIENT_EMAIL` | same JSON file (`client_email`) |
+| `FIREBASE_PRIVATE_KEY` | same JSON file (`private_key`) — paste the full string including `-----BEGIN/END PRIVATE KEY-----` |
+
+`NEXT_PUBLIC_*` vars are embedded at build time; `FIREBASE_*` vars are server-only (Admin SDK, used by API routes).
+
+### Firebase CLI deploys
+
+These are **not** handled by Vercel and must be run manually after changes to the respective files:
+
+```bash
+# After any change to firestore.rules
+firebase deploy --only firestore:rules
+
+# After any change to firestore.indexes.json
+firebase deploy --only firestore:indexes
+```
+
+Firestore indexes take a few minutes to build after deployment — queries that depend on a new index will fail until the build completes.
+
+### Granting admin access
+
+The user must have signed up first (Firebase Auth account must exist), then:
+
+```bash
+# Download service-account.json from Firebase Console → Project Settings → Service Accounts
+node scripts/grant-admin.mjs <email> <businessSlug>
+
+# To revoke
+node scripts/grant-admin.mjs <email> <businessSlug> --revoke
+```
