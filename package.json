@@ -13,7 +13,9 @@
     "test:security": "vitest run --config vitest.security.config.ts",
     "seed:admin": "node scripts/seed-admin-emulator.mjs",
     "grant:admin": "node scripts/grant-admin.mjs",
-    "revoke:admin": "node scripts/grant-admin.mjs --revoke"
+    "revoke:admin": "node scripts/grant-admin.mjs --revoke",
+    "seed:businesses": "node scripts/seed-businesses.mjs",
+    "seed:businesses:emulator": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/seed-businesses.mjs"
   },
   "dependencies": {
     "firebase": "^12.12.1",

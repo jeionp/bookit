@@ -9,6 +9,12 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.slugs.hasAny([slug]);
     }
 
+    // Business config — public read, write via Admin SDK only (onboarding API route)
+    match /businesses/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /admins/{uid} {
       // Only the user themselves can read their own admin record
       allow get: if request.auth != null && request.auth.uid == uid;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
-import { businesses } from "@/lib/businesses";
+import { getBusinessBySlug } from "@/lib/firebase/businesses";
 
 export const dynamic = "force-dynamic";
 
@@ -12,13 +12,13 @@ export interface CreateBookingRequest {
   businessSlug: string;
 }
 
-function calcPrice(businessSlug: string, facilityId: string, hours: number[]): {
+async function calcPrice(businessSlug: string, facilityId: string, hours: number[]): Promise<{
   totalPrice: number;
   currency: string;
   facilityName: string;
   businessName: string;
-} | null {
-  const biz = businesses.find((b) => b.slug === businessSlug);
+} | null> {
+  const biz = await getBusinessBySlug(businessSlug);
   if (!biz) return null;
   const facility = biz.facilities.find((f) => f.id === facilityId);
   if (!facility) return null;
@@ -40,7 +40,6 @@ function calcPrice(businessSlug: string, facilityId: string, hours: number[]): {
 }
 
 export async function POST(req: NextRequest) {
-  // Verify the caller's Firebase ID token
   const authHeader = req.headers.get("authorization") ?? "";
   const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!idToken) {
@@ -66,8 +65,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  // Recalculate price server-side from the static business config (source of truth)
-  const priceInfo = calcPrice(businessSlug, facilityId, hours);
+  // Recalculate price server-side from Firestore (source of truth)
+  const priceInfo = await calcPrice(businessSlug, facilityId, hours);
   if (!priceInfo) {
     return NextResponse.json({ error: "Unknown business or facility" }, { status: 400 });
   }
@@ -76,7 +75,6 @@ export async function POST(req: NextRequest) {
 
   try {
     await adminDb.runTransaction(async (tx) => {
-      // Check for conflicts: any confirmed booking on this court/date that overlaps
       const snap = await tx.get(
         adminDb
           .collection("bookings")
