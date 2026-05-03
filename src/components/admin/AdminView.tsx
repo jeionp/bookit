@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, ExternalLink, CalendarDays, BarChart2 } from "lucide-react";
+import { LogOut, ExternalLink, CalendarDays, BarChart2, Settings } from "lucide-react";
 import Link from "next/link";
 import { Business } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import AdminScheduleView from "./AdminScheduleView";
 import AdminAnalyticsView from "./AdminAnalyticsView";
+import AdminSettingsView from "./AdminSettingsView";
 
-type Tab = "schedule" | "analytics";
+type Tab = "schedule" | "analytics" | "settings";
 
 export default function AdminView({ business }: { business: Business }) {
   const { signOut } = useAuth();
@@ -63,14 +64,23 @@ export default function AdminView({ business }: { business: Business }) {
           label="Analytics"
           accent={business.accentColor}
         />
+        <TabButton
+          active={tab === "settings"}
+          onClick={() => setTab("settings")}
+          icon={<Settings size={14} />}
+          label="Settings"
+          accent={business.accentColor}
+        />
       </div>
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">
         {tab === "schedule" ? (
           <AdminScheduleView business={business} />
-        ) : (
+        ) : tab === "analytics" ? (
           <AdminAnalyticsView business={business} />
+        ) : (
+          <AdminSettingsView business={business} />
         )}
       </div>
     </div>

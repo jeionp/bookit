@@ -9,6 +9,7 @@ export interface Facility {
   primePricePerHour?: number; // prime time rate (optional)
   primeTimeStart?: number;    // hour when prime time begins e.g. 17 = 5 PM
   currency: string;
+  operatingHours?: OperatingHours[];
 }
 
 export interface OperatingHours {
