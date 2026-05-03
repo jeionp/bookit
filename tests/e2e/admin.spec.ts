@@ -37,12 +37,14 @@ async function signInOnStorefront(page: Page, email: string, password: string) {
 }
 
 // Signs in as admin, seeds the admin doc, and navigates to the admin schedule
-// view. Waits until the schedule grid header is ready before returning.
+// view. Waits until the date navigation buttons are visible — those only exist
+// inside AdminScheduleView and unambiguously confirm the admin page loaded.
 async function goToScheduleView(page: Page, adminUid: string) {
   await seedAdminDoc(adminUid, ['paddleup'])
   await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
   await page.goto(ADMIN_PAGE)
-  await expect(page.getByText('Court 1')).toBeVisible({ timeout: 8_000 })
+  await expect(page).toHaveURL(ADMIN_PAGE, { timeout: 8_000 })
+  await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
 }
 
 // ─── Suite setup ─────────────────────────────────────────────────────────────
