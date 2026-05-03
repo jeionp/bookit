@@ -1255,3 +1255,122 @@ test.describe('Guided reschedule flow', () => {
     await expect(panel.getByRole('button', { name: 'Next' })).toBeEnabled()
   })
 })
+
+// ─── Phase 6: Admin Settings tab ─────────────────────────────────────────────
+
+async function goToSettingsView(page: Page, adminUid: string) {
+  await goToScheduleView(page, adminUid)
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-save-btn')).toBeVisible({ timeout: 8_000 })
+}
+
+async function navigateToTomorrow(page: Page) {
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(now.getDate() + 1)
+
+  // Open the AvailabilitySection date picker (the button currently shows "Today")
+  await page.locator('[data-testid="availability-section"]').getByRole('button').first().click()
+
+  // Advance to next month if tomorrow falls in it
+  if (tomorrow.getMonth() !== now.getMonth()) {
+    await page.getByLabel('Go to next month').click()
+  }
+
+  // Match exactly the day number — regex anchors prevent matching "15" when looking for "5"
+  await page.locator('button').filter({ hasText: new RegExp(`^${tomorrow.getDate()}$`) }).first().click()
+}
+
+test.describe('Admin settings tab', () => {
+  let adminUid = ''
+
+  test.beforeAll(async () => {
+    const result = await signInUser(ADMIN_EMAIL, ADMIN_PASSWORD)
+    adminUid = result.localId
+  })
+
+  test('Settings tab is visible and shows all three sections', async ({ page }) => {
+    await goToSettingsView(page, adminUid)
+    await expect(page.getByText('Business Info')).toBeVisible()
+    await expect(page.getByText('Courts')).toBeVisible()
+    await expect(page.getByText('Amenities')).toBeVisible()
+  })
+
+  test('editing the business name persists after save and page reload', async ({ page }) => {
+    await goToSettingsView(page, adminUid)
+
+    await page.getByTestId('settings-name-input').fill('Renamed Venue')
+    await page.getByTestId('settings-save-btn').click()
+    await expect(page.getByText('Changes saved successfully.')).toBeVisible({ timeout: 8_000 })
+
+    // Reload and re-open Settings — server re-fetches business from Firestore
+    await page.goto(ADMIN_PAGE)
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await expect(page.getByTestId('settings-name-input')).toHaveValue('Renamed Venue', { timeout: 8_000 })
+  })
+
+  test('per-court hours override marks a court closed while other courts use business hours', async ({ page }) => {
+    await goToSettingsView(page, adminUid)
+
+    // Expand Court 1 and activate a per-court override (copies business hours)
+    const court1 = page.getByTestId('settings-court-court-1')
+    await court1.getByRole('button', { name: 'Court 1' }).click()
+    await court1.getByRole('button', { name: 'Override for this court' }).click()
+
+    // Mark tomorrow's day of the week as Closed
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const dayName = tomorrow.toLocaleDateString('en-US', { weekday: 'long' })
+    const dayRow = page.getByTestId(`settings-court-court-1-day-${dayName.toLowerCase()}`)
+    await dayRow.locator('input[type="checkbox"]').check()
+
+    await page.getByTestId('settings-save-btn').click()
+    await expect(page.getByText('Changes saved successfully.')).toBeVisible({ timeout: 8_000 })
+
+    // Navigate to the storefront and select tomorrow
+    await page.goto(STOREFRONT)
+    await navigateToTomorrow(page)
+
+    // Court 1 is the default selection — must show "Closed on this day"
+    await expect(page.getByText('Closed on this day')).toBeVisible({ timeout: 8_000 })
+
+    // Switch to Court 2 (uses business hours) — must show available slots
+    await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 2' })
+    await page.getByText('Loading availability…').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
+    await expect(page.getByText('Loading availability…')).not.toBeVisible({ timeout: 10_000 })
+
+    await expect(page.getByText('Closed on this day')).not.toBeAttached()
+    await expect(page.getByRole('button', { name: '6 AM' })).toBeVisible()
+  })
+
+  test('adding a court and saving makes it appear on the storefront', async ({ page }) => {
+    await goToSettingsView(page, adminUid)
+
+    await page.getByRole('button', { name: 'Add court' }).click()
+    await page.getByTestId('settings-save-btn').click()
+    await expect(page.getByText('Changes saved successfully.')).toBeVisible({ timeout: 8_000 })
+
+    await page.goto(STOREFRONT)
+    await expect(
+      page.getByTestId('availability-section').locator('select')
+    ).toContainText('New Court', { timeout: 8_000 })
+  })
+
+  test('removing a court and saving removes it from the storefront', async ({ page }) => {
+    await goToSettingsView(page, adminUid)
+
+    // Expand Court 8 (VIP) and confirm removal
+    const court8 = page.getByTestId('settings-court-court-8')
+    await court8.getByRole('button', { name: 'Court 8 (VIP)' }).click()
+    await court8.getByRole('button', { name: 'Remove court' }).click()
+    await court8.getByRole('button', { name: 'Yes, remove' }).click()
+
+    await page.getByTestId('settings-save-btn').click()
+    await expect(page.getByText('Changes saved successfully.')).toBeVisible({ timeout: 8_000 })
+
+    await page.goto(STOREFRONT)
+    await expect(
+      page.getByTestId('availability-section').locator('select')
+    ).not.toContainText('Court 8 (VIP)', { timeout: 8_000 })
+  })
+})
