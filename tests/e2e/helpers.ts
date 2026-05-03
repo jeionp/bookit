@@ -26,6 +26,97 @@ export function dateKeyDelta(daysFromNow: number): string {
 
 // ─── Firestore ────────────────────────────────────────────────────────────────
 
+const OUTDOOR_IMG = 'https://images.unsplash.com/photo-1599474924187-334a4ae5bd3c?w=800&q=80'
+const INDOOR_IMG  = 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80'
+
+function courtField(id: string, name: string, desc: string, img: string, price: number, prime: number) {
+  return {
+    mapValue: {
+      fields: {
+        id:                { stringValue: id },
+        name:              { stringValue: name },
+        description:       { stringValue: desc },
+        image:             { stringValue: img },
+        pricePerHour:      { integerValue: String(price) },
+        primePricePerHour: { integerValue: String(prime) },
+        primeTimeStart:    { integerValue: '17' },
+        currency:          { stringValue: 'PHP' },
+      },
+    },
+  }
+}
+
+export async function seedBusiness(): Promise<void> {
+  const body = {
+    fields: {
+      name:        { stringValue: 'PaddleUp' },
+      type:        { stringValue: 'court' },
+      tagline:     { stringValue: 'Where Pickleball Happens' },
+      description: { stringValue: "PaddleUp is Quezon City's premier pickleball facility." },
+      coverImage:  { stringValue: 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=1400&q=80' },
+      location:    { stringValue: 'Quezon City, Metro Manila' },
+      address:     { stringValue: '123 Katipunan Ave, Loyola Heights, Quezon City, 1108 Metro Manila' },
+      phone:       { stringValue: '+63 917 123 4567' },
+      email:       { stringValue: 'hello@paddleup.ph' },
+      accentColor: { stringValue: '#16a34a' },
+      rating:      { doubleValue: 4.8 },
+      reviewCount: { integerValue: '214' },
+      facilities: {
+        arrayValue: {
+          values: [
+            courtField('court-1', 'Court 1',          'Full-size outdoor pickleball court.', OUTDOOR_IMG, 500, 600),
+            courtField('court-2', 'Court 2',          'Full-size outdoor pickleball court.', OUTDOOR_IMG, 500, 600),
+            courtField('court-3', 'Court 3 (Indoor)', 'Climate-controlled indoor court.',    INDOOR_IMG,  700, 800),
+            courtField('court-4', 'Court 4 (Indoor)', 'Climate-controlled indoor court.',    INDOOR_IMG,  700, 800),
+            courtField('court-5', 'Court 5',          'Full-size outdoor pickleball court.', OUTDOOR_IMG, 500, 600),
+            courtField('court-6', 'Court 6',          'Full-size outdoor pickleball court.', OUTDOOR_IMG, 500, 600),
+            courtField('court-7', 'Court 7 (VIP)',    'Premium private court.',              INDOOR_IMG,  900, 1100),
+            courtField('court-8', 'Court 8 (VIP)',    'Premium private court.',              INDOOR_IMG,  900, 1100),
+          ],
+        },
+      },
+      amenities: {
+        arrayValue: {
+          values: ['Free Parking', 'Restrooms & Showers', 'Equipment Rental', 'Locker Room',
+                   'Pro Shop', 'Snack Bar', 'Free Wi-Fi', 'Spectator Area']
+            .map((a) => ({ stringValue: a })),
+        },
+      },
+      operatingHours: {
+        arrayValue: {
+          values: [
+            { day: 'Monday',    open: '6:00 AM', close: '10:00 PM' },
+            { day: 'Tuesday',   open: '6:00 AM', close: '10:00 PM' },
+            { day: 'Wednesday', open: '6:00 AM', close: '10:00 PM' },
+            { day: 'Thursday',  open: '6:00 AM', close: '10:00 PM' },
+            { day: 'Friday',    open: '6:00 AM', close: '11:00 PM' },
+            { day: 'Saturday',  open: '5:00 AM', close: '11:00 PM' },
+            { day: 'Sunday',    open: '5:00 AM', close: '10:00 PM' },
+          ].map((h) => ({
+            mapValue: {
+              fields: {
+                day:   { stringValue: h.day },
+                open:  { stringValue: h.open },
+                close: { stringValue: h.close },
+              },
+            },
+          })),
+        },
+      },
+    },
+  }
+
+  const res = await fetch(
+    `${FIRESTORE}/v1/projects/${PROJECT}/databases/(default)/documents/businesses/paddleup`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer owner' },
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) throw new Error(`seedBusiness failed: ${await res.text()}`)
+}
+
 export async function clearFirestore(): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8_000)
