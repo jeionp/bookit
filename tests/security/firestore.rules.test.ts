@@ -345,3 +345,124 @@ describe('bookings — delete', () => {
     await assertFails(deleteDoc(doc(db, 'bookings', 'b1')))
   })
 })
+
+// ─── Business config — read ───────────────────────────────────────────────────
+
+async function seedBusiness(slug: string) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'businesses', slug), { name: `Business ${slug}`, type: 'court' })
+  })
+}
+
+describe('businesses — read', () => {
+  beforeEach(async () => {
+    await seedBusiness('paddleup')
+  })
+
+  test('unauthenticated user can read a business document', async () => {
+    const db = testEnv.unauthenticatedContext().firestore()
+    await assertSucceeds(getDoc(doc(db, 'businesses', 'paddleup')))
+  })
+
+  test('authenticated user can read a business document', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertSucceeds(getDoc(doc(db, 'businesses', 'paddleup')))
+  })
+
+  test('unauthenticated user can list the businesses collection', async () => {
+    const db = testEnv.unauthenticatedContext().firestore()
+    await assertSucceeds(getDocs(collection(db, 'businesses')))
+  })
+})
+
+// ─── Business config — write ──────────────────────────────────────────────────
+
+describe('businesses — write', () => {
+  beforeEach(async () => {
+    await seedBusiness('paddleup')
+    await seedAdmin('paddleup-admin', ['paddleup'])
+  })
+
+  test('unauthenticated user cannot create a business document', async () => {
+    const db = testEnv.unauthenticatedContext().firestore()
+    await assertFails(setDoc(doc(db, 'businesses', 'new-biz'), { name: 'New Biz', type: 'court' }))
+  })
+
+  test('authenticated non-admin cannot create a business document', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertFails(setDoc(doc(db, 'businesses', 'new-biz'), { name: 'New Biz', type: 'court' }))
+  })
+
+  test('admin cannot update their own business document', async () => {
+    const db = testEnv.authenticatedContext('paddleup-admin').firestore()
+    await assertFails(updateDoc(doc(db, 'businesses', 'paddleup'), { name: 'Renamed' }))
+  })
+
+  test('admin cannot overwrite another business document', async () => {
+    await seedBusiness('rival-courts')
+    const db = testEnv.authenticatedContext('paddleup-admin').firestore()
+    await assertFails(setDoc(doc(db, 'businesses', 'rival-courts'), { name: 'Taken Over', type: 'court' }))
+  })
+
+  test('no one can delete a business document', async () => {
+    const db = testEnv.authenticatedContext('paddleup-admin').firestore()
+    await assertFails(deleteDoc(doc(db, 'businesses', 'paddleup')))
+  })
+})
+
+// ─── Multi-tenant booking isolation ──────────────────────────────────────────
+// Verifies that admin credentials for one business cannot read or mutate
+// booking data belonging to a different business.
+
+describe('businesses — multi-tenant booking isolation', () => {
+  beforeEach(async () => {
+    await seedAdmin('paddleup-admin', ['paddleup'])
+    await seedAdmin('rival-admin', ['rival-courts'])
+    // Seed one cancelled booking per business so status != "confirmed" and the
+    // public-read bypass for availability queries does not obscure isolation failures.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'bookings', 'paddleup-b1'), {
+        ...booking('alice', 'cancelled'),
+        businessSlug: 'paddleup',
+      })
+      await setDoc(doc(ctx.firestore(), 'bookings', 'rival-b1'), {
+        ...booking('bob', 'cancelled'),
+        businessSlug: 'rival-courts',
+        businessName: 'Rival Courts',
+      })
+    })
+  })
+
+  test('paddleup admin cannot read a rival-courts booking by document ID', async () => {
+    const db = testEnv.authenticatedContext('paddleup-admin').firestore()
+    await assertFails(getDoc(doc(db, 'bookings', 'rival-b1')))
+  })
+
+  test('rival-courts admin cannot read a paddleup booking by document ID', async () => {
+    const db = testEnv.authenticatedContext('rival-admin').firestore()
+    await assertFails(getDoc(doc(db, 'bookings', 'paddleup-b1')))
+  })
+
+  test('paddleup admin cannot update a rival-courts booking', async () => {
+    const db = testEnv.authenticatedContext('paddleup-admin').firestore()
+    await assertFails(updateDoc(doc(db, 'bookings', 'rival-b1'), { status: 'cancelled' }))
+  })
+
+  test('rival-courts admin cannot update a paddleup booking', async () => {
+    const db = testEnv.authenticatedContext('rival-admin').firestore()
+    await assertFails(updateDoc(doc(db, 'bookings', 'paddleup-b1'), { status: 'cancelled' }))
+  })
+
+  test('paddleup admin cannot query cancelled bookings for rival-courts', async () => {
+    const db = testEnv.authenticatedContext('paddleup-admin').firestore()
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, 'bookings'),
+          where('businessSlug', '==', 'rival-courts'),
+          where('status', '==', 'cancelled'),
+        )
+      )
+    )
+  })
+})

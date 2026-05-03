@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { clearFirestore, createTestUser, seedBooking, seedBookingForUser, signInUser, todayKey, dateKeyDelta } from './helpers'
+import { clearFirestore, seedBusiness, createTestUser, seedBooking, seedBookingForUser, signInUser, todayKey, dateKeyDelta } from './helpers'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -91,6 +91,7 @@ test.beforeAll(async () => {
 test.beforeEach(async () => {
   // Fresh Firestore state before every test — Auth users persist across the run.
   await clearFirestore()
+  await seedBusiness()
 })
 
 // ─── Business page ────────────────────────────────────────────────────────────

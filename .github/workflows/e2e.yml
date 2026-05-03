@@ -42,6 +42,11 @@ jobs:
       - name: Wait for emulators to be ready
         run: npx wait-on http://localhost:4000 --timeout 60000
 
+      - name: Seed businesses into emulator
+        run: npm run seed:businesses:emulator
+        env:
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-bookit"
+
       - name: Run Firestore security rule tests
         run: npm run test:security
         env:

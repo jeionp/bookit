@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import {
   clearFirestore,
+  seedBusiness,
   createTestUser,
   signInUser,
   seedAdminDoc,
@@ -53,6 +54,7 @@ test.beforeAll(async () => {
 
 test.beforeEach(async () => {
   await clearFirestore()
+  await seedBusiness()
 })
 
 // ─── Phase 1: Auth & Access Control ──────────────────────────────────────────
