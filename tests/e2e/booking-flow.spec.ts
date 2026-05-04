@@ -196,10 +196,13 @@ test.describe('Slot grid', () => {
 
 test.describe('Past slot filtering', () => {
   test('slots from earlier today are not shown in the grid', async ({ page }) => {
+    // Lock the browser clock to noon so 6 AM is always in the past regardless
+    // of when (or in which timezone) CI runs.
+    const noon = new Date()
+    noon.setHours(12, 0, 0, 0)
+    await page.clock.setFixedTime(noon)
     await page.goto(BUSINESS)
     await waitForSlots(page)
-    // PaddleUp opens at 6 AM on weekdays / 5 AM weekends; both hours are always
-    // past by the time CI runs, so the 6 AM button must not be visible for today.
     await expect(page.getByRole('button', { name: '6 AM' })).not.toBeVisible()
   })
 
