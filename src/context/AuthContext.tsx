@@ -30,12 +30,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        try {
-          const slugs = await getAdminSlugs(firebaseUser.uid);
-          setAdminSlugs(slugs);
-        } catch {
-          setAdminSlugs([]);
+        // Retry up to 3 times on transient WebChannel/emulator failures.
+        // Non-admin users return [] on success (no throw), so retries only fire
+        // for genuine connection errors, not for "user has no admin doc".
+        let slugs: string[] = [];
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            slugs = await getAdminSlugs(firebaseUser.uid);
+            break;
+          } catch {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          }
         }
+        setAdminSlugs(slugs);
       } else {
         setAdminSlugs([]);
       }
