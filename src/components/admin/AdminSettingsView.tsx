@@ -38,17 +38,20 @@ function LabeledInput({
   onChange,
   type = "text",
   placeholder,
+  testId,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   placeholder?: string;
+  testId?: string;
 }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-semibold text-gray-500">{label}</label>
       <input
+        data-testid={testId}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -199,7 +202,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
           <SectionHeader title="Business Info" open={sectionOpen.info} onToggle={() => toggleSection("info")} />
           {sectionOpen.info && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <LabeledInput label="Name" value={draft.name} onChange={(v) => setField("name", v)} />
+              <LabeledInput label="Name" value={draft.name} onChange={(v) => setField("name", v)} testId="settings-name-input" />
               <LabeledInput label="Tagline" value={draft.tagline} onChange={(v) => setField("tagline", v)} />
               <div className="sm:col-span-2">
                 <label className="text-xs font-semibold text-gray-500 block mb-1">Description</label>
@@ -241,7 +244,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
               {draft.facilities.map((facility, idx) => {
                 const isOpen = courtOpen[facility.id] ?? false;
                 return (
-                  <div key={facility.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div key={facility.id} data-testid={`settings-court-${facility.id}`} className="border border-gray-100 rounded-xl overflow-hidden">
                     {/* Court card header */}
                     <button
                       type="button"
@@ -322,7 +325,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                                 ? facility.operatingHours
                                 : DAYS.map((day) => facility.operatingHours!.find((h) => h.day === day) ?? { day, open: "6:00 AM", close: "10:00 PM", closed: false })
                               ).map((oh, dayIdx) => (
-                                <div key={oh.day} className="flex items-center gap-3 text-sm">
+                                <div key={oh.day} data-testid={`settings-court-${facility.id}-day-${oh.day.toLowerCase()}`} className="flex items-center gap-3 text-sm">
                                   <span className="w-24 text-xs font-semibold text-gray-600 shrink-0">{oh.day.slice(0, 3)}</span>
                                   <input
                                     type="text"
@@ -473,6 +476,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
           )}
         </div>
         <button
+          data-testid="settings-save-btn"
           type="button"
           onClick={handleSave}
           disabled={saving}

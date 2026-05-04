@@ -37,13 +37,13 @@ async function signInOnStorefront(page: Page, email: string, password: string) {
 }
 
 // Signs in as admin, seeds the admin doc, and navigates to the admin schedule
-// view. Waits until the date navigation buttons are visible — those only exist
-// inside AdminScheduleView and unambiguously confirm the admin page loaded.
+// view. Uses the in-nav admin link (client-side navigation) instead of page.goto
+// so that React and AuthContext stay alive — no need to re-resolve auth from
+// IndexedDB on a fresh page load, which is slow and flaky in the emulator.
 async function goToScheduleView(page: Page, adminUid: string) {
   await seedAdminDoc(adminUid, ['paddleup'])
   await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
-  await page.goto(ADMIN_PAGE)
-  await expect(page).toHaveURL(ADMIN_PAGE, { timeout: 8_000 })
+  await page.getByRole('link', { name: /Admin/ }).click()
   await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
 }
 
@@ -78,7 +78,10 @@ test.describe('Admin page — access control', () => {
     await seedAdminDoc(localId, ['paddleup'])
 
     await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
-    await page.goto(ADMIN_PAGE)
+    // Use the admin link (client-side nav) so AuthContext stays alive with already-
+    // loaded admin slugs. page.goto would require a fresh WebChannel connection to
+    // the Firestore emulator, which is unreliable in long-running emulator sessions.
+    await page.getByRole('link', { name: /Admin/ }).click()
 
     // Schedule grid header and date navigation are the indicators the admin view loaded
     await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
@@ -1305,8 +1308,11 @@ test.describe('Admin settings tab', () => {
     await page.getByTestId('settings-save-btn').click()
     await expect(page.getByText('Changes saved successfully.')).toBeVisible({ timeout: 8_000 })
 
-    // Reload and re-open Settings — server re-fetches business from Firestore
+    // Reload and re-open Settings — server re-fetches business from Firestore.
+    // Wait for the admin view to finish loading (auth re-resolves from IndexedDB)
+    // before clicking the tab.
     await page.goto(ADMIN_PAGE)
+    await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible({ timeout: 15_000 })
     await page.getByRole('button', { name: 'Settings' }).click()
     await expect(page.getByTestId('settings-name-input')).toHaveValue('Renamed Venue', { timeout: 8_000 })
   })
