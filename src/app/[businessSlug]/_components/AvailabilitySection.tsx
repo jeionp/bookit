@@ -71,7 +71,7 @@ export default function AvailabilitySection({
   const dateKey = toDateKey(selectedDate);
   const isToday = dateKey === toDateKey(today);
   const dayName = selectedDate.toLocaleDateString("en-US", { weekday: "long" });
-  const todayHours = business.operatingHours.find((h) => h.day === dayName);
+  const todayHours = (facility.operatingHours ?? business.operatingHours).find((h) => h.day === dayName);
   const currentHour = new Date().getHours();
   const slots =
     todayHours && !todayHours.closed

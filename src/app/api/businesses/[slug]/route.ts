@@ -1,0 +1,39 @@
+import { NextRequest, NextResponse } from "next/server";
+import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+
+export const dynamic = "force-dynamic";
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await params;
+
+  // Auth check
+  const authHeader = req.headers.get("authorization") ?? "";
+  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let uid: string;
+  try {
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Admin slug check
+  const adminDoc = await adminDb.collection("admins").doc(uid).get();
+  const slugs: string[] = adminDoc.exists ? (adminDoc.data()?.slugs ?? []) : [];
+  if (!slugs.includes(slug)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Merge patch into businesses/{slug}
+  const body = await req.json();
+  await adminDb.collection("businesses").doc(slug).set(body, { merge: true });
+
+  return NextResponse.json({ ok: true });
+}
