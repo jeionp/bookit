@@ -5,6 +5,24 @@ import { getBusinessBySlug } from "@/lib/firebase/businesses";
 
 export const dynamic = "force-dynamic";
 
+// Lazy singleton — only initialised when UPSTASH env vars are present.
+// In emulator/test environments the vars are absent, so rate limiting is skipped.
+let ratelimit: import("@upstash/ratelimit").Ratelimit | null = null;
+function getRatelimit() {
+  if (ratelimit) return ratelimit;
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  const { Ratelimit } = require("@upstash/ratelimit");
+  const { Redis }     = require("@upstash/redis");
+  ratelimit = new Ratelimit({
+    redis:     Redis.fromEnv(),
+    limiter:   Ratelimit.slidingWindow(10, "60 s"),
+    prefix:    "bookit:rl:bookings",
+  });
+  return ratelimit;
+}
+
 export interface CreateBookingRequest {
   facilityId: string;
   date: string;
@@ -40,6 +58,15 @@ async function calcPrice(businessSlug: string, facilityId: string, hours: number
 }
 
 export async function POST(req: NextRequest) {
+  const rl = getRatelimit();
+  if (rl) {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "anonymous";
+    const { success } = await rl.limit(ip);
+    if (!success) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+  }
+
   const authHeader = req.headers.get("authorization") ?? "";
   const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!idToken) {

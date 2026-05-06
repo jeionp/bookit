@@ -18,6 +18,8 @@
     "seed:businesses:emulator": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/seed-businesses.mjs"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "firebase": "^12.12.1",
     "lucide-react": "^1.8.0",
     "next": "16.2.4",
