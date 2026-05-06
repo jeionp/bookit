@@ -69,6 +69,31 @@ describe('GET /api/availability', () => {
     expect(res.status).toBe(400)
   })
 
+  test('returns 400 when date is not in YYYY-MM-DD format', async () => {
+    const res = await GET(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: 'not-a-date' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toHaveProperty('error', 'Invalid date format')
+  })
+
+  test('returns 400 when date is a non-ISO string that looks like a path', async () => {
+    const res = await GET(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '../../etc/passwd' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when businessSlug exceeds 64 characters', async () => {
+    const long = 'a'.repeat(65)
+    const res = await GET(makeReq({ businessSlug: long, facilityId: 'court-1', date: '2026-05-10' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toHaveProperty('error', 'Invalid params')
+  })
+
+  test('returns 400 when facilityId exceeds 64 characters', async () => {
+    const long = 'a'.repeat(65)
+    const res = await GET(makeReq({ businessSlug: 'paddleup', facilityId: long, date: '2026-05-10' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toHaveProperty('error', 'Invalid params')
+  })
+
   // ── Happy-path: no bookings ─────────────────────────────────────────────────
 
   test('returns { bookedHours: [] } when no confirmed bookings exist', async () => {

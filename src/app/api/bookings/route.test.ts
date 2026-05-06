@@ -83,7 +83,7 @@ function makeReq(
   const { token = null, ip } = opts
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  if (ip)    headers.set('x-forwarded-for', ip)
+  if (ip)    headers.set('x-real-ip', ip)
 
   return new NextRequest('http://localhost/api/bookings', {
     method: 'POST',
@@ -227,19 +227,18 @@ describe('POST /api/bookings — rate limiting', () => {
 
   // ── IP extraction ───────────────────────────────────────────────────────────
 
-  test('uses only the first IP from a comma-separated x-forwarded-for header', async () => {
+  test('uses x-real-ip as the rate-limit key', async () => {
     process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
     process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
 
     const mockLimit = vi.fn().mockResolvedValue({ success: false })
     const { POST } = await importFreshRouteWithRatelimit(mockLimit)
 
-    await POST(makeReq(VALID_BODY, { ip: '203.0.113.5, 10.0.0.1' }))
-    // Route splits on ',' and trims; only the first IP is the rate-limit key
+    await POST(makeReq(VALID_BODY, { ip: '203.0.113.5' }))
     expect(mockLimit).toHaveBeenCalledWith('203.0.113.5')
   })
 
-  test('falls back to "anonymous" as the rate-limit key when x-forwarded-for is absent', async () => {
+  test('falls back to "anonymous" as the rate-limit key when x-real-ip is absent', async () => {
     process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
     process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
 
@@ -248,5 +247,19 @@ describe('POST /api/bookings — rate limiting', () => {
 
     await POST(makeReq(VALID_BODY))
     expect(mockLimit).toHaveBeenCalledWith('anonymous')
+  })
+
+  // ── Redis failure — fail open ────────────────────────────────────────────────
+
+  test('fails open (proceeds to auth check) when Redis throws during limit call', async () => {
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+
+    const mockLimit = vi.fn().mockRejectedValue(new Error('Redis connection refused'))
+    const { POST } = await importFreshRouteWithRatelimit(mockLimit)
+
+    // Rate limiter throws → fail open → continues to auth check → 401 (no token)
+    const res = await POST(makeReq(VALID_BODY))
+    expect(res.status).toBe(401)
   })
 })

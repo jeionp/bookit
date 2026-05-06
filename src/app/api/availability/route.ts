@@ -10,8 +10,15 @@ export async function GET(req: NextRequest) {
   const date = searchParams.get("date");
   const excludeBookingId = searchParams.get("excludeBookingId") ?? null;
 
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   if (!businessSlug || !facilityId || !date) {
     return NextResponse.json({ error: "Missing required params" }, { status: 400 });
+  }
+  if (businessSlug.length > 64 || facilityId.length > 64) {
+    return NextResponse.json({ error: "Invalid params" }, { status: 400 });
+  }
+  if (!DATE_RE.test(date)) {
+    return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
   }
 
   const snap = await adminDb

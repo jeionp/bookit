@@ -60,10 +60,17 @@ async function calcPrice(businessSlug: string, facilityId: string, hours: number
 export async function POST(req: NextRequest) {
   const rl = getRatelimit();
   if (rl) {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "anonymous";
-    const { success } = await rl.limit(ip);
-    if (!success) {
-      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    // x-real-ip is set by Vercel's edge and cannot be spoofed by clients.
+    // x-forwarded-for leftmost value is client-controlled, so we avoid it.
+    const ip = req.headers.get("x-real-ip") ?? "anonymous";
+    try {
+      const { success } = await rl.limit(ip);
+      if (!success) {
+        return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      }
+    } catch (err) {
+      // Redis unavailable — fail open so bookings are not blocked by infra issues.
+      console.error("[api/bookings] rate-limit check failed:", err);
     }
   }
 
