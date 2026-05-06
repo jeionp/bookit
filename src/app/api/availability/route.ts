@@ -1,3 +1,7 @@
+// Server-side availability endpoint using the Admin SDK.
+// Exists to avoid PII exposure: a public Firestore query returns full booking
+// documents (userId, userEmail, userName). This route returns only { bookedHours }
+// and never touches the client SDK, so no booking PII reaches the browser.
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin-app";
 

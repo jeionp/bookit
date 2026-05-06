@@ -90,6 +90,10 @@ export async function cancelBooking(bookingId: string): Promise<void> {
   await updateDoc(doc(db, "bookings", bookingId), { status: "cancelled" });
 }
 
+// TOCTOU note: Firestore is updated before the /api/refund call resolves.
+// If the API call fails, the booking appears refunded in the UI but the actual
+// payment refund was never issued. This is acceptable until PayMongo is wired up,
+// but should be addressed (idempotent retry or server-side transaction) before go-live.
 export async function cancelBookingWithRefund(
   bookingId: string,
   refundMethod: "refund" | "credit",
@@ -165,6 +169,8 @@ export async function rescheduleBooking(
 
     const takenHours = new Set<number>();
     snap.docs
+      // Exclude the booking being rescheduled — it may appear in the result if
+      // the new slot is on the same court/date, and its hours aren't actually a conflict.
       .filter((d) => d.id !== bookingId)
       .forEach((d) => {
         (d.data().hours as number[]).forEach((h) => takenHours.add(h));
@@ -202,6 +208,8 @@ export async function getBookingsInRange(
 
 // Returns the last 5 bookings for a customer at a business, excluding the current booking.
 // Requires composite index: businessSlug ASC, userEmail ASC, createdAt DESC (firestore.indexes.json).
+// Fetches limit(6) so there is a candidate to drop via the excludeBookingId filter —
+// after filtering out the excluded doc, slice(0, 5) guarantees at most 5 results.
 export async function getCustomerHistory(
   businessSlug: string,
   userEmail: string,

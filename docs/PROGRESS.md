@@ -1,6 +1,6 @@
 # bookit — Technical Progress & Handoff
 
-> Last updated: 2026-04-29. Covers everything merged to `main` through PR #12 plus open PRs #13–#16 (Phase 5).
+> Last updated: 2026-05-07. Covers everything merged to `main` through PR #31 plus open PR #32 (security hardening, pending CI).
 
 ---
 
@@ -18,14 +18,15 @@
 10. [Development Setup](#10-development-setup)
 11. [Known Gaps & Security Backlog](#11-known-gaps--security-backlog)
 12. [Pending Work & Next Steps](#12-pending-work--next-steps)
+13. [Production Deploy Checklist](#13-production-deploy-checklist)
 
 ---
 
 ## 1. Project Overview
 
-**bookit** is a multi-tenant court/facility booking platform. Each business gets its own storefront at `/<businessSlug>` (e.g. `/paddleup`). Customers browse courts, pick time slots, and pay. Business owners manage bookings through an admin dashboard at `/<businessSlug>/admin`.
+**bookit** is a multi-tenant court/facility booking platform. Each business gets its own storefront at `/<businessSlug>` (e.g. `/paddleup`). Customers browse courts, check real-time availability, and book time slots. Business owners manage bookings through an admin dashboard at `/<businessSlug>/admin`.
 
-Currently one business is configured (`paddleup` — a pickleball facility in Quezon City). The platform is designed for multi-tenant operation, but business config is still static (see §12).
+Currently one business is configured (`paddleup` — a pickleball facility in Quezon City). Business config lives in Firestore (`businesses/{slug}`) and is editable through the admin Settings tab.
 
 ---
 
@@ -35,10 +36,12 @@ Currently one business is configured (`paddleup` — a pickleball facility in Qu
 |---|---|---|
 | Framework | Next.js 16 App Router | Breaking changes from earlier versions — read `node_modules/next/dist/docs/` before touching routing |
 | Styling | Tailwind CSS v4 | |
-| Database | Firebase Firestore | Client SDK (browser), emulator for local dev |
-| Auth | Firebase Auth | Email/password only; emulator for local dev |
-| Payments | PayMongo | Philippine payment gateway; API routes stubbed, full integration pending |
+| Database | Firestore | Client SDK (browser) for booking reads/writes; Admin SDK (server-only) for API routes |
+| Auth | Firebase Auth | Email/password + Google sign-in; emulator for local dev |
+| Rate limiting | Upstash Redis | Sliding window on `POST /api/bookings`; skipped when env vars absent (emulator/test) |
+| Payments | PayMongo | Philippine payment gateway; API routes stubbed, full integration deferred |
 | Hosting | Vercel | Auto-deploys `main` on merge |
+| Firebase project | `bookme-821b4` | Production project (migrated from `jidoka-pixels` in PR #31) |
 | Testing | Playwright (E2E) + Vitest (unit + security rules) | |
 
 ---
@@ -48,61 +51,68 @@ Currently one business is configured (`paddleup` — a pickleball facility in Qu
 ```
 src/
   app/
-    layout.tsx                  # Root layout — wraps AuthProvider
-    page.tsx                    # Root redirect → /paddleup
+    layout.tsx                    # Root layout — wraps AuthProvider
+    page.tsx                      # Root redirect → /paddleup
     api/
-      refund/route.ts           # POST stub — will call PayMongo refund API
-      invite/route.ts           # POST stub — will send signup invite email
+      availability/route.ts       # GET — returns booked hours via Admin SDK (no PII)
+      bookings/route.ts           # POST — create booking with rate limiting + conflict check
+      businesses/[slug]/route.ts  # PATCH — update business config (auth-gated, field allowlist)
+      refund/route.ts             # POST stub — will call PayMongo refund API (now auth-gated)
+      invite/route.ts             # POST stub — will send signup invite email
+      health/route.ts             # GET — health check used by Playwright webServer poll
     [businessSlug]/
-      layout.tsx                # Per-business layout
-      page.tsx                  # Storefront (booking flow)
-      _components/              # Storefront UI components
-        AvailabilitySection.tsx # Date picker + court selector + slot grid + booking bar
+      layout.tsx                  # Per-business layout
+      page.tsx                    # Storefront (booking flow)
+      _components/                # Storefront UI components
+        AvailabilitySection.tsx   # Date picker + court selector + slot grid + booking bar
         FacilityCard.tsx
         BookingSection.tsx
         ...
       admin/
-        page.tsx                # Admin entry point — renders AdminGuard + AdminView
+        page.tsx                  # Admin entry point — renders AdminGuard + AdminView
   components/
     admin/
-      AdminGuard.tsx            # Client-side auth + role check; redirects non-admins
-      AdminView.tsx             # Shell: header, Schedule/Analytics tab bar
-      AdminScheduleView.tsx     # Daily grid view with search bar + "New booking" button
-      AdminAnalyticsView.tsx    # Period selector + stat cards + charts
-      ScheduleGrid.tsx          # Visual grid: courts as columns, hours as rows
-      BookingDetailPanel.tsx    # Slide-in panel: booking info, cancel/refund, reschedule,
-                                # payment badge, customer history
-      WalkInModal.tsx           # Modal for admin walk-in booking creation
+      AdminGuard.tsx              # Client-side auth + role check; redirects non-admins
+      AdminView.tsx               # Shell: header, Schedule/Analytics/Settings tab bar
+      AdminScheduleView.tsx       # Daily grid view with search bar + "New booking" button
+      AdminAnalyticsView.tsx      # Period selector + stat cards + charts
+      AdminSettingsView.tsx       # Business info, per-court hours override, amenities editor
+      ScheduleGrid.tsx            # Visual grid: courts as columns, hours as rows
+      BookingDetailPanel.tsx      # Slide-in panel: booking info, cancel/refund, reschedule,
+                                  # payment badge, customer history
+      WalkInModal.tsx             # Modal for admin walk-in booking creation
     booking/
-      MyBookings.tsx            # Customer booking history tab
-      SlotGrid.tsx              # Hour-slot grid for customer booking
-      BookingActionBar.tsx      # Sticky bar showing price + Book button
-      BookingConfirmModal.tsx   # Confirmation dialog before final booking
+      MyBookings.tsx              # Customer booking history tab
+      SlotGrid.tsx                # Hour-slot grid for customer booking
+      BookingActionBar.tsx        # Sticky bar showing price + Book button
+      BookingConfirmModal.tsx     # Confirmation dialog before final booking
   context/
-    AuthContext.tsx             # onAuthStateChanged + admin slug loading
+    AuthContext.tsx               # onAuthStateChanged + admin slug loading (3× retry on errors)
   lib/
-    types.ts                    # Business, Facility, OperatingHours interfaces
-    businesses.ts               # Static business/facility config (source of truth)
-    slots.ts                    # Slot generation, grouping, validation helpers
+    types.ts                      # Business, Facility, OperatingHours interfaces
+    slots.ts                      # Slot generation, grouping, validation helpers
     firebase/
-      client.ts                 # Firebase app init + emulator connection
-      bookings.ts               # All Firestore booking reads/writes
-      admin.ts                  # getAdminSlugs (reads /admins/{uid})
+      client.ts                   # Firebase client app init + emulator connection
+      admin-app.ts                # Admin SDK init (lazy proxy, emulator-aware)
+      admin.ts                    # getAdminSlugs — reads /admins/{uid} via client SDK
+      bookings.ts                 # All Firestore booking reads/writes (client SDK)
+      businesses.ts               # getBusinessBySlug — reads /businesses/{slug} via Admin SDK
     booking/
-      useSlotSelection.ts       # Drag-to-select hook used by SlotGrid
-firestore.rules                 # Firestore security rules
-firestore.indexes.json          # Composite index definitions (deploy with firebase CLI)
+      useSlotSelection.ts         # Drag-to-select hook used by SlotGrid
+firestore.rules                   # Firestore security rules
+firestore.indexes.json            # Composite index definitions (deploy with firebase CLI)
 tests/
   e2e/
-    booking-flow.spec.ts        # 51 Playwright tests — full storefront flow
-    admin.spec.ts               # 57 Playwright tests — admin dashboard (Phases 1–5)
-    helpers.ts                  # Seed/clear helpers for emulator
+    booking-flow.spec.ts          # 51 Playwright tests — full storefront flow
+    admin.spec.ts                 # 88 Playwright tests — admin dashboard (Phases 1–6)
+    helpers.ts                    # Seed/clear helpers for emulator
   security/
-    firestore.rules.test.ts     # 32 Vitest tests — security rules unit tests
+    firestore.rules.test.ts       # 45 Vitest tests — security rules unit tests
+src/**/*.test.ts                  # 105 Vitest unit tests (api routes, firebase lib)
 .github/workflows/
-  ci.yml                        # Lint + type-check (no emulator)
-  test.yml                      # Vitest unit tests (no emulator)
-  e2e.yml                       # Security rules + E2E (spins up emulator)
+  ci.yml                          # Lint + type-check (no emulator)
+  test.yml                        # Vitest unit tests (no emulator)
+  e2e.yml                         # Security rules + E2E (spins up emulator)
 ```
 
 ---
@@ -124,7 +134,7 @@ interface Booking {
   facilityName: string;                            // e.g. "Court 1"
   date: string;                                    // "YYYY-MM-DD" local date
   hours: number[];                                 // [9, 10] means 9 AM–11 AM (each entry = one hour slot)
-  totalPrice: number;                              // whole PHP pesos
+  totalPrice: number;                              // whole PHP pesos; recalculated server-side in POST /api/bookings
   currency: string;                                // "PHP"
   status: "confirmed" | "cancelled";
   paymentStatus?: "unpaid" | "paid" | "refunded";  // absent = unpaid; "refunded" set by admin cancel flow
@@ -144,9 +154,28 @@ interface Booking {
 
 Written out-of-band (Firebase Console or `scripts/grant-admin.mjs`). No client writes allowed. Admin status is loaded once per auth state change in `AuthContext` and cached in `adminSlugs` state.
 
-### Business config
+### `businesses` collection
 
-Businesses and facilities live in `src/lib/businesses.ts` as a static array — **not in Firestore**. Slug, court names, prices, operating hours, and prime-time windows are all defined there. To add a new business, add an entry to that array and re-deploy. **This will need to migrate to Firestore before onboarding a second business** — see §12.
+```
+/businesses/{slug}
+  name: string
+  tagline: string
+  description: string
+  coverImage: string
+  location: string
+  address: string
+  phone: string
+  email: string
+  accentColor: string
+  rating: number
+  reviewCount: number
+  type: "court" | "appointment" | "room"
+  facilities: Facility[]        // includes per-facility operatingHours overrides
+  amenities: string[]
+  operatingHours: OperatingHours[]
+```
+
+Public read (no auth required). Writes go through `PATCH /api/businesses/[slug]` with admin auth + field allowlist. Seeded via `npm run seed:businesses` / `npm run seed:businesses:emulator`.
 
 ---
 
@@ -157,7 +186,8 @@ Full rules are in `firestore.rules`. Key decisions:
 | Rule | Rationale |
 |---|---|
 | `admins` write: always false | Admin records are managed out-of-band only — no client can grant themselves admin |
-| `bookings` list: `status == "confirmed"` publicly readable | Required for the availability display (shows which slots are taken). Trade-off: full booking documents including `userId`/`userEmail` are visible. See gap #2 in §11. |
+| `bookings` list (public): removed | Availability reads now go through `GET /api/availability` (Admin SDK) — prevents PII exposure from full booking documents |
+| `bookings` list: owner or admin only | Authenticated users see their own bookings; admins see all bookings for their business |
 | `bookings` update (owner): only `status → "cancelled"` | Prevents users from changing price, date, or other fields |
 | `bookings` update (admin): any field | Allows reschedule (date/facilityId/hours/totalPrice change), cancel, and payment status updates |
 | `bookings` create (admin): userId can differ from auth.uid | Allows walk-in bookings on behalf of customers |
@@ -180,8 +210,7 @@ firebase deploy --only firestore:indexes
 |---|---|---|
 | `bookings` | `businessSlug ASC`, `date ASC` | `getBookingsInRange` (analytics) |
 | `bookings` | `businessSlug ASC`, `userEmail ASC`, `createdAt DESC` | `getCustomerHistory`, `lookupCustomerByEmail` |
-
-> **Action required:** These indexes were added in PR #15 but have not yet been deployed to the production project (`jidoka-pixels`). Run `firebase deploy --only firestore:indexes` after PR #15 merges to `main`.
+| `bookings` | `userId ASC`, `createdAt DESC` | `getUserBookings` (My Bookings tab) |
 
 ---
 
@@ -192,22 +221,20 @@ firebase deploy --only firestore:indexes
 | PR | Feature |
 |---|---|
 | #1–#7 | Initial booking flow: slot grid, drag selection, booking modal, Firebase integration, auth modal |
-| #8 | Firestore security rules + 32 rule unit tests |
+| #8 | Firestore security rules + security rule tests |
 | #9 | README |
 | #10 | Sidebar About card hidden on mobile |
 | #11 | Admin dashboard Phase 1 (auth/access control) + Phase 2 (master schedule view) |
-| #12 | Admin Phase 3 (booking management: cancel/reschedule/search) + Phase 4 (analytics dashboard) + My Bookings "Completed" state + E2E suite expansion |
-
-### Open PRs — Phase 5 (merge in order)
-
-These are stacked — each branch targets the previous one. Merge #13 first, then #14, #15, #16.
-
-| PR | Branch | Feature |
-|---|---|---|
-| #13 | `feature/phase-5b-payment-status` | `paymentStatus` field + Paid/Refunded badge in `BookingDetailPanel` |
-| #14 | `feature/phase-5c-refund-prompt` | Refund/credit prompt on paid booking cancel; `/api/refund` + `/api/invite` stub routes |
-| #15 | `feature/phase-5a-customer-history` | Customer booking history list in detail panel; `getCustomerHistory` query; new Firestore indexes |
-| #16 | `feature/phase-5d-walkin-form` | Walk-in booking modal with customer email lookup, optional phone, signup invite stub |
+| #12 | Admin Phase 3 (booking management: cancel/reschedule/search) + Phase 4 (analytics dashboard) + My Bookings "Completed" state |
+| #13 | `paymentStatus` field + Paid/Refunded badge in BookingDetailPanel |
+| #14 | Refund/credit prompt on paid booking cancel; `/api/refund` + `/api/invite` stub routes |
+| #15 | Customer booking history in detail panel; `getCustomerHistory` query; Firestore indexes |
+| #16 | Walk-in booking modal with customer email lookup, optional phone, signup invite stub |
+| #17–#28 | Admin Phase 5 polish + E2E expansion (walk-in past-slot hints, 3-step reschedule UX, guided flow) |
+| #29 | Business config migrated from static `src/lib/businesses.ts` to Firestore `businesses/{slug}`; admin Settings tab reads/writes Firestore |
+| #30 | Admin Phase 6 — Settings tab: Business Info, per-court hours override, pricing, amenities; `PATCH /api/businesses/[slug]` |
+| #31 | Security: `GET /api/availability` (Admin SDK, no PII); rate limiting on `POST /api/bookings` (Upstash Redis, 10 req/60 s per IP); Firebase project migrated to `bookme-821b4`; Firestore public list rule removed |
+| #32 | Security hardening: auth added to `POST /api/refund`; field allowlist on `PATCH /api/businesses/[slug]`; `hours` and `date` input validation on `POST /api/bookings`; 9 new unit tests |
 
 ---
 
@@ -223,11 +250,11 @@ User visits /<slug>/admin
       → done, isAdminOf(slug): render AdminView
 ```
 
-`AuthContext` loads admin slugs from Firestore on every `onAuthStateChanged` event. If Firestore is unreachable the call is caught and loading resolves with empty slugs (user is redirected to storefront).
+`AuthContext` loads admin slugs from Firestore on every `onAuthStateChanged` event. If Firestore is unreachable the call is retried up to 3 times (1 s apart); on final failure, loading resolves with empty slugs (user is redirected to storefront).
 
 ### AdminView shell
 
-Tab bar with **Schedule** and **Analytics** tabs. Header contains business name/badge, "Public view" link, and Sign out button.
+Tab bar with **Schedule**, **Analytics**, and **Settings** tabs. Header contains business name/badge, "Public view" link, and Sign out button.
 
 ### Schedule tab — `AdminScheduleView`
 
@@ -242,12 +269,12 @@ Tab bar with **Schedule** and **Analytics** tabs. Header contains business name/
 1. **Detail view** — facility, date/time range, customer name/email, total price, booking ID, payment status badge, customer booking history.
 2. **Cancel flow (unpaid)** — "Cancel booking" → confirm dialog with Back / Yes cancel.
 3. **Cancel flow (paid)** — "Cancel booking" → refund choice screen (Refund to payment method OR Issue store credit) → confirm dialog. Both options call `POST /api/refund` (stub) and set `paymentStatus: "refunded"`.
-4. **Reschedule form** — court dropdown, date input, live slot picker (fetches availability excluding the current booking via `getBookedHoursExcluding`), price preview. Conflict-checked via Firestore transaction on confirm.
+4. **Reschedule flow (3 steps)** — Step 1: court + date; Step 2: slot picker (excludes current booking's hours from conflict check); Step 3: price diff preview + confirm. Conflict-checked via Firestore transaction.
 
 Key implementation details:
 - Panel is `key={selectedBooking.id}` — forces full remount when switching between bookings, resetting all state.
 - Slot loading uses `useRef` request counter to discard stale async responses.
-- Customer history loads via `useEffect` on mount; shows last 5 bookings for the same `userEmail` at this business, excluding the current one.
+- Customer history loads via `useEffect` on mount; shows last 5 bookings for the same `userEmail` at this business, excluding the current one. Fetches `limit(6)` to account for the excluded doc.
 - Cancel step state: `"idle" → "refund_choice" (paid only) → "confirm"`. Back button on confirm step returns to `"refund_choice"` for paid bookings, `"idle"` for unpaid.
 
 ### WalkInModal
@@ -260,49 +287,72 @@ Opened by "New booking" button in the schedule view header. Features:
 - Walk-in bookings stored with `source: "walk_in"`, `userId: "walk_in"` (or linked userId if customer found)
 - On successful booking, schedule grid auto-refreshes
 
+### Settings tab — `AdminSettingsView`
+
+Three collapsible sections:
+
+1. **Business Info** — name, tagline, description, cover image URL, location, address, phone, email, accent color
+2. **Courts** — add/remove courts; per-court operating hours override (falls back to business hours when absent); toggle individual days closed
+3. **Amenities** — add/remove free-text amenity tags
+
+A single "Save changes" bar appears when edits are pending. Saving calls `PATCH /api/businesses/[slug]` with the admin user's ID token.
+
 ### Analytics tab — `AdminAnalyticsView`
 
 Period selector: Today / This Week / This Month / Year to Date. All date ranges are computed in local time.
 
 Stat cards:
-- `stat-revenue` — sum of `totalPrice` for confirmed bookings
-- `stat-bookings` — count of confirmed bookings
-- `stat-hours` — total hours booked (sum of `hours.length`)
-- `stat-cancellation-rate` — `cancelled / total`; shown in red when > 15%
+- Revenue — sum of `totalPrice` for confirmed bookings
+- Bookings — count of confirmed bookings
+- Hours — total hours booked (sum of `hours.length`)
+- Cancellation rate — `cancelled / total`; shown in red when > 15%
 
 Additional sections (only rendered when `bookingCount > 0`):
 - Court utilization — horizontal bars, width = `(courtHours / maxCourtHours) * 100%`
 - Peak hours heatmap — horizontal bars per hour with booking count
 
+### API routes
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /api/availability` | None | Returns `{ bookedHours: number[] }` for a facility/date; uses Admin SDK so no booking PII is exposed |
+| `POST /api/bookings` | Firebase ID token | Creates a booking; rate-limited (10/60 s per IP); price recalculated server-side; conflict-checked in Firestore transaction |
+| `PATCH /api/businesses/[slug]` | Firebase ID token + admin slug check | Updates business config; fields filtered through explicit allowlist |
+| `POST /api/refund` | Firebase ID token + admin slug check | Stub; will call PayMongo refund or write credit ledger |
+| `POST /api/invite` | None | Stub; will send signup invite email via Resend/SendGrid |
+| `GET /api/health` | None | Returns `{ ok: true }`; used by Playwright `webServer` poll |
+
 ### Firestore functions (bookings.ts)
 
-| Function | Purpose |
-|---|---|
-| `getAllBookingsForDay(slug, date)` | Schedule grid — confirmed only |
-| `getBookingsForDate(slug, facilityId, date)` | Slot availability check |
-| `getBookedHours(slug, facilityId, date)` | Returns booked hour numbers |
-| `getBookedHoursExcluding(slug, facilityId, date, excludeId)` | Reschedule slot picker |
-| `createBooking(data)` | Transaction with conflict check — online bookings |
-| `createWalkInBooking(data)` | Transaction with conflict check — admin walk-in bookings |
-| `cancelBooking(bookingId)` | Sets `status → "cancelled"` |
-| `cancelBookingWithRefund(bookingId, method)` | Sets `status → "cancelled"`, `paymentStatus → "refunded"`, calls `/api/refund` |
-| `rescheduleBooking(bookingId, ...)` | Transaction with conflict check |
-| `getBookingsInRange(slug, start, end)` | Analytics date-range query |
-| `getUserBookings(userId)` | My Bookings tab |
-| `getCustomerHistory(slug, email, excludeId)` | Last 5 bookings for customer in detail panel |
-| `lookupCustomerByEmail(slug, email)` | Walk-in form email lookup |
+| Function | SDK | Purpose |
+|---|---|---|
+| `getAllBookingsForDay(slug, date)` | Client | Schedule grid — confirmed only |
+| `getBookingsForDate(slug, facilityId, date)` | Client | Slot availability check (admin reschedule/walk-in) |
+| `getBookedHours(slug, facilityId, date)` | Client | Returns booked hour numbers |
+| `getBookedHoursExcluding(slug, facilityId, date, excludeId)` | Client | Reschedule slot picker |
+| `createBooking(data)` | Client | Transaction with conflict check — online bookings (note: prefer `POST /api/bookings` which also validates + rate-limits) |
+| `createWalkInBooking(data)` | Client | Transaction with conflict check — admin walk-in bookings |
+| `cancelBooking(bookingId)` | Client | Sets `status → "cancelled"` |
+| `cancelBookingWithRefund(bookingId, method)` | Client | Sets `status → "cancelled"` + `paymentStatus → "refunded"`, calls `/api/refund` stub (TOCTOU — see §11) |
+| `rescheduleBooking(bookingId, ...)` | Client | Transaction with conflict check (excludes current booking's hours) |
+| `getBookingsInRange(slug, start, end)` | Client | Analytics date-range query |
+| `getUserBookings(userId)` | Client | My Bookings tab |
+| `getCustomerHistory(slug, email, excludeId)` | Client | Last 5 bookings for customer in detail panel |
+| `lookupCustomerByEmail(slug, email)` | Client | Walk-in form email lookup |
 
 ---
 
 ## 9. Test Suite
 
-### Counts (as of 2026-04-29, PRs #13–#16 branch)
+### Counts (as of PR #32)
 
 | Suite | Runner | Count |
 |---|---|---|
-| `tests/e2e/admin.spec.ts` | Playwright | 57 tests (Phases 1–5) |
+| `tests/e2e/admin.spec.ts` | Playwright | 88 tests (Phases 1–6) |
 | `tests/e2e/booking-flow.spec.ts` | Playwright | 51 tests |
-| `tests/security/firestore.rules.test.ts` | Vitest | 32 tests |
+| `tests/security/firestore.rules.test.ts` | Vitest | 45 tests |
+| `src/**/*.test.ts` (unit) | Vitest | 105 tests |
+| **Total** | | **289 tests** |
 
 ### Running locally
 
@@ -312,18 +362,22 @@ lsof -ti :8080 | xargs kill -9 2>/dev/null
 lsof -ti :9099 | xargs kill -9 2>/dev/null
 firebase emulators:start
 
-# In a separate terminal
+# In separate terminals
 npm run test:security   # Vitest — Firestore rules (no browser needed)
+npm test                # Vitest — unit tests (no emulator needed)
 npm run test:e2e        # Playwright — full app (needs dev server + emulators)
 ```
 
 The Firestore emulator accumulates JVM gRPC threads over time. After a long-running session it can exhaust the OS thread limit, causing test hangs. **Always kill and restart the emulator before a test run.**
 
+**Do not pass `--project` to the emulator** — a mismatched project ID causes `adminAuth.verifyIdToken` to fail in E2E tests that call admin-authenticated API routes.
+
 ### E2E test helpers (`tests/e2e/helpers.ts`)
 
 | Helper | What it does |
 |---|---|
-| `clearFirestore()` | DELETE all documents via emulator REST API (8s AbortController timeout) |
+| `clearFirestore()` | DELETE all documents via emulator REST API (8 s AbortController timeout) |
+| `seedBusiness(page)` | Writes `businesses/paddleup` to the emulator before each test |
 | `seedBooking(opts)` | Creates a confirmed booking; authenticates as seed user for rule compliance |
 | `seedBookingForUser(opts)` | Creates a booking for a specific user using `Bearer owner` admin bypass; includes `createdAt` and optional `paymentStatus` |
 | `seedAdminDoc(uid, slugs)` | Writes `/admins/{uid}` using `Bearer owner` bypass |
@@ -335,15 +389,19 @@ The Firestore emulator accumulates JVM gRPC threads over time. After a long-runn
 
 **E2E slot tests:**
 - Call `selectTomorrow(page)` before `waitForSlots(page)` — today's past hours are filtered in headless Chromium using UTC, making tests timezone-dependent. Tomorrow always shows all slots.
-- `waitForSlots` first waits for "Loading availability…" to appear (2s timeout, swallowed), then waits for it to disappear — handles the race where loading finishes before the assertion runs.
+- `waitForSlots` first waits for "Loading availability…" to appear (2 s timeout, swallowed), then waits for it to disappear — handles the race where loading finishes before the assertion runs.
 - Slot button locators use `exact: true` — "2 PM" would otherwise match "12 PM".
 
-**Cancel flow (post Phase 5c):**
+**Cancel flow:**
 - The dismiss button on the cancel confirm step is labelled **"Back"** (not "No"). For unpaid bookings "Back" returns to idle; for paid bookings it returns to the refund choice screen.
 
 **Walk-in bookings:**
 - `seedBookingForUser` accepts an optional `paymentStatus` field for seeding paid/refunded bookings in tests.
-- `undefined` field values must never be passed to Firestore writes — use conditional assignment (`if (value) obj.field = value`) rather than `field: value || undefined`.
+- `undefined` field values must never be passed to Firestore writes — use conditional assignment.
+
+**Unit tests:**
+- `vi.hoisted` + `vi.mock` for module-level mocks (hoisted mocks used across all tests in the file).
+- `vi.doMock` + `vi.resetModules` + dynamic `import('./route')` to reset module-level singletons (e.g. the rate limiter lazy singleton) between tests.
 
 ---
 
@@ -355,113 +413,93 @@ See `README.md` for the full setup guide. Quick reference:
 # Install deps
 npm install
 
-# Copy env
-cp .env.example .env.local  # fill in Firebase config
+# Copy env and fill in Firebase config values
+cp .env.local.example .env.local  # or create manually — see README for full template
 
-# Start emulators (Auth + Firestore)
+# Start emulators (Auth + Firestore) — uses bookme-821b4 from .firebaserc
 firebase emulators:start
 
 # Dev server (separate terminal)
 npm run dev
 
-# Seed an admin user for local testing
-node scripts/seed-admin-emulator.mjs
+# Seed business config and admin user for local testing
+npm run seed:businesses:emulator
+npm run seed:admin -- admin@paddleup.test Admin1234! paddleup
 ```
 
 ### Granting admin access
 
-**Emulator:** `node scripts/seed-admin-emulator.mjs` — writes `/admins/{uid}` directly via the emulator REST API.
+**Emulator:** `npm run seed:admin -- <email> <password> <slug>` — creates the Auth account and admin doc in one step.
 
-**Production:** `node scripts/grant-admin.mjs <email> <slug>` — uses `firebase-admin` with a service account. Requires `service-account.json` (gitignored) in the project root.
+**Production:** `npm run grant:admin -- <email> <slug>` — uses `firebase-admin` with a service account. Requires `service-account.json` (gitignored) in the project root, downloaded from Firebase Console → Project Settings → Service Accounts.
 
 ---
 
 ## 11. Known Gaps & Security Backlog
 
-These were identified during a security review and intentionally deferred. Address before production launch, especially before PayMongo goes live.
+### Fixed (PRs #31–#32)
 
-### Gap 1 — Client-side price calculation (critical before payments)
+| Gap | Fix |
+|---|---|
+| Client-side `totalPrice` (bookings) | `POST /api/bookings` recalculates price server-side from Firestore before writing |
+| PII exposure via public Firestore list query | Public list rule removed; availability reads go through `GET /api/availability` (Admin SDK) |
+| No rate limiting on booking creation | Upstash Redis sliding window (10 req/60 s per IP) on `POST /api/bookings`; fail-open on Redis errors |
+| `/api/refund` had zero auth | Bearer token verification + admin slug check added |
+| `PATCH /api/businesses/[slug]` accepted arbitrary body | Field allowlist strips `slug`, `type`, `rating`, `reviewCount`, and any unknown keys |
+| `hours` array unbounded in `POST /api/bookings` | Max 24 entries, integer range [0, 23], deduplicated before write |
+| `date` unvalidated in `POST /api/bookings` | YYYY-MM-DD regex enforced |
 
-`totalPrice` is calculated in `useSlotSelection.ts` (browser) and written directly to Firestore. The security rule only checks `totalPrice >= 0`, not that the amount is correct. A malicious user calling the Firebase SDK directly could write `totalPrice: 1`.
+### Still open
 
-**Fix:** Route booking creation through a Next.js Server Action or API Route that recalculates `totalPrice` from `src/lib/businesses.ts` before writing to Firestore.
+**TOCTOU in `cancelBookingWithRefund`:**
+Firestore status is updated to `"cancelled"` / `paymentStatus: "refunded"` before the `/api/refund` API call resolves. If the refund API call fails, the booking appears refunded in the UI but the actual payment refund was never issued. Acceptable until PayMongo is wired up; address with an idempotent retry or atomic server-side transaction before go-live.
 
-### Gap 2 — PII exposure via public availability query
+**`rescheduleBooking` writes client-supplied `totalPrice`:**
+The price passed from `BookingDetailPanel` is calculated client-side from the facility config. A malicious admin could manipulate this. Move reschedule to a server API route (like bookings creation) before PayMongo goes live.
 
-The `bookings` list rule allows anyone to query `where("status", "==", "confirmed")`. This returns full booking documents including `userId`, `userEmail`, and `userName`.
-
-**Fix:** Create a Cloud Function `getAvailability(businessSlug, facilityId, date)` that returns only the `hours` array. Lock down the `list` rule to remove the public `status == "confirmed"` branch.
-
-### Gap 3 — PayMongo webhook signature verification (not yet built)
-
+**PayMongo webhook signature verification:**
 No webhook handler exists yet. When added, it must verify the `X-Paymongo-Signature` header using PayMongo's HMAC-SHA256 scheme before trusting the event.
 
-### Gap 4 — No rate limiting on booking creation
-
-A malicious user can flood `createBooking`, blocking all slots for a facility. Fix with Firebase App Check + Cloud Function wrapper, or Upstash Redis rate limiting in a Next.js API route.
+**Per-business PayMongo credential onboarding:**
+Each business needs its own PayMongo account. The onboarding flow for storing per-business keys is not yet designed. See §12.
 
 ---
 
 ## 12. Pending Work & Next Steps
 
-### Immediate (before merging Phase 5 PRs)
+### Phase 7 — Firebase Storage for court images
 
-- [ ] **Deploy Firestore indexes** — run `firebase deploy --only firestore:indexes` after PR #15 merges. Two new indexes are required: `businessSlug + date` (analytics) and `businessSlug + userEmail + createdAt DESC` (customer history, walk-in lookup). The emulator works without them; production will throw until they're deployed.
-- [ ] **Merge PRs in order** — #13 → #14 → #15 → #16. Each branch targets the previous one.
+Replace Unsplash URL fields in `coverImage` and per-facility `image` with uploaded images stored in Firebase Storage:
 
-### Phase 6 — Payment integration
+- Add Firebase Storage SDK to the client (`firebase/storage`)
+- Add file upload inputs to the Admin Settings tab (replacing the URL text fields)
+- On upload, write the download URL back to the `businesses/{slug}` Firestore doc via the existing `PATCH` route
+- Update `HomeTab` facility cards and the storefront cover to display Storage URLs
 
-PayMongo has a **test mode** (test API keys, test cards) — no local emulator, but the sandbox is free. All API routes are already stubbed with the correct shape.
+### Phase 7 — Landing page + business onboarding flow
 
-**6a — Wire up `/api/refund`:**
-- Read the per-business PayMongo secret key from Firestore `/businessSecrets/{slug}` (Admin SDK, never client)
-- POST to PayMongo `/v1/refunds` with the payment intent ID
-- Use `PAYMONGO_SECRET_KEY_TEST` in `.env.local`, `PAYMONGO_SECRET_KEY` in production env
+A public landing page (at `/`) for the platform itself, separate from any business storefront. Use the `alen-chakma/bookit` GitHub repo as design reference.
 
-**6b — Wire up PayMongo checkout:**
-- `POST /api/checkout` creates a PayMongo payment intent from the server
-- On payment success, PayMongo webhook (`POST /api/[businessSlug]/webhook`) verifies the `X-Paymongo-Signature` HMAC-SHA256 header and sets `paymentStatus: "paid"` on the booking
-- `totalPrice` must be re-verified server-side here (see Gap 1)
+### PayMongo integration (deferred)
 
-**6c — Wire up `/api/invite`:**
-- Replace the `console.log` stub with a real email send (Resend, SendGrid, or Firebase Extensions — Trigger Email)
-- Invite link should point to `/<businessSlug>` with email pre-filled
+Explicitly deferred until per-business credential onboarding is designed. The key questions are:
 
-**6d — Store credit ledger:**
-- `cancelBookingWithRefund("credit")` currently only sets `paymentStatus: "refunded"` on the booking
-- Full implementation: write to `/customers/{userEmail}/credits` via Admin SDK in the API route
-- At checkout, read credit balance and deduct before charging PayMongo
-- Credits are non-transferable, non-encashable (same business only) to reduce BSP e-money compliance risk
+- Where to store per-business PayMongo secret keys (Firestore `/businessSecrets/{slug}` with `allow read, write: if false`, or GCP Secret Manager)
+- What the onboarding UI looks like for a business owner to input their PayMongo keys
 
-### Phase 7 — Multi-tenant business onboarding
+Once that's resolved, the integration path is:
 
-The platform currently supports only `paddleup` via static config in `src/lib/businesses.ts`. To onboard real businesses:
+1. Wire up `POST /api/refund` to call PayMongo `/v1/refunds`
+2. Add `POST /api/checkout` to create a PayMongo payment intent
+3. Add `POST /api/[businessSlug]/webhook` to handle PayMongo events (with signature verification)
+4. Move `rescheduleBooking` to a server API route so price is validated server-side
 
-**7a — Migrate business config to Firestore:**
-- `/businesses/{slug}` — public config (name, facilities, hours, accentColor)
-- `/businessSecrets/{slug}` — private config (PayMongo secret key, webhook secret); `allow read, write: if false` (Admin SDK only)
-- Migrate `src/lib/businesses.ts` reads to Firestore queries
+### Admin management UI (deferred)
 
-**7b — Per-business PayMongo keys:**
-- Each business brings their own PayMongo account (platform never touches money flow)
-- Store keys in `/businessSecrets/{slug}` or GCP Secret Manager (`projects/{project}/secrets/paymongo_{slug}`)
-- API routes read the key for the relevant `businessSlug` before any PayMongo call
-- Prefer GCP Secret Manager for production — built-in rotation, audit log, and access controls
+Currently admin access is granted via CLI scripts only. Two deferred options:
 
-**7c — Admin onboarding UI (Option B):**
-- Currently admin access is granted via CLI scripts only (Option A)
-- Option B: in-app UI for super-admins to grant/revoke admin access without touching the terminal
-- Option C: Firebase custom claims for RBAC without cross-document reads (reduces Firestore read quota usage)
-
-### Phase 8 — Walk-in UX polish
-
-- **Grid distinction** — walk-in bookings (`source: "walk_in"`) should render differently on the schedule grid (e.g. different colour tint or a "Walk-in" label on the block) to distinguish them from online bookings
-- **Multi-business email lookup** — `lookupCustomerByEmail` currently scopes to `businessSlug`; for a returning customer across businesses, a cross-business lookup would be useful (requires a `customers` collection)
-- **Partial refund** — the current refund flow refunds the full `totalPrice`; partial refunds (e.g. if only some hours were cancelled) are not yet handled
-
-### Address security backlog before launch
-
-See §11 for the four deferred security gaps. Gap 1 (client-side price) and Gap 3 (webhook verification) are blockers before PayMongo goes live.
+- **Option B:** In-app UI for super-admins to grant/revoke access without touching the terminal
+- **Option C:** Firebase custom claims for RBAC (avoids cross-document `get()` in Firestore rules, reducing read quota usage)
 
 ---
 
@@ -471,11 +509,11 @@ Run through this whenever deploying to a new environment or after infrastructure
 
 ### Vercel environment variables
 
-Set all of these under **Project Settings → Environment Variables** for the **Production** (and Preview if needed) scope:
+Set all of these under **Project Settings → Environment Variables** for the **Production** scope:
 
 | Variable | Where to get it |
 |---|---|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase Console → Project Settings → Your apps → Web app config |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase Console → bookme-821b4 → Project Settings → Your apps → Web app config |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | same |
 | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | same |
 | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | same |
@@ -484,8 +522,10 @@ Set all of these under **Project Settings → Environment Variables** for the **
 | `FIREBASE_PROJECT_ID` | Firebase Console → Project Settings → Service Accounts → Generate new private key |
 | `FIREBASE_CLIENT_EMAIL` | same JSON file (`client_email`) |
 | `FIREBASE_PRIVATE_KEY` | same JSON file (`private_key`) — paste the full string including `-----BEGIN/END PRIVATE KEY-----` |
+| `UPSTASH_REDIS_REST_URL` | Upstash Console → your database → REST API |
+| `UPSTASH_REDIS_REST_TOKEN` | same |
 
-`NEXT_PUBLIC_*` vars are embedded at build time; `FIREBASE_*` vars are server-only (Admin SDK, used by API routes).
+`NEXT_PUBLIC_*` vars are embedded at build time; `FIREBASE_*` and `UPSTASH_*` vars are server-only (used by API routes only).
 
 ### Firebase CLI deploys
 
@@ -501,14 +541,23 @@ firebase deploy --only firestore:indexes
 
 Firestore indexes take a few minutes to build after deployment — queries that depend on a new index will fail until the build completes.
 
+### Seeding business data
+
+After deploying to a new project or resetting Firestore:
+
+```bash
+# Download service-account.json from Firebase Console → Project Settings → Service Accounts
+npm run seed:businesses
+```
+
 ### Granting admin access
 
 The user must have signed up first (Firebase Auth account must exist), then:
 
 ```bash
 # Download service-account.json from Firebase Console → Project Settings → Service Accounts
-node scripts/grant-admin.mjs <email> <businessSlug>
+npm run grant:admin -- <email> <businessSlug>
 
 # To revoke
-node scripts/grant-admin.mjs <email> <businessSlug> --revoke
+npm run revoke:admin -- <email> <businessSlug>
 ```
