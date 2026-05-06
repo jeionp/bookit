@@ -31,6 +31,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Only allow editable business fields. Excludes slug (immutable identifier),
+  // type (structural — changing would break routing), and rating/reviewCount
+  // (should only be updated through a controlled review system, not the settings UI).
   const ALLOWED_FIELDS = new Set([
     "name", "tagline", "description", "coverImage", "location",
     "address", "phone", "email", "accentColor",

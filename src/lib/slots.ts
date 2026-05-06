@@ -33,6 +33,9 @@ export function formatRange(hours: number[]): string {
   return `${formatHour(hours[0])} – ${formatHour(hours[hours.length - 1] + 1)}`;
 }
 
+// Returns all hours between startHour and endHour (inclusive) that are not booked,
+// stopping at the first booked hour. Handles both forward (9→14) and backward (14→9)
+// drag directions, always returning the result in ascending order.
 export function getValidRange(
   startHour: number,
   endHour: number,

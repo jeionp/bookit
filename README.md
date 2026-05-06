@@ -5,7 +5,8 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
 ## Tech stack
 
 - **Next.js 16** (App Router) — frontend and server components
-- **Firebase** — Firestore for bookings, Firebase Auth for user accounts
+- **Firebase** — Firestore for business config + bookings, Firebase Auth (email/password + Google)
+- **Upstash Redis** — rate limiting on booking creation (`UPSTASH_REDIS_REST_URL` / `_TOKEN`)
 - **Tailwind CSS** — styling
 - **Playwright** — end-to-end tests
 - **Vitest** — unit and security rule tests
@@ -31,9 +32,9 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
    ```env
    NEXT_PUBLIC_USE_EMULATOR=true
    NEXT_PUBLIC_FIREBASE_API_KEY=demo-key
-   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-bookit.firebaseapp.com
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-bookit
-   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=demo-bookit.appspot.com
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=bookme-821b4.firebaseapp.com
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=bookme-821b4
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=bookme-821b4.appspot.com
    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000
    NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:demo
 
@@ -47,13 +48,19 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
    FIREBASE_PROJECT_ID=<your-project-id>
    FIREBASE_CLIENT_EMAIL=<service-account-email>
    FIREBASE_PRIVATE_KEY=<service-account-private-key>
+
+   # Rate limiting (Upstash Redis — get from console.upstash.com)
+   UPSTASH_REDIS_REST_URL=<your-upstash-rest-url>
+   UPSTASH_REDIS_REST_TOKEN=<your-upstash-rest-token>
    ```
 
 3. **Start the Firebase emulators** (Auth + Firestore)
 
    ```bash
-   firebase emulators:start --only auth,firestore --project demo-bookit
+   firebase emulators:start
    ```
+
+   This uses the `bookme-821b4` project from `.firebaserc`. Do not pass `--project` — a mismatched project ID causes Admin SDK token verification to fail.
 
 4. **Start the dev server** (in a second terminal)
 
@@ -84,7 +91,7 @@ Sign in at [http://localhost:3000/paddleup](http://localhost:3000/paddleup) with
 
 **One-time setup:**
 
-1. Go to Firebase Console → **jidoka-pixels** → Project Settings → Service Accounts
+1. Go to Firebase Console → **bookme-821b4** → Project Settings → Service Accounts
 2. Click **Generate new private key** and save the file as `service-account.json` in the project root
 3. `service-account.json` is gitignored — never commit it
 
@@ -116,21 +123,40 @@ npm run revoke:admin -- <email> <slug>
 | `npm run seed:admin` | Create an admin account in the local emulator |
 | `npm run grant:admin` | Grant production admin access by email |
 | `npm run revoke:admin` | Revoke production admin access by email |
+| `npm run seed:businesses` | Seed business config to production Firestore |
+| `npm run seed:businesses:emulator` | Seed business config to the local emulator |
 
 ## Running tests
+
+**Restart the emulator at the start of every session** — a long-running emulator accumulates gRPC threads and can hang:
+
+```bash
+lsof -ti :8080 | xargs kill -9 2>/dev/null; lsof -ti :9099 | xargs kill -9 2>/dev/null; true
+firebase emulators:start
+```
 
 **Security rule tests** — requires the emulator running:
 
 ```bash
-firebase emulators:start --only auth,firestore --project demo-bookit &
 npm run test:security
+```
+
+**Unit tests** — no emulator required (all Firebase calls are mocked):
+
+```bash
+npm test
 ```
 
 **E2E tests** — requires the emulator and dev server both running:
 
 ```bash
-firebase emulators:start --only auth,firestore --project demo-bookit &
-npm run dev &
+# terminal 1
+firebase emulators:start
+
+# terminal 2
+npm run dev
+
+# terminal 3
 npm run test:e2e
 ```
 

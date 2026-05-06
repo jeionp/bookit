@@ -22,6 +22,9 @@ function getAdminApp() {
   });
 }
 
+// Defers Admin SDK initialization to first use rather than module load time.
+// Next.js imports modules during static build steps where env vars may not be available,
+// so calling getAuth/getFirestore at the top level would throw in those contexts.
 function lazyProxy<T extends object>(factory: () => T): T {
   return new Proxy({} as T, {
     get(_target, prop) {
