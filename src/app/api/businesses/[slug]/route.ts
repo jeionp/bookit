@@ -31,9 +31,22 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Merge patch into businesses/{slug}
-  const body = await req.json();
-  await adminDb.collection("businesses").doc(slug).set(body, { merge: true });
+  const ALLOWED_FIELDS = new Set([
+    "name", "tagline", "description", "coverImage", "location",
+    "address", "phone", "email", "accentColor",
+    "facilities", "amenities", "operatingHours",
+  ]);
+
+  const raw = await req.json();
+  const patch: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    if (ALLOWED_FIELDS.has(key)) patch[key] = raw[key];
+  }
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+  }
+
+  await adminDb.collection("businesses").doc(slug).set(patch, { merge: true });
 
   return NextResponse.json({ ok: true });
 }

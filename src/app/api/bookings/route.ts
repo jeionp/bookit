@@ -95,12 +95,23 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as CreateBookingRequest;
   const { facilityId, date, hours, businessSlug } = body;
 
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   if (!facilityId || !date || !Array.isArray(hours) || hours.length === 0 || !businessSlug) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
+  if (!DATE_RE.test(date)) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  if (
+    hours.length > 24 ||
+    hours.some((h) => !Number.isInteger(h) || h < 0 || h > 23)
+  ) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  const uniqueHours = [...new Set(hours)];
 
   // Recalculate price server-side from Firestore (source of truth)
-  const priceInfo = await calcPrice(businessSlug, facilityId, hours);
+  const priceInfo = await calcPrice(businessSlug, facilityId, uniqueHours);
   if (!priceInfo) {
     return NextResponse.json({ error: "Unknown business or facility" }, { status: 400 });
   }
@@ -123,7 +134,7 @@ export async function POST(req: NextRequest) {
         (d.data().hours as number[]).forEach((h) => takenHours.add(h));
       });
 
-      if (hours.some((h) => takenHours.has(h))) {
+      if (uniqueHours.some((h) => takenHours.has(h))) {
         throw new Error("SLOT_UNAVAILABLE");
       }
 
@@ -136,7 +147,7 @@ export async function POST(req: NextRequest) {
         facilityId,
         facilityName: priceInfo.facilityName,
         date,
-        hours,
+        hours: uniqueHours,
         totalPrice: priceInfo.totalPrice,
         currency: priceInfo.currency,
         status: "confirmed",

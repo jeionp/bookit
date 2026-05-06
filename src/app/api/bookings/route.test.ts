@@ -225,3 +225,70 @@ describe('POST /api/bookings — rate limiting', () => {
     expect(res.status).toBe(401)
   })
 })
+
+// ─── Input validation tests ───────────────────────────────────────────────────
+// These run without Upstash env vars so rate limiting is skipped.
+// An auth token is provided so the route reaches the validation logic.
+
+describe('POST /api/bookings — input validation', () => {
+  beforeEach(() => {
+    mockVerifyIdToken.mockReset()
+    mockRunTransaction.mockReset()
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email: 'a@b.com', name: 'Alice' })
+  })
+
+  afterEach(() => {
+    vi.resetModules()
+  })
+
+  test('returns 400 for date without dashes (YYYYMMDD)', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({ ...VALID_BODY, date: '20260510' }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 for date in MM/DD/YYYY format', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({ ...VALID_BODY, date: '05/10/2026' }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when hours array exceeds 24 entries', async () => {
+    const { POST } = await import('./route')
+    const tooMany = Array.from({ length: 25 }, (_, i) => i % 24)
+    const res = await POST(makeReq({ ...VALID_BODY, hours: tooMany }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when an hour value is out of range (24)', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({ ...VALID_BODY, hours: [8, 24] }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when an hour value is negative', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({ ...VALID_BODY, hours: [-1, 8] }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when an hour value is a float', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({ ...VALID_BODY, hours: [8.5] }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('deduplicates hours before storing — tx.set receives unique values', async () => {
+    const { POST } = await import('./route')
+    const setMock = vi.fn()
+    mockRunTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({ get: vi.fn().mockResolvedValue({ docs: [] }), set: setMock })
+    })
+    const res = await POST(makeReq({ ...VALID_BODY, hours: [8, 8, 9] }, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const storedHours = setMock.mock.calls[0][1].hours as number[]
+    expect(storedHours).toEqual([8, 9])
+  })
+})
