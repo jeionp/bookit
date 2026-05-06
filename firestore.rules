@@ -31,13 +31,9 @@ service cloud.firestore {
 
       // Queries:
       //   - Authenticated users can query their own bookings (any status)
-      //   - Anyone can query confirmed bookings — required for the public
-      //     availability display (getBookedHours). Trade-off: confirmed booking
-      //     documents are visible to any caller who queries with status=="confirmed".
-      //     To eliminate this, move availability reads to a Cloud Function.
       //   - Admins can query all bookings for their business slug
+      //   - Public availability reads go through GET /api/availability (Admin SDK, no PII exposed)
       allow list: if (request.auth != null && resource.data.userId == request.auth.uid)
-                  || resource.data.status == "confirmed"
                   || isAdminOfSlug(resource.data.businessSlug);
 
       // Create: authenticated, booking is for the caller, starts as confirmed,

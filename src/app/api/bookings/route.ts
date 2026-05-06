@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { getBusinessBySlug } from "@/lib/firebase/businesses";
 
 export const dynamic = "force-dynamic";
+
+// Lazy singleton — only initialised when UPSTASH env vars are present.
+// In emulator/test environments the vars are absent, so rate limiting is skipped.
+let ratelimit: Ratelimit | null = null;
+function getRatelimit(): Ratelimit | null {
+  if (ratelimit) return ratelimit;
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  ratelimit = new Ratelimit({
+    redis:   Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(10, "60 s"),
+    prefix:  "bookit:rl:bookings",
+  });
+  return ratelimit;
+}
 
 export interface CreateBookingRequest {
   facilityId: string;
@@ -40,6 +58,22 @@ async function calcPrice(businessSlug: string, facilityId: string, hours: number
 }
 
 export async function POST(req: NextRequest) {
+  const rl = getRatelimit();
+  if (rl) {
+    // x-real-ip is set by Vercel's edge and cannot be spoofed by clients.
+    // x-forwarded-for leftmost value is client-controlled, so we avoid it.
+    const ip = req.headers.get("x-real-ip") ?? "anonymous";
+    try {
+      const { success } = await rl.limit(ip);
+      if (!success) {
+        return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      }
+    } catch (err) {
+      // Redis unavailable — fail open so bookings are not blocked by infra issues.
+      console.error("[api/bookings] rate-limit check failed:", err);
+    }
+  }
+
   const authHeader = req.headers.get("authorization") ?? "";
   const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!idToken) {

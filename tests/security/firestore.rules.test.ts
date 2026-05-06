@@ -157,9 +157,9 @@ describe('bookings — read', () => {
     )
   })
 
-  test('anyone can query confirmed bookings for availability', async () => {
+  test('unauthenticated user cannot query confirmed bookings (availability via API only)', async () => {
     const db = testEnv.unauthenticatedContext().firestore()
-    await assertSucceeds(
+    await assertFails(
       getDocs(
         query(
           collection(db, 'bookings'),
@@ -418,8 +418,7 @@ describe('businesses — multi-tenant booking isolation', () => {
   beforeEach(async () => {
     await seedAdmin('paddleup-admin', ['paddleup'])
     await seedAdmin('rival-admin', ['rival-courts'])
-    // Seed one cancelled booking per business so status != "confirmed" and the
-    // public-read bypass for availability queries does not obscure isolation failures.
+    // Seed one cancelled booking per business to verify slug isolation rules.
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'bookings', 'paddleup-b1'), {
         ...booking('alice', 'cancelled'),

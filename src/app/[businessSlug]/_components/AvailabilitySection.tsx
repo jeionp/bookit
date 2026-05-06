@@ -7,7 +7,6 @@ import type { MonthCaptionProps } from "react-day-picker";
 import "react-day-picker/src/style.css";
 import { Business, Facility } from "@/lib/types";
 import { Selection, toDateKey, generateSlots } from "@/lib/slots";
-import { getBookedHours } from "@/lib/firebase/bookings";
 import { useSlotSelection } from "@/hooks/useSlotSelection";
 import SlotGrid from "@/components/booking/SlotGrid";
 import BookingActionBar from "@/components/booking/BookingActionBar";
@@ -91,10 +90,11 @@ export default function AvailabilitySection({
 
   useEffect(() => {
     let cancelled = false;
-    getBookedHours(business.slug, facility.id, dateKey)
-      .then((hours) => {
+    fetch(`/api/availability?businessSlug=${encodeURIComponent(business.slug)}&facilityId=${encodeURIComponent(facility.id)}&date=${encodeURIComponent(dateKey)}`)
+      .then((r) => r.json())
+      .then((data: { bookedHours: number[] }) => {
         if (!cancelled) {
-          setBookedHours(hours);
+          setBookedHours(data.bookedHours ?? []);
           setLoadedKey(`${facility.id}:${dateKey}`);
         }
       })
