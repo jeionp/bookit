@@ -36,43 +36,6 @@ vi.mock('@/lib/firebase/businesses', () => ({
   }),
 }))
 
-// ─── require.cache helpers for CJS Upstash packages ──────────────────────────
-// vi.mock() does not intercept the CJS require() calls that getRatelimit() makes
-// for @upstash/ratelimit and @upstash/redis because those packages are externalized
-// (not transformed by Vitest's ESM pipeline).  The only reliable approach is to
-// inject fakes directly into Node's require.cache before the route is (re)loaded.
-
-const RL_PATH    = require.resolve('@upstash/ratelimit')
-const REDIS_PATH = require.resolve('@upstash/redis')
-
-function injectFakeUpstash(mockLimit: ReturnType<typeof vi.fn>): void {
-  require.cache[RL_PATH] = {
-    id: RL_PATH, filename: RL_PATH, loaded: true, path: RL_PATH, paths: [],
-    children: [], parent: null,
-    exports: {
-      Ratelimit: class {
-        static slidingWindow() { return {} }
-        limit = mockLimit
-      },
-    },
-  } as unknown as NodeJS.Module
-
-  require.cache[REDIS_PATH] = {
-    id: REDIS_PATH, filename: REDIS_PATH, loaded: true, path: REDIS_PATH, paths: [],
-    children: [], parent: null,
-    exports: { Redis: { fromEnv: () => ({}) } },
-  } as unknown as NodeJS.Module
-}
-
-function restoreUpstash(
-  savedRl:    NodeJS.Module | undefined,
-  savedRedis: NodeJS.Module | undefined,
-): void {
-  if (savedRl)    require.cache[RL_PATH]    = savedRl
-  else            delete require.cache[RL_PATH]
-  if (savedRedis) require.cache[REDIS_PATH] = savedRedis
-  else            delete require.cache[REDIS_PATH]
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +72,15 @@ async function importFreshRouteWithRatelimit(
 ): Promise<{ POST: (req: NextRequest) => Promise<Response> }> {
   vi.resetModules()
 
-  // Re-register ESM mocks after resetModules cleared them
+  vi.doMock('@upstash/ratelimit', () => ({
+    Ratelimit: class {
+      static slidingWindow() { return {} }
+      limit = mockLimit
+    },
+  }))
+  vi.doMock('@upstash/redis', () => ({
+    Redis: { fromEnv: () => ({}) },
+  }))
   vi.doMock('@/lib/firebase/admin-app', () => ({
     adminAuth: { verifyIdToken: mockVerifyIdToken },
     adminDb: {
@@ -132,9 +103,6 @@ async function importFreshRouteWithRatelimit(
     }),
   }))
 
-  // Inject CJS fakes so the route's require() calls get our mock
-  injectFakeUpstash(mockLimit)
-
   return import('./route')
 }
 
@@ -143,16 +111,12 @@ async function importFreshRouteWithRatelimit(
 describe('POST /api/bookings — rate limiting', () => {
   let savedUrl:   string | undefined
   let savedToken: string | undefined
-  let savedRl:    NodeJS.Module | undefined
-  let savedRedis: NodeJS.Module | undefined
 
   beforeEach(() => {
     mockVerifyIdToken.mockReset()
     mockRunTransaction.mockReset()
     savedUrl   = process.env.UPSTASH_REDIS_REST_URL
     savedToken = process.env.UPSTASH_REDIS_REST_TOKEN
-    savedRl    = require.cache[RL_PATH]
-    savedRedis = require.cache[REDIS_PATH]
   })
 
   afterEach(() => {
@@ -160,8 +124,6 @@ describe('POST /api/bookings — rate limiting', () => {
     else                          process.env.UPSTASH_REDIS_REST_URL = savedUrl
     if (savedToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN
     else                          process.env.UPSTASH_REDIS_REST_TOKEN = savedToken
-    restoreUpstash(savedRl, savedRedis)
-    // Always reset modules at the end so the main import() alias cache is clean
     vi.resetModules()
   })
 

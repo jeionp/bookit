@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { getBusinessBySlug } from "@/lib/firebase/businesses";
 
@@ -7,18 +9,16 @@ export const dynamic = "force-dynamic";
 
 // Lazy singleton — only initialised when UPSTASH env vars are present.
 // In emulator/test environments the vars are absent, so rate limiting is skipped.
-let ratelimit: import("@upstash/ratelimit").Ratelimit | null = null;
-function getRatelimit() {
+let ratelimit: Ratelimit | null = null;
+function getRatelimit(): Ratelimit | null {
   if (ratelimit) return ratelimit;
   const url   = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
-  const { Ratelimit } = require("@upstash/ratelimit");
-  const { Redis }     = require("@upstash/redis");
   ratelimit = new Ratelimit({
-    redis:     Redis.fromEnv(),
-    limiter:   Ratelimit.slidingWindow(10, "60 s"),
-    prefix:    "bookit:rl:bookings",
+    redis:   Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(10, "60 s"),
+    prefix:  "bookit:rl:bookings",
   });
   return ratelimit;
 }
