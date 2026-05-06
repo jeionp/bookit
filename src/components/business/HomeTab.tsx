@@ -5,7 +5,6 @@ import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Business } from "@/lib/types";
 import { toDateKey, generateSlots } from "@/lib/slots";
-import { getBookedHours } from "@/lib/firebase/bookings";
 import AvailabilitySection, { Selection } from "@/app/[businessSlug]/_components/AvailabilitySection";
 
 interface HomeTabProps {
@@ -39,13 +38,14 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
     if (totalSlotsToday === 0) return;
     Promise.all(
       business.facilities.map((f) =>
-        getBookedHours(business.slug, f.id, todayKey)
-          .then((hours) => ({ id: f.id, count: hours.length }))
+        fetch(`/api/availability?businessSlug=${encodeURIComponent(business.slug)}&facilityId=${encodeURIComponent(f.id)}&date=${encodeURIComponent(todayKey)}`)
+          .then((r) => r.json())
+          .then((data: { bookedHours: number[] }) => ({ id: f.id, count: (data.bookedHours ?? []).length }))
           .catch(() => ({ id: f.id, count: 0 }))
       )
     ).then((results) => {
       const map: Record<string, number> = {};
-      results.forEach(({ id, count }) => { map[id] = count; });
+      results.forEach(({ id, count }: { id: string; count: number }) => { map[id] = count; });
       setTodayBookedCounts(map);
     });
   }, [business.facilities, business.slug, todayKey, totalSlotsToday]);
