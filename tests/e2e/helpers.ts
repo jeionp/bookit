@@ -3,7 +3,7 @@
 
 const FIRESTORE = 'http://localhost:8080'
 const AUTH     = 'http://localhost:9099'
-const PROJECT  = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'jidoka-pixels'
+const PROJECT  = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'bookme-821b4'
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 

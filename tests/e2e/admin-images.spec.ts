@@ -15,7 +15,7 @@ const ADMIN_EMAIL    = 'admin-images@bookit-test.internal'
 const ADMIN_PASSWORD = 'AdminPass1!'
 
 const FIRESTORE = 'http://localhost:8080'
-const PROJECT   = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'jidoka-pixels'
+const PROJECT   = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'bookme-821b4'
 
 // Minimal valid JPEG header bytes — Storage emulator accepts this as an image/jpeg upload.
 const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])

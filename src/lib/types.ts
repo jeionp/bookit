@@ -36,4 +36,6 @@ export interface Business {
   facilities: Facility[];
   amenities: string[];
   operatingHours: OperatingHours[];
+  ownerId?: string;
+  status?: "active" | "suspended";
 }
