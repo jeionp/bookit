@@ -194,14 +194,15 @@ test.describe('ImageUpload — file upload happy path', () => {
     })
 
     // Wait for the URL text input to change from its original value to a Storage URL.
-    // The Storage emulator returns a URL starting with http://127.0.0.1:9199.
+    // The emulator SDK uses the exact hostname passed to connectStorageEmulator
+    // ('localhost'), so accept both localhost and 127.0.0.1 for emulator URLs.
     await expect(urlInput).not.toHaveValue(
       /^https:\/\/images\.unsplash\.com/,
       { timeout: 15_000 }
     )
     const uploadedUrl = await urlInput.inputValue()
     expect(
-      uploadedUrl.startsWith('http://127.0.0.1:9199') ||
+      /^https?:\/\/(localhost|127\.0\.0\.1):9199/.test(uploadedUrl) ||
       uploadedUrl.startsWith('https://firebasestorage.googleapis.com')
     ).toBe(true)
   })
