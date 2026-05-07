@@ -35,7 +35,7 @@ jobs:
         run: npm install -g firebase-tools
 
       - name: Start Firebase emulators
-        run: firebase emulators:start --only auth,firestore --project demo-bookit &
+        run: firebase emulators:start --only auth,firestore,storage --project demo-bookit &
         env:
           CI: "true"
 
@@ -51,6 +51,8 @@ jobs:
         run: npm run test:security
         env:
           CI: "true"
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-bookit"
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "demo-bookit.appspot.com"
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

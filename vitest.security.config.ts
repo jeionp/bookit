@@ -10,6 +10,5 @@ export default defineConfig({
     // Run test files sequentially — both files share the same Firebase emulator,
     // so concurrent clearFirestore() calls from separate workers would race.
     maxWorkers: 1,
-    minWorkers: 1,
   },
 })

@@ -15,8 +15,10 @@ const STORAGE_RULES_PATH   = resolve(process.cwd(), 'storage.rules')
 const FIRESTORE_RULES_PATH = resolve(process.cwd(), 'firestore.rules')
 // Must match the project the emulators were started with so that Storage's
 // cross-service firestore.get() call resolves in the correct Firestore namespace.
-const PROJECT_ID = 'bookme-821b4'
-const BUCKET     = 'bookme-821b4.firebasestorage.app'
+// In CI, NEXT_PUBLIC_FIREBASE_PROJECT_ID is set to the demo project; locally it
+// falls back to the real project picked up from .firebaserc.
+const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'bookme-821b4'
+const BUCKET     = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'bookme-821b4.firebasestorage.app'
 const AUTH_REST      = 'http://localhost:9099'
 const FIRESTORE_REST = 'http://localhost:8080'
 
