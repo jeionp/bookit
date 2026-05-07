@@ -1,0 +1,13 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /businesses/{slug}/{allPaths=**} {
+      allow read: if true;
+      // Only an admin of this slug may write
+      allow write: if request.auth != null
+        && slug in firestore.get(
+             /databases/(default)/documents/admins/$(request.auth.uid)
+           ).data.slugs;
+    }
+  }
+}

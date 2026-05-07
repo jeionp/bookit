@@ -82,7 +82,7 @@ export default function BusinessPageClient({ business }: { business: Business })
       {/* Hero */}
       <div className="relative h-52 sm:h-64 lg:h-72 overflow-hidden bg-gray-200">
         <Image
-          src={business.coverImage}
+          src={business.coverImage || "/placeholder-cover.svg"}
           alt={business.name}
           fill priority
           className="object-cover"

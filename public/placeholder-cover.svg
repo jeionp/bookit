@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100">
+  <rect width="300" height="100" fill="#f3f4f6"/>
+  <!-- camera icon (Lucide-style, 24px, centered at 150,44) -->
+  <g transform="translate(138,32)" fill="none" stroke="#9ca3af" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </g>
+  <text x="150" y="68" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="5.5" fill="#9ca3af" text-anchor="middle">Add a cover photo</text>
+</svg>
