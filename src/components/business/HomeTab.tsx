@@ -138,7 +138,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
                 >
                   <div className="relative h-32 bg-gray-100">
                     <Image
-                      src={facility.image}
+                      src={facility.image || "/placeholder-court.svg"}
                       alt={facility.name}
                       fill
                       className="object-cover"

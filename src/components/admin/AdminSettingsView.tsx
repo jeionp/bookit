@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, X, Plus } from "lucide-react";
+import { useRef, useState } from "react";
+import { ChevronDown, ChevronUp, X, Plus, Upload, Image as ImageIcon } from "lucide-react";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "@/lib/firebase/client";
 import { Business, Facility, OperatingHours } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -58,6 +60,107 @@ function LabeledInput({
         placeholder={placeholder}
         className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors"
       />
+    </div>
+  );
+}
+
+function ImageUpload({
+  label,
+  value,
+  onChange,
+  path,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  path: string;
+  hint?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const inputId = `img-${path.replace(/\//g, "-")}`;
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please select an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Image must be under 5 MB.");
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      onChange(url);
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-gray-500">{label}</label>
+      <div className="flex items-start gap-3">
+        {/* Always show preview area — placeholder when no image is set */}
+        {value ? (
+          <img
+            src={value}
+            alt=""
+            className="w-16 h-16 object-cover rounded-xl border border-gray-200 shrink-0"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center shrink-0">
+            <ImageIcon size={20} className="text-gray-300" />
+          </div>
+        )}
+        <div className="flex-1 flex flex-col gap-1.5">
+          <input
+            ref={inputRef}
+            id={inputId}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleFile}
+            className="hidden"
+          />
+          <label
+            htmlFor={inputId}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors w-fit"
+          >
+            {uploading ? (
+              <>
+                <span className="w-3 h-3 rounded-full border-2 border-gray-400 border-t-transparent animate-spin inline-block" />
+                Uploading…
+              </>
+            ) : (
+              <>
+                <Upload size={12} />
+                {value ? "Replace image" : "Upload image"}
+              </>
+            )}
+          </label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => { setUploadError(null); onChange(e.target.value); }}
+            placeholder="Or paste a URL…"
+            disabled={uploading}
+            className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors disabled:opacity-50"
+          />
+          {hint && <p className="text-xs text-gray-400">{hint}</p>}
+        </div>
+      </div>
+      {uploadError && <p className="text-xs text-red-500 mt-0.5">{uploadError}</p>}
     </div>
   );
 }
@@ -218,7 +321,13 @@ export default function AdminSettingsView({ business }: { business: Business }) 
               <LabeledInput label="Phone" value={draft.phone} onChange={(v) => setField("phone", v)} />
               <LabeledInput label="Email" value={draft.email} onChange={(v) => setField("email", v)} />
               <div className="sm:col-span-2">
-                <LabeledInput label="Cover Image URL" value={draft.coverImage} onChange={(v) => setField("coverImage", v)} placeholder="https://..." />
+                <ImageUpload
+                  label="Cover Image"
+                  value={draft.coverImage}
+                  onChange={(v) => setField("coverImage", v)}
+                  path={`businesses/${draft.slug}/cover`}
+                  hint="Landscape, at least 1200 × 400 px · JPEG, PNG or WebP · max 5 MB"
+                />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-gray-500">Accent Color</label>
@@ -259,7 +368,15 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                       <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <LabeledInput label="Name" value={facility.name} onChange={(v) => updateFacility(idx, { name: v })} />
-                          <LabeledInput label="Image URL" value={facility.image} onChange={(v) => updateFacility(idx, { image: v })} placeholder="https://..." />
+                          <div className="sm:col-span-2">
+                            <ImageUpload
+                              label="Court Image"
+                              value={facility.image}
+                              onChange={(v) => updateFacility(idx, { image: v })}
+                              path={`businesses/${draft.slug}/courts/${facility.id}`}
+                              hint="Landscape, at least 400 × 260 px · JPEG, PNG or WebP · max 5 MB"
+                            />
+                          </div>
                           <div className="sm:col-span-2">
                             <label className="text-xs font-semibold text-gray-500 block mb-1">Description</label>
                             <textarea
