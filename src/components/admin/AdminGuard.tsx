@@ -10,15 +10,15 @@ interface Props {
 }
 
 export default function AdminGuard({ slug, children }: Props) {
-  const { user, loading, isAdminOf } = useAuth();
+  const { user, loading, adminSlugs, isAdminOf } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
-    if (!user || !isAdminOf(slug)) {
-      router.replace(`/${slug}`);
-    }
-  }, [loading, user, isAdminOf, slug, router]);
+    if (!user) { router.replace(`/${slug}`); return; }
+    if (adminSlugs.length === 0) { router.replace("/onboarding"); return; }
+    if (!isAdminOf(slug)) { router.replace(`/${slug}`); return; }
+  }, [loading, user, adminSlugs, isAdminOf, slug, router]);
 
   if (loading) {
     return (
