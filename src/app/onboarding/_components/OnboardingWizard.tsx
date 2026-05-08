@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Facility, OperatingHours } from "@/lib/types";
 import StepIndicator from "./StepIndicator";
@@ -49,7 +48,6 @@ const INITIAL: WizardDraft = {
 
 export default function OnboardingWizard() {
   const { user } = useAuth();
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<WizardDraft>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
@@ -72,7 +70,7 @@ export default function OnboardingWizard() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Something went wrong");
-      router.replace(`/${json.slug}/admin`);
+      window.location.replace(`/${json.slug}/admin`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Something went wrong");
       setSubmitting(false);

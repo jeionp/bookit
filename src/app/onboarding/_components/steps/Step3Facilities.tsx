@@ -43,25 +43,27 @@ function FacilityCard({ facility, index, slug, onChange, onRemove }: FacilityCar
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center justify-between w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-      >
-        <span className="text-sm font-semibold text-gray-700">
-          {facility.name || `Facility ${index + 1}`}
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-          >
-            <Trash2 size={14} />
-          </button>
-          {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-        </div>
-      </button>
+      <div className="flex items-center bg-gray-50 hover:bg-gray-100 transition-colors">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 flex items-center justify-between px-4 py-3 text-left"
+        >
+          <span className="text-sm font-semibold text-gray-700">
+            {facility.name || `Facility ${index + 1}`}
+          </span>
+          <div className="flex items-center gap-2 mr-2">
+            {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="p-1 mr-3 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
 
       {open && (
         <div className="p-4 flex flex-col gap-4">
