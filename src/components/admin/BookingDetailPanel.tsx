@@ -56,20 +56,23 @@ function computePrice(business: Business, facilityId: string, hours: number[]): 
   }, 0);
 }
 
-function PaymentBadge({ status }: { status?: "unpaid" | "paid" | "refunded" }) {
+function PaymentBadge({ status }: { status?: "unpaid" | "paid" | "refunded" | "credited" | "refund_pending" }) {
   if (!status || status === "unpaid") return null;
-  const styles = {
-    paid:     { bg: "#f0fdf4", color: "#16a34a", label: "Paid" },
-    refunded: { bg: "#fef9c3", color: "#854d0e", label: "Refunded" },
-  } as const;
-  const { bg, color, label } = styles[status];
+  const styles: Record<string, { bg: string; color: string; label: string }> = {
+    paid:           { bg: "#f0fdf4", color: "#16a34a", label: "Paid" },
+    refunded:       { bg: "#fef9c3", color: "#854d0e", label: "Refunded" },
+    credited:       { bg: "#fef3c7", color: "#d97706", label: "Credited" },
+    refund_pending: { bg: "#fef9c3", color: "#b45309", label: "Refund Pending" },
+  };
+  const style = styles[status];
+  if (!style) return null;
   return (
     <span
       className="inline-block text-xs font-bold px-3 py-1 rounded-full"
-      style={{ backgroundColor: bg, color }}
+      style={{ backgroundColor: style.bg, color: style.color }}
       data-testid="payment-badge"
     >
-      {label}
+      {style.label}
     </span>
   );
 }

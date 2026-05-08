@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
@@ -28,6 +28,7 @@ export interface CreateBookingRequest {
   date: string;
   hours: number[];
   businessSlug: string;
+  creditAmount?: number;
 }
 
 async function calcPrice(businessSlug: string, facilityId: string, hours: number[]): Promise<{
@@ -93,10 +94,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json()) as CreateBookingRequest;
-  const { facilityId, date, hours, businessSlug } = body;
+  const { facilityId, date, hours, businessSlug, creditAmount = 0 } = body;
 
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   if (!facilityId || !date || !Array.isArray(hours) || hours.length === 0 || !businessSlug) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  if (typeof creditAmount !== "number" || creditAmount < 0) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   if (!DATE_RE.test(date)) {
@@ -114,6 +118,30 @@ export async function POST(req: NextRequest) {
   const priceInfo = await calcPrice(businessSlug, facilityId, uniqueHours);
   if (!priceInfo) {
     return NextResponse.json({ error: "Unknown business or facility" }, { status: 400 });
+  }
+
+  // Clamp creditAmount to totalPrice — can't overpay with credits
+  const appliedCredit = Math.min(creditAmount, priceInfo.totalPrice);
+
+  // Verify the user has sufficient credit balance at this business (server-side check)
+  if (appliedCredit > 0) {
+    const creditsSnap = await adminDb
+      .collection("credits")
+      .where("userId", "==", uid)
+      .where("businessSlug", "==", businessSlug)
+      .get();
+    const now = Date.now();
+    let issued = 0;
+    let redeemed = 0;
+    for (const doc of creditsSnap.docs) {
+      const c = doc.data();
+      if (c.type === "issued" && c.expiresAt.toMillis() > now) issued += c.amount as number;
+      if (c.type === "redeemed") redeemed += c.amount as number;
+    }
+    const balance = Math.max(0, Math.round((issued - redeemed) * 100) / 100);
+    if (appliedCredit > balance) {
+      return NextResponse.json({ error: "INSUFFICIENT_CREDITS" }, { status: 422 });
+    }
   }
 
   const newDocRef = adminDb.collection("bookings").doc();
@@ -151,8 +179,27 @@ export async function POST(req: NextRequest) {
         totalPrice: priceInfo.totalPrice,
         currency: priceInfo.currency,
         status: "confirmed",
+        ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      // Record the credit redemption event inside the same transaction
+      if (appliedCredit > 0) {
+        const redemptionRef = adminDb.collection("credits").doc();
+        tx.set(redemptionRef, {
+          userId: uid,
+          businessSlug,
+          businessName: priceInfo.businessName,
+          amount: appliedCredit,
+          currency: priceInfo.currency,
+          type: "redeemed",
+          reason: "cancellation",
+          sourceBookingId: newDocRef.id,
+          redeemedBookingId: newDocRef.id,
+          expiresAt: new Timestamp(0, 0),
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
     });
   } catch (err) {
     if (err instanceof Error && err.message === "SLOT_UNAVAILABLE") {
@@ -162,5 +209,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 
-  return NextResponse.json({ bookingId: newDocRef.id }, { status: 201 });
+  return NextResponse.json(
+    { bookingId: newDocRef.id, creditApplied: appliedCredit > 0 ? appliedCredit : undefined },
+    { status: 201 },
+  );
 }
