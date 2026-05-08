@@ -777,6 +777,8 @@ test.describe('My Bookings tab', () => {
     // Select "Keep as credits" and confirm
     await expect(page.getByRole('heading', { name: 'Cancel Booking' })).toBeVisible({ timeout: 5_000 })
     await page.getByRole('button', { name: /keep as credits/i }).click()
+    // Wait for the choice state to propagate before the confirm button becomes enabled
+    await expect(page.getByRole('button', { name: /confirm cancel/i })).toBeEnabled({ timeout: 3_000 })
     await page.getByRole('button', { name: /confirm cancel/i }).click()
 
     // Dismiss success state
