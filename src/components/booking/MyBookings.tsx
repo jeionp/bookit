@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Clock, X } from "lucide-react";
-import { Booking, getUserBookings, cancelBooking } from "@/lib/firebase/bookings";
+import { CalendarDays, Clock } from "lucide-react";
+import { Booking, getUserBookings } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
+import CancelBookingModal from "@/components/booking/CancelBookingModal";
 
 function formatHour(h: number): string {
   if (h === 0) return "12 AM";
@@ -29,7 +30,6 @@ function isBookingPast(booking: Booking): boolean {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (bookingDay < today) return true;
   if (bookingDay > today) return false;
-  // Same day — past once the last booked hour has ended
   return now.getHours() >= booking.hours[booking.hours.length - 1] + 1;
 }
 
@@ -37,8 +37,8 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(!!user);
-  const [cancelling, setCancelling] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -48,16 +48,10 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
       .finally(() => setLoading(false));
   }, [user]);
 
-  async function handleCancel(bookingId: string) {
-    setCancelling(bookingId);
-    try {
-      await cancelBooking(bookingId);
-      setBookings((prev) =>
-        prev.map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b))
-      );
-    } finally {
-      setCancelling(null);
-    }
+  function handleCancelled(bookingId: string) {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b)),
+    );
   }
 
   if (!user) {
@@ -101,72 +95,79 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
     );
   }
 
-  const upcoming   = bookings.filter((b) => b.status === "confirmed" && !isBookingPast(b));
-  const completed  = bookings.filter((b) => b.status === "confirmed" &&  isBookingPast(b));
-  const cancelled  = bookings.filter((b) => b.status === "cancelled");
+  const upcoming  = bookings.filter((b) => b.status === "confirmed" && !isBookingPast(b));
+  const completed = bookings.filter((b) => b.status === "confirmed" &&  isBookingPast(b));
+  const cancelled = bookings.filter((b) => b.status === "cancelled");
 
   return (
-    <div className="space-y-6 pb-6">
-      {upcoming.length > 0 && (
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
-            Upcoming
-          </h3>
-          <div className="space-y-3">
-            {upcoming.map((booking) => (
-              <BookingCard
-                key={booking.id}
-                booking={booking}
-                accentColor={accentColor}
-                variant="upcoming"
-                onCancel={() => handleCancel(booking.id)}
-                cancelling={cancelling === booking.id}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+    <>
+      <div className="space-y-6 pb-6">
+        {upcoming.length > 0 && (
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
+              Upcoming
+            </h3>
+            <div className="space-y-3">
+              {upcoming.map((booking) => (
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  accentColor={accentColor}
+                  variant="upcoming"
+                  onCancel={() => setCancelTarget(booking)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
-      {completed.length > 0 && (
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
-            Completed
-          </h3>
-          <div className="space-y-3 opacity-60">
-            {completed.map((booking) => (
-              <BookingCard
-                key={booking.id}
-                booking={booking}
-                accentColor={accentColor}
-                variant="completed"
-                onCancel={() => {}}
-                cancelling={false}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+        {completed.length > 0 && (
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
+              Completed
+            </h3>
+            <div className="space-y-3 opacity-60">
+              {completed.map((booking) => (
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  accentColor={accentColor}
+                  variant="completed"
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
-      {cancelled.length > 0 && (
-        <section>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
-            Cancelled
-          </h3>
-          <div className="space-y-3 opacity-60">
-            {cancelled.map((booking) => (
-              <BookingCard
-                key={booking.id}
-                booking={booking}
-                accentColor={accentColor}
-                variant="cancelled"
-                onCancel={() => {}}
-                cancelling={false}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
+        {cancelled.length > 0 && (
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
+              Cancelled
+            </h3>
+            <div className="space-y-3 opacity-60">
+              {cancelled.map((booking) => (
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  accentColor={accentColor}
+                  variant="cancelled"
+                />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      <CancelBookingModal
+        open={!!cancelTarget}
+        booking={cancelTarget}
+        accentColor={accentColor}
+        onClose={() => setCancelTarget(null)}
+        onCancelled={(id) => {
+          handleCancelled(id);
+        }}
+      />
+    </>
   );
 }
 
@@ -181,13 +182,11 @@ function BookingCard({
   accentColor,
   variant,
   onCancel,
-  cancelling,
 }: {
   booking: Booking;
   accentColor: string;
   variant: "upcoming" | "completed" | "cancelled";
-  onCancel: () => void;
-  cancelling: boolean;
+  onCancel?: () => void;
 }) {
   const startHour = booking.hours[0];
   const endHour = booking.hours[booking.hours.length - 1] + 1;
@@ -204,9 +203,7 @@ function BookingCard({
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-2 min-w-0">
             <div>
-              <p className="text-sm font-bold text-gray-900 truncate">
-                {booking.facilityName}
-              </p>
+              <p className="text-sm font-bold text-gray-900 truncate">{booking.facilityName}</p>
               <p className="text-xs text-gray-500">{booking.businessName}</p>
             </div>
             <div className="flex flex-wrap gap-3 text-xs text-gray-500">
@@ -231,14 +228,12 @@ function BookingCard({
           </div>
         </div>
 
-        {variant === "upcoming" && (
+        {variant === "upcoming" && onCancel && (
           <button
             onClick={onCancel}
-            disabled={cancelling}
-            className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+            className="mt-3 text-xs font-semibold text-red-400 hover:text-red-600 transition-colors"
           >
-            <X size={12} />
-            {cancelling ? "Cancelling…" : "Cancel booking"}
+            Cancel booking
           </button>
         )}
       </div>

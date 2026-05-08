@@ -60,5 +60,14 @@ service cloud.firestore {
       // No deletes ever
       allow delete: if false;
     }
+
+    match /credits/{creditId} {
+      // Players read their own credits; admins read credits for their business
+      allow get, list: if request.auth != null
+                       && (resource.data.userId == request.auth.uid
+                           || isAdminOfSlug(resource.data.businessSlug));
+      // All writes go through Admin SDK (cancel and bookings API routes)
+      allow write: if false;
+    }
   }
 }

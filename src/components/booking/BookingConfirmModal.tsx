@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { X, CalendarDays, Clock, MapPin } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, CalendarDays, Clock, MapPin, Coins } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { getCreditsByBusiness, computeBalance } from "@/lib/firebase/credits";
 
 interface BookingSelection {
   facilityId: string;
@@ -48,10 +49,21 @@ export default function BookingConfirmModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [useCredits, setUseCredits] = useState(false);
+
+  useEffect(() => {
+    if (!open || !user) return;
+    getCreditsByBusiness(user.uid, businessSlug)
+      .then((credits) => setCreditBalance(computeBalance(credits)))
+      .catch(() => setCreditBalance(0));
+  }, [open, user, businessSlug]);
 
   if (!open || !selection) return null;
 
   const { pricePerHour, primePricePerHour, primeTimeStart, totalPrice } = selection;
+  const appliedCredit = useCredits ? Math.min(creditBalance, totalPrice) : 0;
+  const amountDue = Math.max(0, totalPrice - appliedCredit);
   const normalHours = primeTimeStart
     ? selection.hours.filter((h) => h < primeTimeStart)
     : selection.hours;
@@ -84,6 +96,7 @@ export default function BookingConfirmModal({
           facilityId: selection!.facilityId,
           date: dateStr,
           hours: selection!.hours,
+          ...(appliedCredit > 0 && { creditAmount: appliedCredit }),
         }),
       });
       if (!res.ok) {
@@ -106,6 +119,7 @@ export default function BookingConfirmModal({
   function handleClose() {
     setDone(false);
     setError("");
+    setUseCredits(false);
     onClose();
     if (done) onSuccess();
   }
@@ -227,10 +241,38 @@ export default function BookingConfirmModal({
                   <span>₱{(primePricePerHour * primeHours.length).toLocaleString()}</span>
                 </div>
               )}
+
+              {/* Credits row */}
+              {creditBalance > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setUseCredits((v) => !v)}
+                  className="w-full flex items-center justify-between py-2 px-3 rounded-xl border transition-colors text-sm"
+                  style={
+                    useCredits
+                      ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
+                      : { borderColor: "#f3f4f6", backgroundColor: "#fafafa" }
+                  }
+                >
+                  <span className="flex items-center gap-2 font-semibold" style={{ color: useCredits ? accentColor : "#6b7280" }}>
+                    <Coins size={14} />
+                    Use credits (₱{creditBalance.toLocaleString()} available)
+                  </span>
+                  <span className="font-bold" style={{ color: useCredits ? accentColor : "#9ca3af" }}>
+                    {useCredits ? `−₱${appliedCredit.toLocaleString()}` : "Off"}
+                  </span>
+                </button>
+              )}
+
               <div className="flex justify-between text-base font-black text-gray-900 pt-1.5 border-t border-gray-100">
-                <span>Total</span>
-                <span>₱{totalPrice.toLocaleString()}</span>
+                <span>Total due</span>
+                <span>₱{amountDue.toLocaleString()}</span>
               </div>
+              {appliedCredit > 0 && (
+                <p className="text-xs text-gray-400 text-right">
+                  ₱{appliedCredit.toLocaleString()} covered by credits
+                </p>
+              )}
             </div>
 
             {error && (

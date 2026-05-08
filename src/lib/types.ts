@@ -1,5 +1,33 @@
 export type BusinessType = "court" | "appointment" | "room";
 
+export interface CancellationPolicy {
+  freeCancelHours: number;    // default 24 — cancel before this = full credit/refund
+  noCancelHours: number;      // default 2  — cancel within this = blocked
+  creditValidityDays: number; // default 365
+}
+
+export const DEFAULT_CANCELLATION_POLICY: CancellationPolicy = {
+  freeCancelHours: 24,
+  noCancelHours: 2,
+  creditValidityDays: 365,
+};
+
+export interface Credit {
+  id: string;
+  userId: string;
+  businessSlug: string;
+  businessName: string;
+  amount: number;
+  currency: string;
+  type: "issued" | "redeemed";
+  reason: "cancellation";
+  sourceBookingId: string;
+  redeemedBookingId?: string;
+  expiresAt: import("firebase/firestore").Timestamp;
+  createdAt: import("firebase/firestore").Timestamp;
+  voided?: boolean;
+}
+
 export interface Facility {
   id: string;
   name: string;
@@ -38,4 +66,5 @@ export interface Business {
   operatingHours: OperatingHours[];
   ownerId?: string;
   status?: "active" | "suspended";
+  cancellationPolicy?: CancellationPolicy;
 }

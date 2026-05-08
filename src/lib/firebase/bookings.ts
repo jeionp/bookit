@@ -26,7 +26,8 @@ export interface Booking {
   totalPrice: number;
   currency: string;
   status: "confirmed" | "cancelled";
-  paymentStatus?: "unpaid" | "paid" | "refunded";
+  paymentStatus?: "unpaid" | "paid" | "refunded" | "credited" | "refund_pending";
+  creditApplied?: number;
   source?: "online" | "walk_in";
   userPhone?: string;
   createdAt: Timestamp;

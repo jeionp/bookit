@@ -1,0 +1,140 @@
+import { NextRequest, NextResponse } from "next/server";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { DEFAULT_CANCELLATION_POLICY, CancellationPolicy } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+export interface CancelBookingRequest {
+  bookingId: string;
+  choice: "credit" | "refund_pending";
+}
+
+export interface CancelBookingResponse {
+  tier: "free" | "prorated" | "blocked";
+  refundRatio: number;
+  creditAmount: number;
+  currency: string;
+}
+
+export function getBookingStartMs(date: string, firstHour: number): number {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(y, m - 1, d, firstHour, 0, 0, 0).getTime();
+}
+
+export function computeTier(
+  bookingStartMs: number,
+  policy: CancellationPolicy,
+): { tier: "free" | "prorated" | "blocked"; refundRatio: number } {
+  const hoursUntil = (bookingStartMs - Date.now()) / 3_600_000;
+
+  if (hoursUntil >= policy.freeCancelHours) {
+    return { tier: "free", refundRatio: 1 };
+  }
+  if (hoursUntil <= policy.noCancelHours) {
+    return { tier: "blocked", refundRatio: 0 };
+  }
+  // Prorated: linear interpolation across the window between noCancelHours and freeCancelHours
+  const window = policy.freeCancelHours - policy.noCancelHours;
+  const ratio = (hoursUntil - policy.noCancelHours) / window;
+  return { tier: "prorated", refundRatio: Math.round(ratio * 10000) / 10000 };
+}
+
+export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get("authorization") ?? "";
+  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!idToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let uid: string;
+  try {
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    uid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await req.json()) as CancelBookingRequest;
+  const { bookingId, choice } = body;
+
+  if (!bookingId || (choice !== "credit" && choice !== "refund_pending")) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  const bookingRef = adminDb.collection("bookings").doc(bookingId);
+  const bookingSnap = await bookingRef.get();
+
+  if (!bookingSnap.exists) {
+    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+  }
+
+  const booking = bookingSnap.data()!;
+
+  if (booking.userId !== uid) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (booking.status === "cancelled") {
+    return NextResponse.json({ error: "Already cancelled" }, { status: 409 });
+  }
+
+  // Load cancellation policy from business (fall back to defaults)
+  const bizSnap = await adminDb.collection("businesses").doc(booking.businessSlug).get();
+  const bizData = bizSnap.data() ?? {};
+  const policy: CancellationPolicy = {
+    freeCancelHours:
+      bizData.cancellationPolicy?.freeCancelHours ?? DEFAULT_CANCELLATION_POLICY.freeCancelHours,
+    noCancelHours:
+      bizData.cancellationPolicy?.noCancelHours ?? DEFAULT_CANCELLATION_POLICY.noCancelHours,
+    creditValidityDays:
+      bizData.cancellationPolicy?.creditValidityDays ?? DEFAULT_CANCELLATION_POLICY.creditValidityDays,
+  };
+
+  const bookingStartMs = getBookingStartMs(booking.date as string, (booking.hours as number[])[0]);
+  const { tier, refundRatio } = computeTier(bookingStartMs, policy);
+
+  if (tier === "blocked") {
+    return NextResponse.json(
+      { error: "CANCEL_BLOCKED", tier: "blocked" },
+      { status: 422 },
+    );
+  }
+
+  const creditAmount = Math.round(booking.totalPrice * refundRatio * 100) / 100;
+
+  const batch = adminDb.batch();
+
+  batch.update(bookingRef, {
+    status: "cancelled",
+    paymentStatus: choice === "credit" ? "credited" : "refund_pending",
+  });
+
+  if (choice === "credit" && creditAmount > 0) {
+    const expiresAt = Timestamp.fromMillis(
+      Date.now() + policy.creditValidityDays * 86_400_000,
+    );
+    const creditRef = adminDb.collection("credits").doc();
+    batch.set(creditRef, {
+      userId: uid,
+      businessSlug: booking.businessSlug,
+      businessName: booking.businessName,
+      amount: creditAmount,
+      currency: booking.currency,
+      type: "issued",
+      reason: "cancellation",
+      sourceBookingId: bookingId,
+      expiresAt,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+
+  const response: CancelBookingResponse = {
+    tier,
+    refundRatio,
+    creditAmount,
+    currency: booking.currency as string,
+  };
+  return NextResponse.json(response, { status: 200 });
+}

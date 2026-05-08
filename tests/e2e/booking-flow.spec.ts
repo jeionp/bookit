@@ -771,8 +771,19 @@ test.describe('My Bookings tab', () => {
     await expect(page.getByText('Booking Confirmed!')).toBeVisible({ timeout: 10_000 })
     await page.getByRole('button', { name: 'Done' }).click()
 
-    // Cancel it
+    // Cancel it — opens the CancelBookingModal
     await page.getByRole('button', { name: /cancel booking/i }).click()
+
+    // Select "Keep as credits" and confirm
+    await expect(page.getByRole('heading', { name: 'Cancel Booking' })).toBeVisible({ timeout: 5_000 })
+    await page.getByRole('button', { name: /keep as credits/i }).click()
+    // Wait for the choice state to propagate before the confirm button becomes enabled
+    await expect(page.getByRole('button', { name: /confirm cancel/i })).toBeEnabled({ timeout: 3_000 })
+    await page.getByRole('button', { name: /confirm cancel/i }).click()
+
+    // Dismiss success state
+    await expect(page.getByRole('heading', { name: 'Booking Cancelled' })).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Done' }).click()
 
     // Status badge changes to "Cancelled"
     await expect(page.locator('span', { hasText: 'Cancelled' })).toBeVisible({ timeout: 5_000 })
