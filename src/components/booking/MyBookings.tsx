@@ -165,7 +165,6 @@ export default function MyBookings({ accentColor }: { accentColor: string }) {
         onClose={() => setCancelTarget(null)}
         onCancelled={(id) => {
           handleCancelled(id);
-          setCancelTarget(null);
         }}
       />
     </>
