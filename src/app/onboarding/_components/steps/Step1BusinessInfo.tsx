@@ -53,8 +53,16 @@ interface Props {
 
 export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
   const [slugEdited, setSlugEdited] = useState(false);
-  const [slugStatus, setSlugStatus] = useState<SlugStatus>("idle");
+  // Only tracks the async check result — "idle"/"invalid" are derived in render
+  const [asyncCheckResult, setAsyncCheckResult] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Derive display status synchronously — avoids calling setState inside effect bodies
+  const slugStatus: SlugStatus = !draft.slug
+    ? "idle"
+    : !isValidSlug(draft.slug)
+    ? "invalid"
+    : asyncCheckResult;
 
   // Auto-derive slug from name unless user has manually edited it
   useEffect(() => {
@@ -62,24 +70,22 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
     const derived = slugify(draft.name);
     if (derived !== draft.slug) {
       patch({ slug: derived });
-      setSlugStatus("idle");
     }
   }, [draft.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced availability check
+  // Debounced availability check — only fires for valid slugs
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!draft.slug) { setSlugStatus("idle"); return; }
-    if (!isValidSlug(draft.slug)) { setSlugStatus("invalid"); return; }
+    if (!draft.slug || !isValidSlug(draft.slug)) return;
 
-    setSlugStatus("checking");
     debounceRef.current = setTimeout(async () => {
+      setAsyncCheckResult("checking");
       try {
         const res = await fetch(`/api/onboarding/check-slug?slug=${encodeURIComponent(draft.slug)}`);
         const json = await res.json();
-        setSlugStatus(json.available ? "available" : "taken");
+        setAsyncCheckResult(json.available ? "available" : "taken");
       } catch {
-        setSlugStatus("idle");
+        setAsyncCheckResult("idle");
       }
     }, 400);
 
