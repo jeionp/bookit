@@ -67,10 +67,12 @@ test.describe('Admin page — access control', () => {
     await expect(page).toHaveURL(STOREFRONT, { timeout: 8_000 })
   })
 
-  test('authenticated non-admin is redirected to the storefront', async ({ page }) => {
+  // Non-admin users (no admin slugs) are now sent to /onboarding so they can
+  // list their own business, rather than silently dropping them on the storefront.
+  test('authenticated non-admin is redirected to /onboarding', async ({ page }) => {
     await signInOnStorefront(page, NON_ADMIN_EMAIL, NON_ADMIN_PASSWORD)
     await page.goto(ADMIN_PAGE)
-    await expect(page).toHaveURL(STOREFRONT, { timeout: 8_000 })
+    await expect(page).toHaveURL('/onboarding', { timeout: 8_000 })
   })
 
   test('admin user can access the admin page and sees the schedule view', async ({ page }) => {
