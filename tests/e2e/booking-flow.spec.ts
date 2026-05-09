@@ -853,3 +853,41 @@ test.describe('My Bookings tab', () => {
     await expect(page.locator('span', { hasText: 'Completed' })).toHaveCount(1)
   })
 })
+
+// ─── Business page navigation ─────────────────────────────────────────────────
+
+test.describe('Business page navigation', () => {
+  test('bookit logo navigates to landing page (unauthenticated)', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await page.getByRole('link', { name: 'bookit' }).click()
+    await page.waitForURL('/', { timeout: 5_000 })
+  })
+
+  test('bookit logo navigates to landing page (signed in)', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await signIn(page)
+    await page.getByRole('link', { name: 'bookit' }).click()
+    await page.waitForURL('/', { timeout: 5_000 })
+  })
+
+  test('user pill links to /account when signed in', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await signIn(page)
+    const pill = page.locator('a[href="/account"]')
+    await expect(pill).toBeVisible({ timeout: 5_000 })
+    await pill.click()
+    await page.waitForURL('/account', { timeout: 5_000 })
+  })
+
+  test('user pill shows the user initial in the avatar', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await signIn(page)
+    const avatar = page.locator('a[href="/account"] div.rounded-full')
+    await expect(avatar).toHaveText('E', { timeout: 5_000 })
+  })
+
+  test('no user pill when not signed in', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await expect(page.locator('a[href="/account"]')).not.toBeAttached()
+  })
+})
