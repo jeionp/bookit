@@ -39,13 +39,21 @@ export default function BusinessPageClient({ business }: { business: Business })
       {/* Nav */}
       <header className="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-30 h-14">
         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-          <span className="text-base font-black tracking-tight text-gray-900">bookit</span>
+          <Link href="/" className="text-base font-black tracking-tight text-gray-900 hover:text-blue-600 transition-colors">bookit</Link>
           {!loading && (
             user ? (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600 hidden sm:block">
-                  {user.displayName ?? user.email}
-                </span>
+                <Link
+                  href="/account"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
+                    {(user.displayName ?? user.email ?? "U").charAt(0).toUpperCase()}
+                  </div>
+                  <span className="hidden sm:block max-w-[120px] truncate">
+                    {user.displayName ?? user.email}
+                  </span>
+                </Link>
                 {isAdminOf(businessSlug) && (
                   <Link
                     href={`/${businessSlug}/admin`}
