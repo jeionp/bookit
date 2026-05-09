@@ -789,16 +789,16 @@ test.describe('My Bookings tab', () => {
     await expect(page.locator('span', { hasText: 'Cancelled' })).toBeVisible({ timeout: 5_000 })
   })
 
-  // The three tests below specifically exercise the same-day time logic in isBookingPast:
-  //   now.getHours() >= booking.hours[last] + 1
-  // Hours [2] (2 AM – 3 AM) are always elapsed by 3 AM — safe for any CI run.
-  // Hours [23] (11 PM – midnight) end at hour 24, which now.getHours() never reaches.
+  // hours [23] (11 PM – midnight) end at hour 24, which now.getHours() never reaches — safe for any CI run.
+  // The "already elapsed" test uses yesterday instead of a same-day past hour because CI runs at
+  // ~00:30 UTC; no fixed hour is guaranteed to have elapsed at that time. The same-day hour
+  // branch of isBookingPast is covered by unit tests where Date can be mocked.
 
-  test('same-day booking whose hours have already elapsed is shown as Completed', async ({ page }) => {
+  test('past booking is shown as Completed', async ({ page }) => {
     const { localId } = await signInUser(TEST_EMAIL, TEST_PASSWORD)
     await seedBookingForUser({
       facilityId: COURT_1, facilityName: COURT_1_NAME,
-      date: todayKey(), hours: [2],
+      date: dateKeyDelta(-1), hours: [9, 10],
       userId: localId, userEmail: TEST_EMAIL, userName: 'E2E Tester',
     })
 
