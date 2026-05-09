@@ -152,18 +152,18 @@ export default function AccountPage() {
         {/* Stats strip */}
         {bookings.length > 0 && (
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-2xl p-4 text-center border border-gray-100">
+            <div className="bg-white rounded-2xl p-4 flex flex-col items-center justify-center text-center border border-gray-100 min-h-[80px]">
               <p className="text-2xl font-black text-gray-900">{bookings.filter((b) => b.status === "confirmed").length}</p>
               <p className="text-xs text-gray-400 mt-0.5">Bookings</p>
             </div>
-            <div className="bg-white rounded-2xl p-4 text-center border border-gray-100">
-              <p className="text-sm font-black text-gray-900 leading-tight">
+            <div className="bg-white rounded-2xl p-4 flex flex-col items-center justify-center text-center border border-gray-100 min-h-[80px]">
+              <p className="text-2xl font-black text-gray-900">
                 ₱{spend >= 1000 ? `${(spend / 1000).toFixed(1)}k` : spend.toLocaleString()}
               </p>
               <p className="text-xs text-gray-400 mt-0.5">Total spent</p>
             </div>
-            <div className="bg-white rounded-2xl p-4 text-center border border-gray-100 overflow-hidden">
-              <p className="text-xs font-black text-gray-900 leading-tight truncate">{fav ?? "—"}</p>
+            <div className="bg-white rounded-2xl p-4 flex flex-col items-center justify-center text-center border border-gray-100 min-h-[80px] overflow-hidden">
+              <p className="text-sm font-black text-gray-900 leading-snug line-clamp-2">{fav ?? "—"}</p>
               <p className="text-xs text-gray-400 mt-0.5">Fav venue</p>
             </div>
           </div>
@@ -274,7 +274,6 @@ export default function AccountPage() {
         onClose={() => setCancelTarget(null)}
         onCancelled={(id, issued, currency) => {
           handleCancelled(id, issued, currency);
-          setCancelTarget(null);
         }}
       />
     </div>
