@@ -401,7 +401,7 @@ test.describe('AdminGuard redirect behaviour', () => {
     await signInViaModal(page, ADMIN_EMAIL, ADMIN_PASSWORD)
     await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible({ timeout: 8_000 })
 
-    await page.getByRole('link', { name: /admin|dashboard/i }).click()
+    await page.getByRole('link', { name: 'Admin', exact: true }).click()
 
     await expect(page).toHaveURL('/paddleup/admin', { timeout: 8_000 })
     // The schedule grid is the landmark that confirms AdminView rendered
