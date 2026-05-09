@@ -114,7 +114,7 @@ async function signInOnStorefront(page: Page, email: string, password: string) {
 async function goToSettingsView(page: Page, adminUid: string) {
   await seedAdminDoc(adminUid, ['paddleup'])
   await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
-  await page.getByRole('link', { name: /Admin/ }).click()
+  await page.getByRole('link', { name: 'Admin', exact: true }).click()
   await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
   await page.getByRole('button', { name: 'Settings' }).click()
   await expect(page.getByTestId('settings-save-btn')).toBeVisible({ timeout: 8_000 })

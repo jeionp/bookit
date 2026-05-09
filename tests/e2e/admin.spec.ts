@@ -43,7 +43,7 @@ async function signInOnStorefront(page: Page, email: string, password: string) {
 async function goToScheduleView(page: Page, adminUid: string) {
   await seedAdminDoc(adminUid, ['paddleup'])
   await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
-  await page.getByRole('link', { name: /Admin/ }).click()
+  await page.getByRole('link', { name: 'Admin', exact: true }).click()
   await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
 }
 
@@ -83,7 +83,7 @@ test.describe('Admin page — access control', () => {
     // Use the admin link (client-side nav) so AuthContext stays alive with already-
     // loaded admin slugs. page.goto would require a fresh WebChannel connection to
     // the Firestore emulator, which is unreliable in long-running emulator sessions.
-    await page.getByRole('link', { name: /Admin/ }).click()
+    await page.getByRole('link', { name: 'Admin', exact: true }).click()
 
     // Schedule grid header and date navigation are the indicators the admin view loaded
     await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
@@ -972,7 +972,7 @@ test.describe('Storefront — admin link', () => {
     await seedAdminDoc(adminUid, ['paddleup'])
     await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
 
-    await expect(page.getByRole('link', { name: /Admin/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Admin', exact: true })).toBeVisible()
   })
 
   test('admin link is not visible for regular authenticated users', async ({ page }) => {
@@ -980,7 +980,7 @@ test.describe('Storefront — admin link', () => {
     // Sign out button confirms auth has fully settled
     await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()
 
-    await expect(page.getByRole('link', { name: /Admin/ })).not.toBeAttached()
+    await expect(page.getByRole('link', { name: 'Admin', exact: true })).not.toBeAttached()
   })
 
   test('admin link is not visible for unauthenticated users', async ({ page }) => {
@@ -988,14 +988,14 @@ test.describe('Storefront — admin link', () => {
     // Sign in button confirms auth loaded with no user
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible({ timeout: 8_000 })
 
-    await expect(page.getByRole('link', { name: /Admin/ })).not.toBeAttached()
+    await expect(page.getByRole('link', { name: 'Admin', exact: true })).not.toBeAttached()
   })
 
   test('clicking the admin link navigates to the admin schedule view', async ({ page }) => {
     await seedAdminDoc(adminUid, ['paddleup'])
     await signInOnStorefront(page, ADMIN_EMAIL, ADMIN_PASSWORD)
 
-    await page.getByRole('link', { name: /Admin/ }).click()
+    await page.getByRole('link', { name: 'Admin', exact: true }).click()
 
     await expect(page).toHaveURL(ADMIN_PAGE, { timeout: 8_000 })
     await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 8_000 })
