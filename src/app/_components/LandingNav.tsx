@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AuthModal from "@/components/auth/AuthModal";
 
 export default function LandingNav() {
-  const { user, loading, adminSlugs } = useAuth();
+  const { user, loading, adminSlugs, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
   return (
@@ -39,6 +40,13 @@ export default function LandingNav() {
                     {user.displayName ?? user.email}
                   </span>
                 </Link>
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
+                >
+                  <LogOut size={15} />
+                  <span className="hidden sm:inline">Sign out</span>
+                </button>
               </div>
             ) : (
               <button

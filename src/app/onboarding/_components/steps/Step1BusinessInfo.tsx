@@ -6,9 +6,9 @@ import { slugify, isValidSlug } from "@/lib/slugify";
 import { WizardDraft } from "../OnboardingWizard";
 
 const BUSINESS_TYPES = [
-  { value: "court", label: "Sports Court" },
-  { value: "appointment", label: "Appointment-based" },
-  { value: "room", label: "Room / Space" },
+  { value: "court", label: "Sports Court", available: true },
+  { value: "appointment", label: "Appointment-based", available: false },
+  { value: "room", label: "Room / Space", available: false },
 ] as const;
 
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
@@ -152,20 +152,28 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
         {/* Business type */}
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-gray-500">Business type</label>
-          <div className="grid grid-cols-3 gap-2">
-            {BUSINESS_TYPES.map(({ value, label }) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {BUSINESS_TYPES.map(({ value, label, available }) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => patch({ type: value })}
+                onClick={() => available && patch({ type: value })}
+                disabled={!available}
                 className={[
-                  "py-2 px-3 rounded-xl border text-sm font-medium transition-colors",
-                  draft.type === value
+                  "relative py-2 px-3 rounded-xl border text-sm font-medium transition-colors",
+                  !available
+                    ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
+                    : draft.type === value
                     ? "border-blue-600 bg-blue-50 text-blue-700"
                     : "border-gray-200 text-gray-600 hover:border-gray-300",
                 ].join(" ")}
               >
                 {label}
+                {!available && (
+                  <span className="absolute -top-2 -right-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 leading-none">
+                    Soon
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -189,7 +197,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <LabeledInput
             label="City / Area"
             value={draft.location}
@@ -204,7 +212,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <LabeledInput
             label="Phone"
             value={draft.phone}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -49,7 +50,7 @@ export default function AuthModal({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   function resetForm() {
     setName("");
@@ -97,7 +98,7 @@ export default function AuthModal({
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -235,7 +236,8 @@ export default function AuthModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

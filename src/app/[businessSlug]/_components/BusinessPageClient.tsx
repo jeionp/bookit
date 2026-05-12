@@ -14,7 +14,7 @@ import BookingConfirmModal from "@/components/booking/BookingConfirmModal";
 import MyBookings from "@/components/booking/MyBookings";
 import type { Business } from "@/lib/types";
 
-const TABS = ["Home", "My Bookings"] as const;
+const TABS = ["Home", "My Bookings", "Info"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function BusinessPageClient({ business }: { business: Business }) {
@@ -72,7 +72,7 @@ export default function BusinessPageClient({ business }: { business: Business })
                   className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
                 >
                   <LogOut size={15} />
-                  Sign out
+                  <span className="hidden sm:inline">Sign out</span>
                 </button>
               </div>
             ) : (
@@ -116,41 +116,28 @@ export default function BusinessPageClient({ business }: { business: Business })
 
       {/* Mobile info strip */}
       <div className="xl:hidden bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-7xl mx-auto space-y-2.5">
-          <div className="flex items-center gap-3 flex-wrap">
-            {(() => {
-              const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-              const todayHours = business.operatingHours.find((h) => h.day === today);
-              return todayHours && !todayHours.closed ? (
-                <span
-                  className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: `${business.accentColor}15`, color: business.accentColor }}
-                >
-                  <Clock size={11} />
-                  Open · closes {todayHours.close}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">
-                  Closed today
-                </span>
-              );
-            })()}
-            <div className="flex items-center gap-3 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <StarRating rating={business.rating} />
-                <span className="font-bold text-gray-700 ml-0.5">{business.rating}</span>
-                <span className="text-gray-400">({business.reviewCount})</span>
+        <div className="max-w-7xl mx-auto flex items-center gap-3 flex-wrap">
+          {(() => {
+            const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+            const todayHours = business.operatingHours.find((h) => h.day === today);
+            return todayHours && !todayHours.closed ? (
+              <span
+                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
+                style={{ backgroundColor: `${business.accentColor}15`, color: business.accentColor }}
+              >
+                <Clock size={11} />
+                Open · closes {todayHours.close}
               </span>
-              <span className="text-gray-300">·</span>
-              <span>{business.facilities.length} courts</span>
-              <span className="text-gray-300">·</span>
-              <span>{business.amenities.length} amenities</span>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 flex items-start gap-1.5">
-            <MapPin size={12} className="text-gray-400 mt-0.5 shrink-0" />
-            {business.address}
-          </p>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 shrink-0">
+                Closed today
+              </span>
+            );
+          })()}
+          <span className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
+            <MapPin size={11} className="text-gray-400 shrink-0" />
+            <span className="truncate">{business.address}</span>
+          </span>
         </div>
       </div>
 
@@ -158,7 +145,7 @@ export default function BusinessPageClient({ business }: { business: Business })
       <div className="max-w-7xl mx-auto px-4 py-5">
         <div className="flex flex-col xl:grid xl:grid-cols-[300px_1fr] xl:gap-6 xl:items-start">
 
-          <aside className="order-2 xl:order-1 mt-4 xl:mt-0 xl:sticky xl:top-[72px]">
+          <aside className="hidden xl:block xl:order-1 xl:sticky xl:top-[72px]">
             <Sidebar business={business} />
           </aside>
 
@@ -170,7 +157,7 @@ export default function BusinessPageClient({ business }: { business: Business })
                   onClick={() => setActiveTab(tab)}
                   className={`flex-1 py-3.5 text-sm font-bold transition-colors relative ${
                     activeTab === tab ? "text-gray-900" : "text-gray-400 hover:text-gray-600"
-                  }`}
+                  } ${tab === "Info" ? "xl:hidden" : ""}`}
                 >
                   {tab}
                   {activeTab === tab && (
@@ -183,14 +170,21 @@ export default function BusinessPageClient({ business }: { business: Business })
               ))}
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 px-5 pt-6">
-              {activeTab === "Home" && (
-                <HomeTab business={business} onBook={handleBook} />
-              )}
-              {activeTab === "My Bookings" && (
-                <MyBookings accentColor={business.accentColor} />
-              )}
-            </div>
+            {activeTab !== "Info" && (
+              <div className="bg-white rounded-2xl border border-gray-100 px-5 pt-6">
+                {activeTab === "Home" && (
+                  <HomeTab business={business} onBook={handleBook} />
+                )}
+                {activeTab === "My Bookings" && (
+                  <MyBookings accentColor={business.accentColor} />
+                )}
+              </div>
+            )}
+            {activeTab === "Info" && (
+              <div className="xl:hidden">
+                <Sidebar business={business} />
+              </div>
+            )}
           </div>
 
         </div>
