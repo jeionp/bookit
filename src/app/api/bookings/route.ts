@@ -4,6 +4,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { getBusinessBySlug } from "@/lib/firebase/businesses";
+import { sendBookingConfirmation, sendAdminBookingNotification } from "@/lib/notifications/email";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ async function calcPrice(businessSlug: string, facilityId: string, hours: number
   currency: string;
   facilityName: string;
   businessName: string;
+  businessEmail: string;
+  businessAddress: string;
 } | null> {
   const biz = await getBusinessBySlug(businessSlug);
   if (!biz) return null;
@@ -55,6 +58,8 @@ async function calcPrice(businessSlug: string, facilityId: string, hours: number
     currency: facility.currency,
     facilityName: facility.name,
     businessName: biz.name,
+    businessEmail: biz.email,
+    businessAddress: biz.address,
   };
 }
 
@@ -208,6 +213,26 @@ export async function POST(req: NextRequest) {
     console.error("[api/bookings] transaction error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
+
+  // Fire-and-forget — booking is already committed; don't block the 201 on email delivery
+  const notificationData = {
+    customerEmail: email,
+    customerName: displayName,
+    bookingId: newDocRef.id,
+    businessName: priceInfo.businessName,
+    businessEmail: priceInfo.businessEmail,
+    businessAddress: priceInfo.businessAddress,
+    facilityName: priceInfo.facilityName,
+    date,
+    hours: uniqueHours,
+    totalPrice: priceInfo.totalPrice,
+    currency: priceInfo.currency,
+    ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
+  };
+  Promise.all([
+    sendBookingConfirmation(notificationData),
+    sendAdminBookingNotification(notificationData),
+  ]).catch((err) => console.error("[api/bookings] notification error:", err));
 
   return NextResponse.json(
     { bookingId: newDocRef.id, creditApplied: appliedCredit > 0 ? appliedCredit : undefined },

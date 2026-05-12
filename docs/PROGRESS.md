@@ -1,6 +1,6 @@
 # bookit — Technical Progress & Handoff
 
-> Last updated: 2026-05-07. Covers everything merged to `main` through PR #31 plus open PR #32 (security hardening, pending CI).
+> Last updated: 2026-05-13. Covers everything merged to `main` through PR #32 plus the open `feature/notifications` branch (transactional email, pending CI).
 
 ---
 
@@ -39,6 +39,7 @@ Currently one business is configured (`paddleup` — a pickleball facility in Qu
 | Database | Firestore | Client SDK (browser) for booking reads/writes; Admin SDK (server-only) for API routes |
 | Auth | Firebase Auth | Email/password + Google sign-in; emulator for local dev |
 | Rate limiting | Upstash Redis | Sliding window on `POST /api/bookings`; skipped when env vars absent (emulator/test) |
+| Email | Resend | Transactional email for booking confirmation + cancellation receipt; gracefully skipped when `RESEND_API_KEY` absent |
 | Payments | PayMongo | Philippine payment gateway; API routes stubbed, full integration deferred |
 | Hosting | Vercel | Auto-deploys `main` on merge |
 | Firebase project | `bookme-821b4` | Production project (migrated from `jidoka-pixels` in PR #31) |
@@ -97,6 +98,15 @@ src/
       admin.ts                    # getAdminSlugs — reads /admins/{uid} via client SDK
       bookings.ts                 # All Firestore booking reads/writes (client SDK)
       businesses.ts               # getBusinessBySlug — reads /businesses/{slug} via Admin SDK
+    notifications/
+      ics.ts                      # generateICS — produces RFC 5545 .ics calendar file from booking data
+      email.ts                    # Resend client (lazy singleton) + four send functions:
+                                  #   sendBookingConfirmation (customer, with .ics attachment)
+                                  #   sendAdminBookingNotification (business owner, new booking)
+                                  #   sendCancellationReceipt (customer, adapts to free/prorated/refund)
+                                  #   sendAdminCancellationNotification (business owner, cancellation)
+      notifications.test.ts       # 65 Vitest unit tests — ICS generation, HTML output,
+                                  #   Resend call assertions, and error resilience
     booking/
       useSlotSelection.ts         # Drag-to-select hook used by SlotGrid
 firestore.rules                   # Firestore security rules
@@ -235,6 +245,7 @@ firebase deploy --only firestore:indexes
 | #30 | Admin Phase 6 — Settings tab: Business Info, per-court hours override, pricing, amenities; `PATCH /api/businesses/[slug]` |
 | #31 | Security: `GET /api/availability` (Admin SDK, no PII); rate limiting on `POST /api/bookings` (Upstash Redis, 10 req/60 s per IP); Firebase project migrated to `bookme-821b4`; Firestore public list rule removed |
 | #32 | Security hardening: auth added to `POST /api/refund`; field allowlist on `PATCH /api/businesses/[slug]`; `hours` and `date` input validation on `POST /api/bookings`; 9 new unit tests |
+| open | **Transactional email (notifications):** Resend integration; booking confirmation email with `.ics` calendar attachment; cancellation receipt (free/prorated, credit/refund variants); admin/business-owner notifications for both events; HTML injection + CRLF injection hardening; 65 new unit tests |
 
 ---
 
@@ -316,10 +327,11 @@ Additional sections (only rendered when `bookingCount > 0`):
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET /api/availability` | None | Returns `{ bookedHours: number[] }` for a facility/date; uses Admin SDK so no booking PII is exposed |
-| `POST /api/bookings` | Firebase ID token | Creates a booking; rate-limited (10/60 s per IP); price recalculated server-side; conflict-checked in Firestore transaction |
+| `POST /api/bookings` | Firebase ID token | Creates a booking; rate-limited (10/60 s per IP); price recalculated server-side; conflict-checked in Firestore transaction; fires customer confirmation + admin notification emails (fire-and-forget) |
+| `POST /api/cancel` | Firebase ID token | Cancels a booking; applies free/prorated policy; issues credit ledger entry; fires customer receipt + admin notification emails (fire-and-forget) |
 | `PATCH /api/businesses/[slug]` | Firebase ID token + admin slug check | Updates business config; fields filtered through explicit allowlist |
 | `POST /api/refund` | Firebase ID token + admin slug check | Stub; will call PayMongo refund or write credit ledger |
-| `POST /api/invite` | None | Stub; will send signup invite email via Resend/SendGrid |
+| `POST /api/invite` | None | Stub; will send signup invite email |
 | `GET /api/health` | None | Returns `{ ok: true }`; used by Playwright `webServer` poll |
 
 ### Firestore functions (bookings.ts)
@@ -344,15 +356,15 @@ Additional sections (only rendered when `bookingCount > 0`):
 
 ## 9. Test Suite
 
-### Counts (as of PR #32)
+### Counts (as of `feature/notifications`)
 
 | Suite | Runner | Count |
 |---|---|---|
 | `tests/e2e/admin.spec.ts` | Playwright | 88 tests (Phases 1–6) |
 | `tests/e2e/booking-flow.spec.ts` | Playwright | 51 tests |
 | `tests/security/firestore.rules.test.ts` | Vitest | 45 tests |
-| `src/**/*.test.ts` (unit) | Vitest | 105 tests |
-| **Total** | | **289 tests** |
+| `src/**/*.test.ts` (unit) | Vitest | 250 tests |
+| **Total** | | **434 tests** |
 
 ### Running locally
 
@@ -437,7 +449,7 @@ npm run seed:admin -- admin@paddleup.test Admin1234! paddleup
 
 ## 11. Known Gaps & Security Backlog
 
-### Fixed (PRs #31–#32)
+### Fixed (PRs #31–#32 + `feature/notifications`)
 
 | Gap | Fix |
 |---|---|
@@ -448,6 +460,9 @@ npm run seed:admin -- admin@paddleup.test Admin1234! paddleup
 | `PATCH /api/businesses/[slug]` accepted arbitrary body | Field allowlist strips `slug`, `type`, `rating`, `reviewCount`, and any unknown keys |
 | `hours` array unbounded in `POST /api/bookings` | Max 24 entries, integer range [0, 23], deduplicated before write |
 | `date` unvalidated in `POST /api/bookings` | YYYY-MM-DD regex enforced |
+| HTML injection in email templates | `escapeHtml()` applied to all user/business strings interpolated into HTML; a malicious display name (e.g. `<script>…</script>`) now renders as literal text |
+| CRLF injection in ICS fields | `sanitizeICSLine()` strips `\r\n` from `SUMMARY` and `LOCATION`; bare `\r` stripped from `DESCRIPTION`; prevents property injection into calendar files |
+| Email header injection via subject line | `sanitizeSubject()` strips `\r\n` from all four email subject lines |
 
 ### Still open
 
@@ -466,6 +481,21 @@ Each business needs its own PayMongo account. The onboarding flow for storing pe
 ---
 
 ## 12. Pending Work & Next Steps
+
+### Notifications (shipped — `feature/notifications`)
+
+Transactional email via Resend. No Cloud Functions required — all sends are inline in existing API routes, fire-and-forget, and gracefully skip when `RESEND_API_KEY` is absent.
+
+| Trigger | Customer email | Admin email |
+|---|---|---|
+| Booking created (`POST /api/bookings`) | Confirmation with `.ics` calendar attachment | New booking alert with customer contact |
+| Booking cancelled (`POST /api/cancel`) | Cancellation receipt (free/prorated, credit/refund variants) | Cancellation alert with outcome |
+
+**ICS attachment** — floating-time format (no timezone; calendar apps display in the user's local time, correct for a physical venue). Click to add to Google Calendar / Apple Calendar / Outlook.
+
+**Proactive reminders** (e.g. "Your booking is tomorrow") are deferred — they require a Cloud Scheduler job. Not yet implemented.
+
+**Domain / sender address:** currently using Resend's `onboarding@resend.dev` test sender. Must be updated to a verified domain before going to production (see §13).
 
 ### Phase 7 — Firebase Storage for court images
 
@@ -524,6 +554,8 @@ Set all of these under **Project Settings → Environment Variables** for the **
 | `FIREBASE_PRIVATE_KEY` | same JSON file (`private_key`) — paste the full string including `-----BEGIN/END PRIVATE KEY-----` |
 | `UPSTASH_REDIS_REST_URL` | Upstash Console → your database → REST API |
 | `UPSTASH_REDIS_REST_TOKEN` | same |
+| `RESEND_API_KEY` | Resend dashboard → API Keys |
+| `RESEND_FROM_ADDRESS` | e.g. `noreply@yourdomain.com` — must be a verified Resend domain; without this env var email sends are silently skipped |
 
 `NEXT_PUBLIC_*` vars are embedded at build time; `FIREBASE_*` and `UPSTASH_*` vars are server-only (used by API routes only).
 
