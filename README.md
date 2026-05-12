@@ -52,6 +52,11 @@ A multi-tenant booking platform for courts, rooms, and appointment-based busines
    # Rate limiting (Upstash Redis — get from console.upstash.com)
    UPSTASH_REDIS_REST_URL=<your-upstash-rest-url>
    UPSTASH_REDIS_REST_TOKEN=<your-upstash-rest-token>
+
+   # Transactional email — Resend (resend.com)
+   # Without these, email sends are silently skipped (bookings still work).
+   RESEND_API_KEY=re_xxxxxxxxxxxx
+   RESEND_FROM_ADDRESS=noreply@yourdomain.com
    ```
 
 3. **Start the Firebase emulators** (Auth + Firestore)

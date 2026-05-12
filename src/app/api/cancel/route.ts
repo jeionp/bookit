@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { DEFAULT_CANCELLATION_POLICY, CancellationPolicy } from "@/lib/types";
+import { sendCancellationReceipt, sendAdminCancellationNotification } from "@/lib/notifications/email";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,34 @@ export async function POST(req: NextRequest) {
   }
 
   await batch.commit();
+
+  // Fire-and-forget — cancellation is already committed
+  const creditExpiresAt =
+    choice === "credit" && creditAmount > 0
+      ? new Date(Date.now() + policy.creditValidityDays * 86_400_000)
+      : undefined;
+
+  const receiptData = {
+    customerEmail: booking.userEmail as string,
+    customerName: booking.userName as string,
+    bookingId,
+    businessName: booking.businessName as string,
+    businessEmail: (bizData.email as string) ?? "",
+    facilityName: booking.facilityName as string,
+    date: booking.date as string,
+    hours: booking.hours as number[],
+    totalPrice: booking.totalPrice as number,
+    currency: booking.currency as string,
+    tier,
+    creditAmount,
+    choice,
+    creditExpiresAt,
+  };
+
+  Promise.all([
+    sendCancellationReceipt(receiptData),
+    sendAdminCancellationNotification(receiptData),
+  ]).catch((err) => console.error("[api/cancel] notification error:", err));
 
   const response: CancelBookingResponse = {
     tier,
