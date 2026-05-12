@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { LogOut, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Facility, OperatingHours } from "@/lib/types";
 import StepIndicator from "./StepIndicator";
@@ -47,7 +49,8 @@ const INITIAL: WizardDraft = {
 };
 
 export default function OnboardingWizard() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<WizardDraft>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +58,12 @@ export default function OnboardingWizard() {
 
   function patch(partial: Partial<WizardDraft>) {
     setDraft((prev) => ({ ...prev, ...partial }));
+  }
+
+  function handleExit() {
+    const isDirty = step > 0 || draft.name.trim().length > 0;
+    if (isDirty && !window.confirm("Exit setup? Your progress will be lost.")) return;
+    router.push("/");
   }
 
   async function submit() {
@@ -78,30 +87,58 @@ export default function OnboardingWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4">
-      <div className="w-full max-w-2xl flex flex-col gap-8">
-        <div className="flex flex-col items-center gap-2">
-          <h1 className="text-2xl font-bold text-gray-900">Set up your business</h1>
-          <p className="text-sm text-gray-500">Tell us about your business to get started.</p>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Nav */}
+      <header className="bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-base font-black tracking-tight text-gray-900">bookit</span>
+          <button
+            onClick={handleExit}
+            className="flex items-center gap-1 text-sm font-medium text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            <X size={14} />
+            <span className="hidden sm:inline">Exit setup</span>
+          </button>
         </div>
-
-        <div className="flex justify-center">
-          <StepIndicator current={step} />
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:block text-xs text-gray-400 truncate max-w-[180px]">
+            {user?.email}
+          </span>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            <LogOut size={15} />
+            <span className="hidden sm:inline">Sign out</span>
+          </button>
         </div>
+      </header>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          {step === 0 && <Step1BusinessInfo draft={draft} patch={patch} onNext={() => setStep(1)} />}
-          {step === 1 && <Step2Branding draft={draft} patch={patch} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
-          {step === 2 && <Step3Facilities draft={draft} patch={patch} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-          {step === 3 && (
-            <Step4Review
-              draft={draft}
-              onBack={() => setStep(2)}
-              onSubmit={submit}
-              submitting={submitting}
-              error={submitError}
-            />
-          )}
+      <div className="flex flex-col items-center py-8 px-4 sm:py-12">
+        <div className="w-full max-w-2xl flex flex-col gap-6 sm:gap-8">
+          <div className="flex flex-col items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">Set up your business</h1>
+            <p className="text-sm text-gray-500">Tell us about your business to get started.</p>
+          </div>
+
+          <div className="flex justify-center">
+            <StepIndicator current={step} />
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-6">
+            {step === 0 && <Step1BusinessInfo draft={draft} patch={patch} onNext={() => setStep(1)} />}
+            {step === 1 && <Step2Branding draft={draft} patch={patch} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
+            {step === 2 && <Step3Facilities draft={draft} patch={patch} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
+            {step === 3 && (
+              <Step4Review
+                draft={draft}
+                onBack={() => setStep(2)}
+                onSubmit={submit}
+                submitting={submitting}
+                error={submitError}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Clock, Coins, ChevronRight, ArrowLeft } from "lucide-react";
+import { CalendarDays, Clock, Coins, ChevronRight, ArrowLeft, LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import AuthModal from "@/components/auth/AuthModal";
 import { Booking, getUserBookings } from "@/lib/firebase/bookings";
@@ -53,7 +53,7 @@ function favBusiness(bookings: Booking[]): string | null {
 }
 
 export default function AccountPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [creditBalances, setCreditBalances] = useState<
@@ -142,10 +142,17 @@ export default function AccountPage() {
         <Link href="/" className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500">
           <ArrowLeft size={18} />
         </Link>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-lg font-black text-gray-900">My Account</h1>
           <p className="text-xs text-gray-400 truncate">{user.email}</p>
         </div>
+        <button
+          onClick={signOut}
+          className="flex items-center gap-1.5 text-sm font-semibold text-gray-400 hover:text-gray-700 transition-colors shrink-0"
+        >
+          <LogOut size={15} />
+          <span className="hidden sm:inline">Sign out</span>
+        </button>
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">

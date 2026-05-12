@@ -25,7 +25,7 @@ export default function StepIndicator({ current }: { current: number }) {
               </div>
               <span
                 className={[
-                  "text-xs font-medium whitespace-nowrap",
+                  "hidden sm:block text-xs font-medium whitespace-nowrap",
                   active ? "text-blue-600" : done ? "text-gray-500" : "text-gray-400",
                 ].join(" ")}
               >
@@ -33,7 +33,7 @@ export default function StepIndicator({ current }: { current: number }) {
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={["h-px w-12 mx-2 mb-5 transition-colors", done ? "bg-blue-600" : "bg-gray-200"].join(" ")} />
+              <div className={["h-px w-6 mx-1 sm:w-12 sm:mx-2 sm:mb-5 transition-colors", done ? "bg-blue-600" : "bg-gray-200"].join(" ")} />
             )}
           </div>
         );

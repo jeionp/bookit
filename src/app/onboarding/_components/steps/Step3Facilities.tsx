@@ -67,7 +67,7 @@ function FacilityCard({ facility, index, slug, onChange, onRemove }: FacilityCar
 
       {open && (
         <div className="p-4 flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-gray-500">Name<span className="text-red-400 ml-0.5">*</span></label>
               <input
@@ -91,7 +91,7 @@ function FacilityCard({ facility, index, slug, onChange, onRemove }: FacilityCar
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-gray-500">Prime-time price (optional)</label>
               <input
@@ -230,35 +230,37 @@ export default function Step3Facilities({ draft, patch, onBack, onNext }: Props)
         <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">Operating Hours</h3>
         <div className="flex flex-col gap-1">
           {hours.map((h, i) => (
-            <div key={h.day} className="flex items-center gap-3 py-1.5">
-              <span className="text-sm text-gray-600 w-24 shrink-0">{h.day}</span>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!h.closed}
-                  onChange={(e) => setHour(i, "closed", !e.target.checked)}
-                  className="rounded"
-                />
-                <span className="text-xs text-gray-500">Open</span>
-              </label>
+            <div key={h.day} className="py-1.5">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 w-24 shrink-0">{h.day}</span>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!h.closed}
+                    onChange={(e) => setHour(i, "closed", !e.target.checked)}
+                    className="rounded"
+                  />
+                  <span className="text-xs text-gray-500">Open</span>
+                </label>
+                {h.closed && <span className="text-xs text-gray-400 italic">Closed</span>}
+              </div>
               {!h.closed && (
-                <>
+                <div className="flex items-center gap-2 mt-1.5 pl-24">
                   <input
                     type="time"
                     value={h.open}
                     onChange={(e) => setHour(i, "open", e.target.value)}
-                    className="px-2 py-1 rounded-lg border border-gray-200 text-sm text-gray-700 outline-none focus:border-gray-400"
+                    className="flex-1 min-w-0 px-2 py-1 rounded-lg border border-gray-200 text-sm text-gray-700 outline-none focus:border-gray-400"
                   />
-                  <span className="text-gray-400 text-sm">–</span>
+                  <span className="text-gray-400 text-sm shrink-0">–</span>
                   <input
                     type="time"
                     value={h.close}
                     onChange={(e) => setHour(i, "close", e.target.value)}
-                    className="px-2 py-1 rounded-lg border border-gray-200 text-sm text-gray-700 outline-none focus:border-gray-400"
+                    className="flex-1 min-w-0 px-2 py-1 rounded-lg border border-gray-200 text-sm text-gray-700 outline-none focus:border-gray-400"
                   />
-                </>
+                </div>
               )}
-              {h.closed && <span className="text-xs text-gray-400 italic">Closed</span>}
             </div>
           ))}
         </div>
