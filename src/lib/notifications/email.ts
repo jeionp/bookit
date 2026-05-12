@@ -524,6 +524,116 @@ export async function sendAdminBookingNotification(data: BookingConfirmationData
   }
 }
 
+export interface ReminderData {
+  customerEmail: string;
+  customerName: string;
+  bookingId: string;
+  businessName: string;
+  businessEmail: string;
+  businessAddress: string;
+  facilityName: string;
+  date: string;   // YYYY-MM-DD
+  hours: number[];
+}
+
+function buildReminderHtml(data: ReminderData): string {
+  const customerName    = escapeHtml(data.customerName);
+  const businessName    = escapeHtml(data.businessName);
+  const businessEmail   = escapeHtml(data.businessEmail);
+  const businessAddress = escapeHtml(data.businessAddress);
+  const facilityName    = escapeHtml(data.facilityName);
+  const bookingId       = escapeHtml(data.bookingId);
+  const timeRange = formatHours(data.hours);
+  const formattedDate = formatDate(data.date);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+        <tr>
+          <td style="background:#0f766e;padding:28px 32px;">
+            <p style="margin:0 0 6px;font-size:12px;color:#99f6e4;letter-spacing:0.08em;text-transform:uppercase;">${businessName}</p>
+            <h1 style="margin:0;font-size:22px;font-weight:600;color:#ffffff;">Your booking is tomorrow</h1>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:28px 32px 0;">
+            <p style="margin:0 0 24px;font-size:15px;color:#374151;">Hi ${customerName}, just a reminder about your upcoming booking!</p>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;padding-top:20px;margin-bottom:28px;">
+              <tr>
+                <td style="padding-bottom:12px;">
+                  <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;">What</p>
+                  <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${facilityName}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-bottom:12px;">
+                  <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;">When</p>
+                  <p style="margin:0;font-size:15px;color:#111827;">${formattedDate}</p>
+                  <p style="margin:4px 0 0;font-size:15px;color:#111827;">${timeRange}</p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;">Where</p>
+                  <p style="margin:0;font-size:15px;color:#111827;">${businessAddress}</p>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 28px;font-size:12px;color:#9ca3af;">
+              Booking ID: <span style="font-family:monospace;">${bookingId}</span>
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
+              Questions? Email us at <a href="mailto:${businessEmail}" style="color:#6b7280;text-decoration:underline;">${businessEmail}</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendBookingReminder(data: ReminderData): Promise<void> {
+  if (!data.hours || data.hours.length === 0) {
+    console.warn("[notifications] sendBookingReminder called with empty hours — skipping");
+    return;
+  }
+
+  const client = getResend();
+  if (!client) {
+    console.warn("[notifications] RESEND_API_KEY not set — skipping reminder email");
+    return;
+  }
+
+  const from = process.env.RESEND_FROM_ADDRESS ?? "onboarding@resend.dev";
+
+  try {
+    await client.emails.send({
+      from,
+      to: data.customerEmail,
+      subject: sanitizeSubject(`Reminder: ${data.facilityName} tomorrow at ${formatHours(data.hours)}`),
+      html: buildReminderHtml(data),
+    });
+  } catch (err) {
+    console.error("[notifications] failed to send reminder email:", err);
+  }
+}
+
 export async function sendBookingConfirmation(data: BookingConfirmationData): Promise<void> {
   const client = getResend();
   if (!client) {

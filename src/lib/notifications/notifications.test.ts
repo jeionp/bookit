@@ -914,3 +914,163 @@ describe("sendAdminCancellationNotification — with Resend client mocked", () =
     ).resolves.toBeUndefined();
   });
 });
+
+// ── sendBookingReminder ───────────────────────────────────────────────────────
+
+const baseReminder = {
+  customerEmail: "player@example.com",
+  customerName: "Alice",
+  bookingId: "bk_001",
+  businessName: "Sports Hub",
+  businessEmail: "info@sportshub.com",
+  businessAddress: "123 Main St",
+  facilityName: "Court A",
+  date: "2026-06-15",
+  hours: [9, 10],
+};
+
+describe("sendBookingReminder — no-op when RESEND_API_KEY is absent", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    delete process.env.RESEND_API_KEY;
+  });
+
+  it("resolves without throwing", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await expect(sendBookingReminder(baseReminder)).resolves.toBeUndefined();
+  });
+});
+
+describe("sendBookingReminder — with Resend client mocked", () => {
+  beforeEach(() => {
+    spyHolder.send.mockClear();
+    spyHolder.send.mockResolvedValue({ id: "mock-id" });
+    process.env.RESEND_API_KEY = "test-key";
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.RESEND_API_KEY;
+    delete process.env.RESEND_FROM_ADDRESS;
+  });
+
+  it("sends to customerEmail", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    expect(mockEmailsSend).toHaveBeenCalledOnce();
+    const call = mockEmailsSend.mock.calls[0][0];
+    expect(call.to).toBe("player@example.com");
+  });
+
+  it("subject contains 'Reminder' and facility name", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const call = mockEmailsSend.mock.calls[0][0];
+    expect(call.subject).toContain("Reminder");
+    expect(call.subject).toContain("Court A");
+  });
+
+  it("does NOT include an ICS attachment", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const call = mockEmailsSend.mock.calls[0][0];
+    expect(call.attachments).toBeUndefined();
+  });
+
+  it("uses RESEND_FROM_ADDRESS env var when set", async () => {
+    process.env.RESEND_FROM_ADDRESS = "noreply@bookit.com";
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const call = mockEmailsSend.mock.calls[0][0];
+    expect(call.from).toBe("noreply@bookit.com");
+  });
+
+  it("falls back to onboarding@resend.dev when RESEND_FROM_ADDRESS is absent", async () => {
+    delete process.env.RESEND_FROM_ADDRESS;
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const call = mockEmailsSend.mock.calls[0][0];
+    expect(call.from).toBe("onboarding@resend.dev");
+  });
+
+  it("HTML contains greeting with customer name", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html).toContain("Hi Alice");
+  });
+
+  it("HTML contains 'your booking is tomorrow'", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html.toLowerCase()).toContain("your booking is tomorrow");
+  });
+
+  it("HTML contains facility name", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html).toContain("Court A");
+  });
+
+  it("HTML contains business address", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html).toContain("123 Main St");
+  });
+
+  it("HTML contains the booking ID", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html).toContain("bk_001");
+  });
+
+  it("HTML contains the business email contact link", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder(baseReminder);
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html).toContain("mailto:info@sportshub.com");
+    expect(html).toContain("info@sportshub.com");
+  });
+
+  it("resolves without rethrowing when emails.send throws", async () => {
+    mockEmailsSend.mockRejectedValueOnce(new Error("smtp error"));
+    const { sendBookingReminder } = await import("./email");
+    await expect(sendBookingReminder(baseReminder)).resolves.toBeUndefined();
+  });
+
+  it("HTML escapes special characters in customer name", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder({ ...baseReminder, customerName: "<script>alert(1)</script>" });
+    const { html } = mockEmailsSend.mock.calls[0][0];
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  // Header injection requires a bare CR/LF to split into a new header line.
+  // sanitizeSubject strips \r and \n, so the payload becomes plain subject text
+  // that email clients treat as part of the subject value, not a new header.
+  it("strips CR/LF from facilityName in subject to prevent header injection", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder({
+      ...baseReminder,
+      facilityName: "Court A\r\nBcc: attacker@evil.com",
+    });
+    const { subject } = mockEmailsSend.mock.calls[0][0];
+    expect(subject).not.toMatch(/[\r\n]/);
+  });
+
+  it("does not call emails.send when hours array is empty", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await sendBookingReminder({ ...baseReminder, hours: [] });
+    expect(mockEmailsSend).not.toHaveBeenCalled();
+  });
+
+  it("resolves without throwing when hours array is empty", async () => {
+    const { sendBookingReminder } = await import("./email");
+    await expect(sendBookingReminder({ ...baseReminder, hours: [] })).resolves.toBeUndefined();
+  });
+});
