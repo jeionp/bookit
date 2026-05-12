@@ -8,6 +8,12 @@ Multi-tenant court booking platform. Next.js 16 App Router, Firebase (Firestore 
 
 Always work on a `feature/<name>` branch. Never commit directly to `main`. After pushing the branch, open a PR and wait for CI before merging. Direct pushes to `main` skip CI and deploy untested code to Vercel.
 
+**Before creating any new branch**, sync with the latest main to avoid merge conflicts at PR time:
+```
+git checkout main && git pull origin main
+git checkout -b feature/<name>
+```
+
 ## Test suite — run before every PR
 
 Three suites, all require `firebase emulators:start` (Auth on 9099, Firestore on 8080):

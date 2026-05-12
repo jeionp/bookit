@@ -30,6 +30,7 @@ export interface Booking {
   creditApplied?: number;
   source?: "online" | "walk_in";
   userPhone?: string;
+  reminderSent?: boolean;
   createdAt: Timestamp;
 }
 
