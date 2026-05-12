@@ -264,9 +264,10 @@ describe('GET /api/reminders — sending logic', () => {
     const { GET } = await import('./route')
     await GET(makeReq('test-secret'))
     expect(mockGetBusinessBySlug).toHaveBeenCalledTimes(2)
-    const calls = mockSendBookingReminder.mock.calls
-    const aliceCall = calls.find((c: [{ customerEmail: string }]) => c[0].customerEmail === 'player@example.com')
-    const bobCall   = calls.find((c: [{ customerEmail: string }]) => c[0].customerEmail === 'bob@example.com')
+    type ReminderArg = [{ customerEmail: string; businessName: string }]
+    const calls = mockSendBookingReminder.mock.calls as ReminderArg[]
+    const aliceCall = calls.find(([arg]) => arg.customerEmail === 'player@example.com')!
+    const bobCall   = calls.find(([arg]) => arg.customerEmail === 'bob@example.com')!
     expect(aliceCall[0].businessName).toBe('PaddleUp')
     expect(bobCall[0].businessName).toBe('Courtside')
   })
@@ -323,31 +324,39 @@ describe('getTomorrowDateString', () => {
     vi.useRealTimers()
   })
 
-  test('returns a YYYY-MM-DD string one day ahead of UTC today', async () => {
+  test('returns a YYYY-MM-DD string', async () => {
     const { getTomorrowDateString } = await import('./route')
-    const result = getTomorrowDateString()
-    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    const today = new Date()
-    const expected = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1))
-      .toISOString()
-      .slice(0, 10)
-    expect(result).toBe(expected)
+    expect(getTomorrowDateString()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  // Pinned-clock tests guard against regressions that use local time instead of UTC.
-  // In UTC+8 (Manila), local midnight is 16:00 UTC the prior day — a local-time
-  // implementation would return the wrong date for bookings on the boundary.
-  test('returns correct date at 23:59:59 UTC (day-boundary — one second before midnight)', async () => {
+  // Pinned-clock tests use Manila (UTC+8) boundaries, which is the default timezone.
+  // These also guard against regressions to UTC-based logic: at 20:00 UTC on May 13,
+  // it is May 14 04:00 in Manila — UTC "tomorrow" is May 14 but Manila "tomorrow" is
+  // May 15. A UTC implementation would remind the wrong day's bookings.
+
+  test('returns Manila tomorrow at one second before Manila midnight (15:59:59 UTC)', async () => {
+    // 2026-05-13T15:59:59Z = 2026-05-13T23:59:59+08:00 — still May 13 in Manila
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-05-13T23:59:59Z'))
+    vi.setSystemTime(new Date('2026-05-13T15:59:59Z'))
     const { getTomorrowDateString } = await import('./route')
     expect(getTomorrowDateString()).toBe('2026-05-14')
   })
 
-  test('returns correct date at exactly midnight UTC', async () => {
+  test('returns Manila tomorrow at exactly Manila midnight (16:00:00 UTC)', async () => {
+    // 2026-05-13T16:00:00Z = 2026-05-14T00:00:00+08:00 — now May 14 in Manila
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-05-14T00:00:00Z'))
+    vi.setSystemTime(new Date('2026-05-13T16:00:00Z'))
     const { getTomorrowDateString } = await import('./route')
     expect(getTomorrowDateString()).toBe('2026-05-15')
+  })
+
+  test('diverges from UTC at 20:00 UTC — Manila tomorrow is one day further ahead', async () => {
+    // 2026-05-13T20:00:00Z = 2026-05-14T04:00:00+08:00 (May 14 in Manila)
+    // UTC "tomorrow" = May 14; Manila "tomorrow" = May 15
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-13T20:00:00Z'))
+    const { getTomorrowDateString } = await import('./route')
+    expect(getTomorrowDateString()).toBe('2026-05-15')        // Manila
+    expect(getTomorrowDateString('UTC')).toBe('2026-05-14')  // UTC (wrong for Manila bookings)
   })
 })

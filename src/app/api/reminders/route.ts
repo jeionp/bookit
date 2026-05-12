@@ -9,10 +9,18 @@ import type { Business } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export function getTomorrowDateString(): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+// timeZone defaults to Asia/Manila so "tomorrow" matches the customer's local
+// calendar date rather than UTC. Pass a different IANA zone if the business is
+// in another region. Date.UTC handles month/day overflow (e.g. Jan 31 + 1 → Feb 1).
+export function getTomorrowDateString(timeZone = "Asia/Manila"): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const [y, m, d] = formatter.format(new Date()).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
