@@ -1,10 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { X, CalendarDays, Clock, MapPin, Coins, QrCode } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, CalendarDays, Clock, MapPin, Coins, QrCode, Upload } from "lucide-react";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuth } from "@/context/AuthContext";
 import { getCreditsByBusiness, computeBalance } from "@/lib/firebase/credits";
+import { storage } from "@/lib/firebase/client";
 import type { PaymentMode } from "@/lib/types";
 
 interface BookingSelection {
@@ -38,6 +40,8 @@ function formatHour(h: number): string {
   return `${h - 12} PM`;
 }
 
+type CheckoutState = "confirmed" | "P2P_AI" | "P2P_upload" | "P2P_submitted" | null;
+
 export default function BookingConfirmModal({
   open,
   onClose,
@@ -54,9 +58,14 @@ export default function BookingConfirmModal({
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [checkoutType, setCheckoutType] = useState<"confirmed" | "P2P_AI" | null>(null);
+  const [checkoutType, setCheckoutType] = useState<CheckoutState>(null);
+  const [bookingId, setBookingId] = useState<string | null>(null);
   const [creditBalance, setCreditBalance] = useState(0);
   const [useCredits, setUseCredits] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -114,6 +123,7 @@ export default function BookingConfirmModal({
         }
         return;
       }
+      setBookingId(body.bookingId ?? null);
       setCheckoutType(body.checkout_type === "P2P_AI" ? "P2P_AI" : "confirmed");
     } catch {
       setError("Failed to save booking. Please try again.");
@@ -122,13 +132,53 @@ export default function BookingConfirmModal({
     }
   }
 
+  async function handleUploadProof() {
+    if (!proofFile || !bookingId || !user) return;
+    setUploadLoading(true);
+    setUploadError("");
+    try {
+      const idToken = await user.getIdToken();
+      const storageRef = ref(storage, `payment_proofs/${bookingId}/${Date.now()}_${proofFile.name}`);
+      await uploadBytes(storageRef, proofFile);
+      const proofUrl = await getDownloadURL(storageRef);
+      const res = await fetch("/api/payments/submit-proof", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ bookingId, proofUrl }),
+      });
+      if (!res.ok) {
+        setUploadError("Failed to submit proof. Please try again.");
+        return;
+      }
+      setCheckoutType("P2P_submitted");
+    } catch {
+      setUploadError("Upload failed. Please check your connection and try again.");
+    } finally {
+      setUploadLoading(false);
+    }
+  }
+
   function handleClose() {
     const wasComplete = checkoutType !== null;
     setCheckoutType(null);
+    setBookingId(null);
+    setProofFile(null);
+    setUploadError("");
     setError("");
     setUseCredits(false);
     onClose();
     if (wasComplete) onSuccess();
+  }
+
+  function headerTitle() {
+    if (checkoutType === "confirmed") return "Booking Confirmed!";
+    if (checkoutType === "P2P_AI") return "Slot Reserved!";
+    if (checkoutType === "P2P_upload") return "Upload Proof";
+    if (checkoutType === "P2P_submitted") return "Proof Submitted!";
+    return "Confirm Booking";
   }
 
   return (
@@ -138,13 +188,7 @@ export default function BookingConfirmModal({
       <div data-testid="booking-modal" className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 flex items-center justify-between">
-          <h2 className="text-xl font-black text-gray-900">
-            {checkoutType === "P2P_AI"
-              ? "Slot Reserved!"
-              : checkoutType === "confirmed"
-              ? "Booking Confirmed!"
-              : "Confirm Booking"}
-          </h2>
+          <h2 className="text-xl font-black text-gray-900">{headerTitle()}</h2>
           <button
             onClick={handleClose}
             className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400"
@@ -182,8 +226,9 @@ export default function BookingConfirmModal({
               Done
             </button>
           </div>
+
         ) : checkoutType === "P2P_AI" ? (
-          /* P2P slot-held: show static QR and payment instructions */
+          /* P2P QR screen — slot held, prompt to upload proof */
           <div className="px-6 pb-6 space-y-4">
             <div className="bg-blue-50 rounded-2xl p-3 text-center">
               <p className="text-xs font-semibold text-blue-700">
@@ -222,19 +267,108 @@ export default function BookingConfirmModal({
                 <span className="font-black text-gray-900">₱{amountDue.toLocaleString()}</span>
               </div>
             </div>
-            <p className="text-xs text-gray-400 text-center leading-relaxed">
-              Scan the GCash QR and send the exact amount. Upload your payment proof to confirm your booking.
+            <button
+              onClick={() => setCheckoutType("P2P_upload")}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white"
+              style={{ backgroundColor: accentColor }}
+            >
+              Next: Upload Proof →
+            </button>
+          </div>
+
+        ) : checkoutType === "P2P_upload" ? (
+          /* P2P upload step */
+          <div className="px-6 pb-6 space-y-4">
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Take a screenshot of your GCash receipt and upload it below. Your booking will be confirmed once the payment is verified.
+            </p>
+
+            {/* File picker */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full border-2 border-dashed rounded-2xl p-5 flex flex-col items-center gap-2 transition-colors"
+              style={proofFile
+                ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
+                : { borderColor: "#e5e7eb", backgroundColor: "#fafafa" }
+              }
+            >
+              <Upload size={22} style={{ color: proofFile ? accentColor : "#9ca3af" }} />
+              <span className="text-sm font-semibold" style={{ color: proofFile ? accentColor : "#6b7280" }}>
+                {proofFile ? proofFile.name : "Tap to choose a photo"}
+              </span>
+              {proofFile && (
+                <span className="text-xs text-gray-400">
+                  {(proofFile.size / 1024).toFixed(0)} KB
+                </span>
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                setProofFile(e.target.files?.[0] ?? null);
+                setUploadError("");
+              }}
+            />
+
+            {uploadError && (
+              <p className="text-xs font-medium text-red-500 bg-red-50 px-3 py-2 rounded-lg">
+                {uploadError}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCheckoutType("P2P_AI")}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handleUploadProof}
+                disabled={!proofFile || uploadLoading}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                style={{ backgroundColor: accentColor }}
+              >
+                {uploadLoading ? "Uploading…" : "Submit proof"}
+              </button>
+            </div>
+          </div>
+
+        ) : checkoutType === "P2P_submitted" ? (
+          /* Upload success */
+          <div className="px-6 pb-8 text-center space-y-4">
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl"
+              style={{ backgroundColor: `${accentColor}15` }}
+            >
+              ✅
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Your payment proof has been submitted. We&apos;ll verify it shortly and confirm your booking for{" "}
+              <strong>{selection.facilityName}</strong> on{" "}
+              <strong>
+                {selectedDate.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </strong>.
             </p>
             <button
               onClick={handleClose}
               className="w-full py-3 rounded-xl text-sm font-bold text-white"
               style={{ backgroundColor: accentColor }}
             >
-              Got it
+              Done
             </button>
           </div>
+
         ) : (
-          /* Confirmation details */
+          /* Booking form */
           <div className="px-6 pb-6 space-y-4">
             {/* Details card */}
             <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
