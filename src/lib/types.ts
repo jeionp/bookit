@@ -47,6 +47,8 @@ export interface OperatingHours {
   closed?: boolean;
 }
 
+export type PaymentMode = "MANUAL_AI" | "GATEWAY_PLATFORM";
+
 export interface Business {
   slug: string;
   name: string;
@@ -67,4 +69,9 @@ export interface Business {
   ownerId?: string;
   status?: "active" | "suspended";
   cancellationPolicy?: CancellationPolicy;
+  // Payment tier fields — absent on legacy businesses (instant-confirm flow unchanged)
+  payment_mode?: PaymentMode;
+  saas_credit_balance?: number;
+  static_qr_url?: string | null;
+  gateway_sub_account_id?: string | null;
 }
