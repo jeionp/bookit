@@ -4,7 +4,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { getBusinessBySlug } from "@/lib/firebase/businesses";
-import { sendBookingConfirmation, sendAdminBookingNotification } from "@/lib/notifications/email";
+import { sendBookingConfirmation, sendAdminBookingNotification, sendLowBalanceWarning } from "@/lib/notifications/email";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +125,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown business or facility" }, { status: 400 });
   }
 
+  // SaaS wallet check — payment_mode businesses have a per-booking credit balance.
+  // Reject new bookings when the balance has dropped to the suspension threshold.
+  const bizDoc = await adminDb.collection("businesses").doc(businessSlug).get();
+  const bizData = bizDoc.data() ?? {};
+  const paymentMode = bizData.payment_mode as string | undefined;
+  const saasBalance = typeof bizData.saas_credit_balance === "number"
+    ? bizData.saas_credit_balance
+    : undefined;
+
+  if (paymentMode && saasBalance !== undefined && saasBalance <= -5) {
+    return NextResponse.json({ error: "SERVICE_SUSPENDED" }, { status: 503 });
+  }
+
   // Clamp creditAmount to totalPrice — can't overpay with credits
   const appliedCredit = Math.min(creditAmount, priceInfo.totalPrice);
 
@@ -188,6 +201,13 @@ export async function POST(req: NextRequest) {
         createdAt: FieldValue.serverTimestamp(),
       });
 
+      // Deduct one SaaS credit per confirmed booking for payment_mode businesses.
+      if (paymentMode && saasBalance !== undefined) {
+        tx.update(adminDb.collection("businesses").doc(businessSlug), {
+          saas_credit_balance: FieldValue.increment(-1),
+        });
+      }
+
       // Record the credit redemption event inside the same transaction
       if (appliedCredit > 0) {
         const redemptionRef = adminDb.collection("credits").doc();
@@ -212,6 +232,19 @@ export async function POST(req: NextRequest) {
     }
     console.error("[api/bookings] transaction error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+
+  // Fire-and-forget low balance warning at exactly 5 or 0 remaining credits.
+  if (paymentMode && saasBalance !== undefined) {
+    const newBalance = saasBalance - 1;
+    if (newBalance === 5 || newBalance === 0) {
+      sendLowBalanceWarning({
+        businessEmail: bizData.email as string ?? "",
+        businessName: priceInfo.businessName,
+        businessSlug,
+        balance: newBalance,
+      }).catch((err) => console.error("[api/bookings] low balance warning error:", err));
+    }
   }
 
   // Fire-and-forget — booking is already committed; don't block the 201 on email delivery

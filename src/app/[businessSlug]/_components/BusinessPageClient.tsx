@@ -27,7 +27,13 @@ export default function BusinessPageClient({ business }: { business: Business })
   const [bookingSelection, setBookingSelection] = useState<Selection | null>(null);
   const [bookingDate, setBookingDate] = useState<Date>(new Date());
 
+  const isStorefrontSuspended =
+    business.payment_mode != null &&
+    business.saas_credit_balance != null &&
+    business.saas_credit_balance <= -5;
+
   function handleBook(selection: Selection, date: Date) {
+    if (isStorefrontSuspended) return;
     if (!user) { setAuthOpen(true); return; }
     setBookingSelection(selection);
     setBookingDate(date);
@@ -86,6 +92,15 @@ export default function BusinessPageClient({ business }: { business: Business })
           )}
         </div>
       </header>
+
+      {/* Degraded storefront banner */}
+      {isStorefrontSuspended && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+          <p className="max-w-7xl mx-auto text-sm font-semibold text-amber-800 text-center">
+            Online bookings are temporarily unavailable. Please contact the venue directly to reserve a slot.
+          </p>
+        </div>
+      )}
 
       {/* Hero */}
       <div className="relative h-52 sm:h-64 lg:h-72 overflow-hidden bg-gray-200">

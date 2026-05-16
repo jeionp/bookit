@@ -634,6 +634,79 @@ export async function sendBookingReminder(data: ReminderData): Promise<void> {
   }
 }
 
+export interface LowBalanceWarningData {
+  businessEmail: string;
+  businessName: string;
+  businessSlug: string;
+  balance: number; // new balance after the triggering booking
+}
+
+function buildLowBalanceHtml(data: LowBalanceWarningData): string {
+  const businessName  = escapeHtml(data.businessName);
+  const businessEmail = escapeHtml(data.businessEmail);
+  const { balance } = data;
+
+  const isCritical = balance <= 0;
+  const headerBg  = isCritical ? "#991b1b" : "#92400e";
+  const headerSub = isCritical ? "#fca5a5" : "#fde68a";
+  const message   = isCritical
+    ? `Your bookit wallet balance is now <strong>${balance}</strong>. Online bookings will be suspended when the balance reaches <strong>−5</strong>. Top up now to keep your storefront active.`
+    : `Your bookit wallet balance is low at <strong>${balance}</strong>. Please top up before you run out.`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr>
+          <td style="background:${headerBg};padding:28px 32px;">
+            <p style="margin:0 0 6px;font-size:12px;color:${headerSub};letter-spacing:0.08em;text-transform:uppercase;">${businessName}</p>
+            <h1 style="margin:0;font-size:22px;font-weight:600;color:#ffffff;">⚠ Low Wallet Balance</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 0;">
+            <p style="margin:0 0 24px;font-size:15px;color:#374151;">${message}</p>
+            <p style="margin:0 0 28px;font-size:14px;color:#6b7280;">Log in to your bookit admin dashboard to top up your wallet and avoid service interruption.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
+              Sent to <a href="mailto:${businessEmail}" style="color:#6b7280;text-decoration:underline;">${businessEmail}</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendLowBalanceWarning(data: LowBalanceWarningData): Promise<void> {
+  const client = getResend();
+  if (!client) {
+    console.warn("[notifications] RESEND_API_KEY not set — skipping low balance warning");
+    return;
+  }
+
+  const from = process.env.RESEND_FROM_ADDRESS ?? "onboarding@resend.dev";
+
+  try {
+    await client.emails.send({
+      from,
+      to: data.businessEmail,
+      subject: sanitizeSubject(`Action required: low wallet balance for ${data.businessName}`),
+      html: buildLowBalanceHtml(data),
+    });
+  } catch (err) {
+    console.error("[notifications] failed to send low balance warning:", err);
+  }
+}
+
 export async function sendBookingConfirmation(data: BookingConfirmationData): Promise<void> {
   const client = getResend();
   if (!client) {

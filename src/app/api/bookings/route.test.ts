@@ -12,7 +12,10 @@ vi.mock('@/lib/firebase/admin-app', () => ({
   adminAuth: { verifyIdToken: mockVerifyIdToken },
   adminDb: {
     collection: () => ({
-      doc:   () => ({ id: 'new-booking-id' }),
+      doc:   () => ({
+        id:  'new-booking-id',
+        get: vi.fn().mockResolvedValue({ data: () => ({}) }),
+      }),
       where: function () { return this },
     }),
     runTransaction: mockRunTransaction,
@@ -85,7 +88,10 @@ async function importFreshRouteWithRatelimit(
     adminAuth: { verifyIdToken: mockVerifyIdToken },
     adminDb: {
       collection: () => ({
-        doc:   () => ({ id: 'new-booking-id' }),
+        doc:   () => ({
+          id:  'new-booking-id',
+          get: vi.fn().mockResolvedValue({ data: () => ({}) }),
+        }),
         where: function () { return this },
       }),
       runTransaction: mockRunTransaction,
