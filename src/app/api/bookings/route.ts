@@ -162,17 +162,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // P2P flow: slot is held pending payment proof; confirmed when proof is approved.
+  const isP2P = paymentMode === "MANUAL_AI";
+  const bookingStatus = isP2P ? "slot_held" : "confirmed";
+  const HOLD_HOURS = 24;
+  const heldUntil = isP2P
+    ? Timestamp.fromMillis(Date.now() + HOLD_HOURS * 60 * 60 * 1000)
+    : null;
+
   const newDocRef = adminDb.collection("bookings").doc();
 
   try {
     await adminDb.runTransaction(async (tx) => {
+      // Block against both confirmed and slot_held to prevent double-booking while a
+      // slot is held awaiting payment proof.
       const snap = await tx.get(
         adminDb
           .collection("bookings")
           .where("businessSlug", "==", businessSlug)
           .where("facilityId", "==", facilityId)
           .where("date", "==", date)
-          .where("status", "==", "confirmed")
+          .where("status", "in", ["confirmed", "slot_held"])
       );
 
       const takenHours = new Set<number>();
@@ -196,12 +206,17 @@ export async function POST(req: NextRequest) {
         hours: uniqueHours,
         totalPrice: priceInfo.totalPrice,
         currency: priceInfo.currency,
-        status: "confirmed",
+        status: bookingStatus,
+        ...(isP2P && {
+          checkout_type: "P2P_AI",
+          payment_status_v2: "pending_proof",
+          held_until: heldUntil,
+        }),
         ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
         createdAt: FieldValue.serverTimestamp(),
       });
 
-      // Deduct one SaaS credit per confirmed booking for payment_mode businesses.
+      // Deduct one SaaS credit per booking (held or confirmed) for payment_mode businesses.
       if (paymentMode && saasBalance !== undefined) {
         tx.update(adminDb.collection("businesses").doc(businessSlug), {
           saas_credit_balance: FieldValue.increment(-1),
@@ -247,28 +262,34 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Fire-and-forget — booking is already committed; don't block the 201 on email delivery
-  const notificationData = {
-    customerEmail: email,
-    customerName: displayName,
-    bookingId: newDocRef.id,
-    businessName: priceInfo.businessName,
-    businessEmail: priceInfo.businessEmail,
-    businessAddress: priceInfo.businessAddress,
-    facilityName: priceInfo.facilityName,
-    date,
-    hours: uniqueHours,
-    totalPrice: priceInfo.totalPrice,
-    currency: priceInfo.currency,
-    ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
-  };
-  Promise.all([
-    sendBookingConfirmation(notificationData),
-    sendAdminBookingNotification(notificationData),
-  ]).catch((err) => console.error("[api/bookings] notification error:", err));
+  // Confirmation emails only after instant-confirm (slot_held bookings are not confirmed yet).
+  if (!isP2P) {
+    const notificationData = {
+      customerEmail: email,
+      customerName: displayName,
+      bookingId: newDocRef.id,
+      businessName: priceInfo.businessName,
+      businessEmail: priceInfo.businessEmail,
+      businessAddress: priceInfo.businessAddress,
+      facilityName: priceInfo.facilityName,
+      date,
+      hours: uniqueHours,
+      totalPrice: priceInfo.totalPrice,
+      currency: priceInfo.currency,
+      ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
+    };
+    Promise.all([
+      sendBookingConfirmation(notificationData),
+      sendAdminBookingNotification(notificationData),
+    ]).catch((err) => console.error("[api/bookings] notification error:", err));
+  }
 
   return NextResponse.json(
-    { bookingId: newDocRef.id, creditApplied: appliedCredit > 0 ? appliedCredit : undefined },
+    {
+      bookingId: newDocRef.id,
+      creditApplied: appliedCredit > 0 ? appliedCredit : undefined,
+      ...(isP2P && { checkout_type: "P2P_AI", static_qr_url: (bizData.static_qr_url as string | null) ?? null }),
+    },
     { status: 201 },
   );
 }

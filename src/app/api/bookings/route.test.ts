@@ -462,3 +462,168 @@ describe('POST /api/bookings — SaaS wallet enforcement', () => {
     expect(mockWarning).not.toHaveBeenCalled()
   })
 })
+
+// ─── P2P slot-held flow tests (phase 2) ──────────────────────────────────────
+// Cover the branching introduced by payment_mode === "MANUAL_AI":
+//   1. Booking written with slot_held status and P2P fields (checkout_type, etc.)
+//   2. Response includes checkout_type and static_qr_url
+//   3. Confirmation emails suppressed for slot_held bookings
+//   4. Legacy flow unchanged: confirmed status + emails fire
+//   5. slot_held conflicts block new bookings (same as confirmed)
+
+describe('POST /api/bookings — P2P slot-held flow', () => {
+  beforeEach(() => {
+    mockVerifyIdToken.mockReset()
+    mockRunTransaction.mockReset()
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email: 'a@b.com', name: 'Alice' })
+  })
+
+  afterEach(() => {
+    vi.resetModules()
+  })
+
+  function makeAdminDbMock(bizData: Record<string, unknown>) {
+    return {
+      collection: (name: string) => ({
+        doc: () => ({
+          id:  'new-booking-id',
+          get: vi.fn().mockResolvedValue({ data: () => (name === 'businesses' ? bizData : {}) }),
+        }),
+        where: function () { return this },
+      }),
+      runTransaction: mockRunTransaction,
+    }
+  }
+
+  // Returns route + captured email mock fns for assertion
+  async function importRoute(bizData: Record<string, unknown>) {
+    vi.resetModules()
+    const mockSendConfirm  = vi.fn().mockResolvedValue(undefined)
+    const mockSendAdmin    = vi.fn().mockResolvedValue(undefined)
+    const mockSendWarning  = vi.fn().mockResolvedValue(undefined)
+    vi.doMock('@/lib/firebase/admin-app', () => ({
+      adminAuth: { verifyIdToken: mockVerifyIdToken },
+      adminDb: makeAdminDbMock(bizData),
+    }))
+    vi.doMock('@/lib/firebase/businesses', () => ({
+      getBusinessBySlug: vi.fn().mockResolvedValue({
+        slug: 'paddleup', name: 'PaddleUp', email: 'admin@paddleup.com',
+        facilities: [{ id: 'court-1', name: 'Court 1', pricePerHour: 500, currency: 'PHP' }],
+      }),
+    }))
+    vi.doMock('@/lib/notifications/email', () => ({
+      sendBookingConfirmation:      mockSendConfirm,
+      sendAdminBookingNotification: mockSendAdmin,
+      sendLowBalanceWarning:        mockSendWarning,
+    }))
+    const route = await import('./route')
+    return { route, mockSendConfirm, mockSendAdmin }
+  }
+
+  function txWithSet(setMock = vi.fn()) {
+    mockRunTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({ get: vi.fn().mockResolvedValue({ docs: [] }), set: setMock, update: vi.fn() })
+    })
+    return setMock
+  }
+
+  // ── Booking document fields ────────────────────────────────────────────────
+
+  test('writes slot_held booking with P2P fields when payment_mode is MANUAL_AI', async () => {
+    const setMock = txWithSet()
+    const { route } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const payload = setMock.mock.calls[0][1] as Record<string, unknown>
+    expect(payload.status).toBe('slot_held')
+    expect(payload.checkout_type).toBe('P2P_AI')
+    expect(payload.payment_status_v2).toBe('pending_proof')
+    expect(payload.held_until).toBeDefined()
+  })
+
+  test('legacy booking still writes confirmed status without P2P fields', async () => {
+    const setMock = txWithSet()
+    const { route } = await importRoute({})
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const payload = setMock.mock.calls[0][1] as Record<string, unknown>
+    expect(payload.status).toBe('confirmed')
+    expect(payload.checkout_type).toBeUndefined()
+    expect(payload.payment_status_v2).toBeUndefined()
+    expect(payload.held_until).toBeUndefined()
+  })
+
+  // ── Response body ─────────────────────────────────────────────────────────
+
+  test('response includes checkout_type P2P_AI and static_qr_url for MANUAL_AI', async () => {
+    txWithSet()
+    const { route } = await importRoute({
+      payment_mode: 'MANUAL_AI', saas_credit_balance: 10, static_qr_url: 'https://example.com/qr.png',
+    })
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('P2P_AI')
+    expect(body.static_qr_url).toBe('https://example.com/qr.png')
+  })
+
+  test('static_qr_url is null in response when not set on the business document', async () => {
+    txWithSet()
+    const { route } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('P2P_AI')
+    expect(body.static_qr_url).toBeNull()
+  })
+
+  test('legacy response does not include checkout_type or static_qr_url', async () => {
+    txWithSet()
+    const { route } = await importRoute({})
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBeUndefined()
+    expect(body.static_qr_url).toBeUndefined()
+  })
+
+  // ── Email suppression ─────────────────────────────────────────────────────
+
+  test('does NOT send confirmation emails for P2P slot_held bookings', async () => {
+    txWithSet()
+    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
+      payment_mode: 'MANUAL_AI', saas_credit_balance: 10,
+    })
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    expect(mockSendConfirm).not.toHaveBeenCalled()
+    expect(mockSendAdmin).not.toHaveBeenCalled()
+  })
+
+  test('sends confirmation emails for legacy confirmed bookings', async () => {
+    txWithSet()
+    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({})
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    expect(mockSendConfirm).toHaveBeenCalled()
+    expect(mockSendAdmin).toHaveBeenCalled()
+  })
+
+  // ── slot_held conflict check ───────────────────────────────────────────────
+
+  test('returns 409 when a slot_held booking already occupies the requested hours', async () => {
+    mockRunTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({
+        get: vi.fn().mockResolvedValue({
+          docs: [{ data: () => ({ status: 'slot_held', hours: [8] }) }],
+        }),
+        set: vi.fn(),
+        update: vi.fn(),
+      })
+    })
+    const { route } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'SLOT_UNAVAILABLE' })
+  })
+})

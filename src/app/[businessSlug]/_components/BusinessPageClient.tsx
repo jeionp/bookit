@@ -222,6 +222,8 @@ export default function BusinessPageClient({ business }: { business: Business })
         businessName={business.name}
         businessLocation={business.location}
         accentColor={business.accentColor}
+        paymentMode={business.payment_mode}
+        staticQrUrl={business.static_qr_url}
       />
     </div>
   );
