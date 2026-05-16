@@ -707,6 +707,112 @@ export async function sendLowBalanceWarning(data: LowBalanceWarningData): Promis
   }
 }
 
+export interface PaymentRejectedData {
+  customerEmail: string;
+  customerName: string;
+  bookingId: string;
+  businessName: string;
+  facilityName: string;
+  date: string;
+  hours: number[];
+  totalPrice: number;
+  currency: string;
+  submittedAmount: number | null;
+}
+
+function buildPaymentRejectedHtml(data: PaymentRejectedData): string {
+  const customerName  = escapeHtml(data.customerName);
+  const businessName  = escapeHtml(data.businessName);
+  const facilityName  = escapeHtml(data.facilityName);
+  const bookingId     = escapeHtml(data.bookingId);
+  const currency      = escapeHtml(data.currency);
+  const timeRange     = formatHours(data.hours);
+  const formattedDate = formatDate(data.date);
+  const expectedStr   = `${currency} ${data.totalPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+  const submittedStr  = data.submittedAmount !== null
+    ? `${currency} ${data.submittedAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+    : "Not detected";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr>
+          <td style="background:#7f1d1d;padding:28px 32px;">
+            <p style="margin:0 0 6px;font-size:12px;color:#fca5a5;letter-spacing:0.08em;text-transform:uppercase;">${businessName}</p>
+            <h1 style="margin:0;font-size:22px;font-weight:600;color:#ffffff;">Payment Proof Rejected</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px 0;">
+            <p style="margin:0 0 24px;font-size:15px;color:#374151;">Hi ${customerName}, unfortunately we could not verify your payment proof.</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;padding-top:20px;margin-bottom:20px;">
+              <tr>
+                <td style="padding-bottom:12px;">
+                  <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;">What</p>
+                  <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${facilityName}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-bottom:12px;">
+                  <p style="margin:0 0 2px;font-size:11px;font-weight:600;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;">When</p>
+                  <p style="margin:0;font-size:15px;color:#111827;">${formattedDate}</p>
+                  <p style="margin:4px 0 0;font-size:15px;color:#111827;">${timeRange}</p>
+                </td>
+              </tr>
+            </table>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:20px;margin-bottom:28px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:14px;color:#6b7280;">Amount Expected</td>
+                  <td style="text-align:right;font-size:14px;font-weight:600;color:#111827;">${expectedStr}</td>
+                </tr>
+                <tr>
+                  <td style="padding-top:8px;font-size:14px;color:#6b7280;">Amount Detected</td>
+                  <td style="padding-top:8px;text-align:right;font-size:14px;font-weight:600;color:#dc2626;">${submittedStr}</td>
+                </tr>
+              </table>
+            </div>
+            <p style="margin:0 0 24px;font-size:14px;color:#374151;">Please resubmit a clear, complete screenshot of your GCash receipt showing the correct amount.</p>
+            <p style="margin:0 0 28px;font-size:12px;color:#9ca3af;">Booking ID: <span style="font-family:monospace;">${bookingId}</span></p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">Reply to this email if you need assistance.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendPaymentRejected(data: PaymentRejectedData): Promise<void> {
+  const client = getResend();
+  if (!client) {
+    console.warn("[notifications] RESEND_API_KEY not set — skipping payment rejected email");
+    return;
+  }
+
+  const from = process.env.RESEND_FROM_ADDRESS ?? "onboarding@resend.dev";
+
+  try {
+    await client.emails.send({
+      from,
+      to: data.customerEmail,
+      subject: sanitizeSubject(`Payment Proof Not Verified – ${data.facilityName}`),
+      html: buildPaymentRejectedHtml(data),
+    });
+  } catch (err) {
+    console.error("[notifications] failed to send payment rejected email:", err);
+  }
+}
+
 export async function sendBookingConfirmation(data: BookingConfirmationData): Promise<void> {
   const client = getResend();
   if (!client) {
