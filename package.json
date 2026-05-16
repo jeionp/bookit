@@ -18,6 +18,7 @@
     "seed:businesses:emulator": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/seed-businesses.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "firebase": "^12.12.1",
