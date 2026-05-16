@@ -9,5 +9,16 @@ service firebase.storage {
              /databases/(default)/documents/admins/$(request.auth.uid)
            ).data.slugs;
     }
+
+    // Payment proof uploads — only the booking owner may write, any auth'd user may read
+    match /payment_proofs/{bookingId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && request.auth.uid == firestore.get(
+             /databases/(default)/documents/bookings/$(bookingId)
+           ).data.userId;
+    }
   }
 }
