@@ -24,7 +24,7 @@ const PROJECT_ID = 'demo-bookit'
 
 let testEnv: RulesTestEnvironment
 
-function booking(userId: string, status: 'confirmed' | 'cancelled' = 'confirmed') {
+function booking(userId: string, status: 'confirmed' | 'cancelled' | 'slot_held' = 'confirmed') {
   return {
     userId,
     userEmail: `${userId}@test.com`,
@@ -98,10 +98,31 @@ describe('bookings — create', () => {
     )
   })
 
-  test('cannot create a booking with status other than "confirmed"', async () => {
+  test('can create a booking with status "slot_held" (P2P payment flow)', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertSucceeds(
+      setDoc(doc(db, 'bookings', 'b1'), booking('alice', 'slot_held'))
+    )
+  })
+
+  test('cannot create a booking with an arbitrary invalid status', async () => {
     const db = testEnv.authenticatedContext('alice').firestore()
     await assertFails(
       setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), status: 'pending' })
+    )
+  })
+
+  test('cannot create a booking with status "expired" (server-only transition)', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertFails(
+      setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), status: 'expired' })
+    )
+  })
+
+  test('cannot create a booking with status "cancelled" (write-only transition)', async () => {
+    const db = testEnv.authenticatedContext('alice').firestore()
+    await assertFails(
+      setDoc(doc(db, 'bookings', 'b1'), booking('alice', 'cancelled'))
     )
   })
 })

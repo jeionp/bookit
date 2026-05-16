@@ -36,11 +36,11 @@ service cloud.firestore {
       allow list: if (request.auth != null && resource.data.userId == request.auth.uid)
                   || isAdminOfSlug(resource.data.businessSlug);
 
-      // Create: authenticated, booking is for the caller, starts as confirmed,
-      // price must be a non-negative number.
+      // Create: authenticated, booking starts as confirmed (legacy/instant) or slot_held
+      // (P2P payment flow — slots reserved pending receipt upload).
       // Admins may also create bookings on behalf of others (walk-ins) with userId != auth.uid.
       allow create: if request.auth != null
-                    && request.resource.data.status == "confirmed"
+                    && request.resource.data.status in ["confirmed", "slot_held"]
                     && request.resource.data.totalPrice is number
                     && request.resource.data.totalPrice >= 0
                     && (request.resource.data.userId == request.auth.uid

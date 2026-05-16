@@ -12,6 +12,11 @@ import {
 } from "firebase/firestore";
 import { db } from "./client";
 
+export type BookingStatus = "confirmed" | "cancelled" | "slot_held" | "expired";
+export type CheckoutType = "P2P_AI" | "GATEWAY_SPLIT";
+export type PaymentStatusV2 = "pending_proof" | "ai_review" | "paid" | "rejected";
+export type CancelledBy = "user" | "merchant" | "system";
+
 export interface Booking {
   id: string;
   userId: string;
@@ -25,13 +30,22 @@ export interface Booking {
   hours: number[];    // [9, 10] = 9 AM and 10 AM slots
   totalPrice: number;
   currency: string;
-  status: "confirmed" | "cancelled";
+  status: BookingStatus;
   paymentStatus?: "unpaid" | "paid" | "refunded" | "credited" | "refund_pending";
   creditApplied?: number;
   source?: "online" | "walk_in";
   userPhone?: string;
   reminderSent?: boolean;
   createdAt: Timestamp;
+  // P2P / gateway payment fields — absent on legacy bookings
+  checkout_type?: CheckoutType;
+  payment_status_v2?: PaymentStatusV2;
+  proof_of_payment_url?: string | null;
+  receipt_reference_number?: string | null;
+  gateway_session_id?: string | null;
+  held_until?: Timestamp | null;
+  cancelled_by?: CancelledBy;
+  cancellation_reason?: string;
 }
 
 export type NewBooking = Omit<Booking, "id" | "createdAt" | "status">;
