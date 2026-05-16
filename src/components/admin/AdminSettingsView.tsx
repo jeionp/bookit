@@ -83,6 +83,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
     info: true,
     courts: true,
     amenities: true,
+    payment: true,
     credits: false,
   });
 
@@ -526,6 +527,67 @@ export default function AdminSettingsView({ business }: { business: Business }) 
           )}
         </div>
       </div>
+
+        {/* ── Section D: Payment (only for payment_mode businesses) ───────── */}
+        {business.payment_mode && (
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+            <SectionHeader title="Payment" open={sectionOpen.payment} onToggle={() => toggleSection("payment")} />
+            {sectionOpen.payment && (() => {
+              const bal = business.saas_credit_balance;
+              const balColor =
+                bal === undefined || bal === null ? "text-gray-400"
+                : bal >= 10 ? "text-green-600"
+                : bal >= 5  ? "text-yellow-600"
+                : bal >= 1  ? "text-orange-500"
+                : "text-red-600";
+              const balLabel =
+                bal === undefined || bal === null ? "—"
+                : bal >= 10 ? "Healthy"
+                : bal >= 5  ? "Watch"
+                : bal >= 1  ? "Low"
+                : bal > -5  ? "Critical"
+                : "Suspended";
+              return (
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-gray-500">Payment Mode</span>
+                    <span className="text-sm font-semibold text-gray-800">
+                      {business.payment_mode === "MANUAL_AI" ? "P2P / AI Verification" : "Gateway Split"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-0.5">Wallet Balance</p>
+                      <p className={`text-2xl font-black ${balColor}`}>
+                        {bal !== undefined && bal !== null ? bal : "—"}
+                        <span className="text-xs font-semibold text-gray-400 ml-1.5">credits</span>
+                      </p>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      balLabel === "Healthy"   ? "bg-green-100 text-green-700"
+                      : balLabel === "Watch"   ? "bg-yellow-100 text-yellow-700"
+                      : balLabel === "Low"     ? "bg-orange-100 text-orange-700"
+                      : balLabel === "Critical" || balLabel === "Suspended" ? "bg-red-100 text-red-700"
+                      : "bg-gray-100 text-gray-500"
+                    }`}>
+                      {balLabel}
+                    </span>
+                  </div>
+                  {bal !== undefined && bal !== null && bal <= 0 && (
+                    <p className="text-xs text-red-500 font-semibold">
+                      {bal <= -5
+                        ? "Storefront suspended — online bookings are blocked. Top up your wallet to restore service."
+                        : `Online bookings will be suspended in ${bal + 5} more booking(s). Please top up.`}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    Wallet balance is managed by the bookit platform. Contact support to top up.
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* ── Credits ─────────────────────────────────────────────────────── */}
         <div className="space-y-4 pt-2 border-t border-gray-100">

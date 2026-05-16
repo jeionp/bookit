@@ -1,5 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import { FieldValue } from 'firebase-admin/firestore'
 
 // ─── Hoisted mocks (used for the "no env vars" / base tests) ─────────────────
 
@@ -12,7 +13,10 @@ vi.mock('@/lib/firebase/admin-app', () => ({
   adminAuth: { verifyIdToken: mockVerifyIdToken },
   adminDb: {
     collection: () => ({
-      doc:   () => ({ id: 'new-booking-id' }),
+      doc:   () => ({
+        id:  'new-booking-id',
+        get: vi.fn().mockResolvedValue({ data: () => ({}) }),
+      }),
       where: function () { return this },
     }),
     runTransaction: mockRunTransaction,
@@ -85,7 +89,10 @@ async function importFreshRouteWithRatelimit(
     adminAuth: { verifyIdToken: mockVerifyIdToken },
     adminDb: {
       collection: () => ({
-        doc:   () => ({ id: 'new-booking-id' }),
+        doc:   () => ({
+          id:  'new-booking-id',
+          get: vi.fn().mockResolvedValue({ data: () => ({}) }),
+        }),
         where: function () { return this },
       }),
       runTransaction: mockRunTransaction,
@@ -290,5 +297,168 @@ describe('POST /api/bookings — input validation', () => {
     expect(res.status).toBe(201)
     const storedHours = setMock.mock.calls[0][1].hours as number[]
     expect(storedHours).toEqual([8, 9])
+  })
+})
+
+// ─── SaaS wallet enforcement tests ───────────────────────────────────────────
+// Cover the three behaviours added in Phase 1:
+//   1. SERVICE_SUSPENDED gate (503 when saas_credit_balance ≤ -5)
+//   2. Wallet decrement inside the transaction for payment_mode businesses
+//   3. Low-balance warning email at exactly newBalance === 5 or 0
+
+describe('POST /api/bookings — SaaS wallet enforcement', () => {
+  beforeEach(() => {
+    mockVerifyIdToken.mockReset()
+    mockRunTransaction.mockReset()
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email: 'a@b.com', name: 'Alice' })
+  })
+
+  afterEach(() => {
+    vi.resetModules()
+  })
+
+  // Helper: build an adminDb mock whose businesses collection returns bizData.
+  function makeAdminDbMock(bizData: Record<string, unknown>) {
+    return {
+      collection: (name: string) => ({
+        doc: () => ({
+          id:  'new-booking-id',
+          get: vi.fn().mockResolvedValue({ data: () => (name === 'businesses' ? bizData : {}) }),
+        }),
+        where: function () { return this },
+      }),
+      runTransaction: mockRunTransaction,
+    }
+  }
+
+  // Helper: reset modules, apply per-test mocks, and import the route fresh.
+  async function importRoute(
+    bizData: Record<string, unknown>,
+    emailOverrides: Record<string, unknown> = {},
+  ) {
+    vi.resetModules()
+    vi.doMock('@/lib/firebase/admin-app', () => ({
+      adminAuth: { verifyIdToken: mockVerifyIdToken },
+      adminDb: makeAdminDbMock(bizData),
+    }))
+    vi.doMock('@/lib/firebase/businesses', () => ({
+      getBusinessBySlug: vi.fn().mockResolvedValue({
+        slug: 'paddleup', name: 'PaddleUp', email: 'admin@paddleup.com',
+        facilities: [{ id: 'court-1', name: 'Court 1', pricePerHour: 500, currency: 'PHP' }],
+      }),
+    }))
+    if (Object.keys(emailOverrides).length > 0) {
+      vi.doMock('@/lib/notifications/email', () => ({
+        sendBookingConfirmation:    vi.fn().mockResolvedValue(undefined),
+        sendAdminBookingNotification: vi.fn().mockResolvedValue(undefined),
+        sendLowBalanceWarning:      vi.fn().mockResolvedValue(undefined),
+        ...emailOverrides,
+      }))
+    }
+    return import('./route')
+  }
+
+  // tx stub used by tests that need a successful booking to complete
+  function txSuccess(updateMock = vi.fn()) {
+    mockRunTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({ get: vi.fn().mockResolvedValue({ docs: [] }), set: vi.fn(), update: updateMock })
+    })
+    return updateMock
+  }
+
+  // ── Suspension gate ────────────────────────────────────────────────────────
+
+  test('returns 503 SERVICE_SUSPENDED when saas_credit_balance is -5', async () => {
+    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: -5 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'SERVICE_SUSPENDED' })
+    expect(mockRunTransaction).not.toHaveBeenCalled()
+  })
+
+  test('returns 503 when saas_credit_balance is below -5', async () => {
+    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: -99 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(503)
+    expect(mockRunTransaction).not.toHaveBeenCalled()
+  })
+
+  test('proceeds when payment_mode is set but saas_credit_balance is -4 (boundary — not yet suspended)', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: -4 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+  })
+
+  test('proceeds when payment_mode is set but saas_credit_balance is absent (wallet not initialised)', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI' })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+  })
+
+  test('proceeds for legacy businesses with no payment_mode regardless of balance', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ saas_credit_balance: -100 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+  })
+
+  // ── Wallet decrement ───────────────────────────────────────────────────────
+
+  test('decrements saas_credit_balance in the transaction for payment_mode businesses', async () => {
+    const updateMock = txSuccess()
+    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.anything(),
+      { saas_credit_balance: FieldValue.increment(-1) },
+    )
+  })
+
+  test('does NOT call tx.update for legacy businesses without payment_mode', async () => {
+    const updateMock = txSuccess()
+    const { POST } = await importRoute({})
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  // ── Low-balance warning email ──────────────────────────────────────────────
+
+  test('sends low-balance warning when new balance hits exactly 5 (saas_credit_balance was 6)', async () => {
+    const mockWarning = vi.fn().mockResolvedValue(undefined)
+    txSuccess()
+    const { POST } = await importRoute(
+      { payment_mode: 'MANUAL_AI', saas_credit_balance: 6, email: 'admin@paddleup.com' },
+      { sendLowBalanceWarning: mockWarning },
+    )
+    await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(mockWarning).toHaveBeenCalledWith(expect.objectContaining({ balance: 5 }))
+  })
+
+  test('sends low-balance warning when new balance hits exactly 0 (saas_credit_balance was 1)', async () => {
+    const mockWarning = vi.fn().mockResolvedValue(undefined)
+    txSuccess()
+    const { POST } = await importRoute(
+      { payment_mode: 'MANUAL_AI', saas_credit_balance: 1, email: 'admin@paddleup.com' },
+      { sendLowBalanceWarning: mockWarning },
+    )
+    await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(mockWarning).toHaveBeenCalledWith(expect.objectContaining({ balance: 0 }))
+  })
+
+  test('does NOT send warning at a non-threshold new balance (saas_credit_balance was 5, new balance = 4)', async () => {
+    const mockWarning = vi.fn().mockResolvedValue(undefined)
+    txSuccess()
+    const { POST } = await importRoute(
+      { payment_mode: 'MANUAL_AI', saas_credit_balance: 5, email: 'admin@paddleup.com' },
+      { sendLowBalanceWarning: mockWarning },
+    )
+    await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(mockWarning).not.toHaveBeenCalled()
   })
 })
