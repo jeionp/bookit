@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
-import { X, CalendarDays, Clock, MapPin, Coins } from "lucide-react";
+import { X, CalendarDays, Clock, MapPin, Coins, QrCode } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getCreditsByBusiness, computeBalance } from "@/lib/firebase/credits";
+import type { PaymentMode } from "@/lib/types";
 
 interface BookingSelection {
   facilityId: string;
@@ -25,6 +27,8 @@ interface BookingConfirmModalProps {
   businessName: string;
   businessLocation: string;
   accentColor: string;
+  paymentMode?: PaymentMode;
+  staticQrUrl?: string | null;
 }
 
 function formatHour(h: number): string {
@@ -44,11 +48,13 @@ export default function BookingConfirmModal({
   businessName,
   businessLocation,
   accentColor,
+  paymentMode,
+  staticQrUrl,
 }: BookingConfirmModalProps) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
+  const [checkoutType, setCheckoutType] = useState<"confirmed" | "P2P_AI" | null>(null);
   const [creditBalance, setCreditBalance] = useState(0);
   const [useCredits, setUseCredits] = useState(false);
 
@@ -99,8 +105,8 @@ export default function BookingConfirmModal({
           ...(appliedCredit > 0 && { creditAmount: appliedCredit }),
         }),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         if (body.error === "SLOT_UNAVAILABLE") {
           setError("One or more slots you selected were just booked by someone else. Please pick a different time.");
         } else {
@@ -108,7 +114,7 @@ export default function BookingConfirmModal({
         }
         return;
       }
-      setDone(true);
+      setCheckoutType(body.checkout_type === "P2P_AI" ? "P2P_AI" : "confirmed");
     } catch {
       setError("Failed to save booking. Please try again.");
     } finally {
@@ -117,11 +123,12 @@ export default function BookingConfirmModal({
   }
 
   function handleClose() {
-    setDone(false);
+    const wasComplete = checkoutType !== null;
+    setCheckoutType(null);
     setError("");
     setUseCredits(false);
     onClose();
-    if (done) onSuccess();
+    if (wasComplete) onSuccess();
   }
 
   return (
@@ -132,7 +139,11 @@ export default function BookingConfirmModal({
         {/* Header */}
         <div className="px-6 pt-6 pb-4 flex items-center justify-between">
           <h2 className="text-xl font-black text-gray-900">
-            {done ? "Booking Confirmed!" : "Confirm Booking"}
+            {checkoutType === "P2P_AI"
+              ? "Slot Reserved!"
+              : checkoutType === "confirmed"
+              ? "Booking Confirmed!"
+              : "Confirm Booking"}
           </h2>
           <button
             onClick={handleClose}
@@ -142,8 +153,8 @@ export default function BookingConfirmModal({
           </button>
         </div>
 
-        {done ? (
-          /* Success state */
+        {checkoutType === "confirmed" ? (
+          /* Instant-confirm success */
           <div className="px-6 pb-8 text-center space-y-4">
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl"
@@ -169,6 +180,57 @@ export default function BookingConfirmModal({
               style={{ backgroundColor: accentColor }}
             >
               Done
+            </button>
+          </div>
+        ) : checkoutType === "P2P_AI" ? (
+          /* P2P slot-held: show static QR and payment instructions */
+          <div className="px-6 pb-6 space-y-4">
+            <div className="bg-blue-50 rounded-2xl p-3 text-center">
+              <p className="text-xs font-semibold text-blue-700">
+                Slot held for 24 hours — send payment to confirm
+              </p>
+            </div>
+            {staticQrUrl ? (
+              <div className="flex justify-center">
+                <div className="border-2 border-gray-200 rounded-2xl p-2 bg-white">
+                  <Image
+                    src={staticQrUrl}
+                    alt="GCash QR code"
+                    width={200}
+                    height={200}
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <div className="w-[200px] h-[200px] border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-gray-400">
+                  <QrCode size={36} />
+                  <p className="text-xs text-center px-4">Contact the venue for payment details</p>
+                </div>
+              </div>
+            )}
+            <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{selection.facilityName}</span>
+                <span className="font-semibold text-gray-900">
+                  {selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">{formatHour(startHour)} – {formatHour(endHour)}</span>
+                <span className="font-black text-gray-900">₱{amountDue.toLocaleString()}</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 text-center leading-relaxed">
+              Scan the GCash QR and send the exact amount. Upload your payment proof to confirm your booking.
+            </p>
+            <button
+              onClick={handleClose}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white"
+              style={{ backgroundColor: accentColor }}
+            >
+              Got it
             </button>
           </div>
         ) : (
