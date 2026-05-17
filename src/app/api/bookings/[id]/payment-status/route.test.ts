@@ -8,6 +8,7 @@ const {
   mockAdminGet,
   mockBizGet,
   mockBizUpdate,
+  mockLedgerAdd,
   mockRunTransaction,
   mockSendBookingConfirmation,
   mockSendAdminBookingNotification,
@@ -19,6 +20,7 @@ const {
   mockAdminGet:                     vi.fn(),
   mockBizGet:                       vi.fn(),
   mockBizUpdate:                    vi.fn(),
+  mockLedgerAdd:                    vi.fn(),
   mockRunTransaction:               vi.fn(),
   mockSendBookingConfirmation:      vi.fn(),
   mockSendAdminBookingNotification: vi.fn(),
@@ -30,18 +32,18 @@ vi.mock('@/lib/firebase/admin-app', () => ({
   adminDb: {
     collection: (name: string) => ({
       doc: () => {
-        if (name === 'bookings')    return { get: mockBookingGet, update: mockBookingUpdate }
-        if (name === 'admins')      return { get: mockAdminGet }
-        if (name === 'businesses')  return { get: mockBizGet, update: mockBizUpdate }
+        if (name === 'bookings')   return { get: mockBookingGet, update: mockBookingUpdate }
+        if (name === 'admins')     return { get: mockAdminGet }
+        if (name === 'businesses') return {
+          get: mockBizGet,
+          update: mockBizUpdate,
+          collection: () => ({ add: mockLedgerAdd }),
+        }
         return {}
       },
     }),
     runTransaction: mockRunTransaction,
   },
-}))
-
-vi.mock('firebase-admin/firestore', () => ({
-  FieldValue: { serverTimestamp: () => ({ _sentinel: 'serverTimestamp' }) },
 }))
 
 vi.mock('firebase-admin/firestore', () => ({
@@ -485,5 +487,54 @@ describe('PATCH /api/bookings/[id]/payment-status', () => {
     const res = await PATCH(makeReq({ action: 'reject' }), { params })
     expect(res.status).toBe(200)
     expect(mockBizUpdate).not.toHaveBeenCalled()
+  })
+
+  // ── Ledger entry writes ───────────────────────────────────────────────────
+
+  test('approve: ledger entry is written to businesses subcollection', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockApproveTransaction(P2P_BOOKING)
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 10 }) })
+    mockLedgerAdd.mockResolvedValue({ id: 'entry-1' })
+
+    const res = await PATCH(makeReq({ action: 'approve' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockLedgerAdd).toHaveBeenCalledOnce()
+    expect(mockLedgerAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        trigger: 'admin_approve',
+        balanceBefore: 10,
+        balanceAfter: 9,
+      }),
+    )
+  })
+
+  test('mark_paid: ledger entry is written to businesses subcollection', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => CASH_BOOKING })
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 8 }) })
+    mockLedgerAdd.mockResolvedValue({ id: 'entry-2' })
+
+    const res = await PATCH(makeReq({ action: 'mark_paid' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockLedgerAdd).toHaveBeenCalledOnce()
+    expect(mockLedgerAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        trigger: 'admin_mark_paid',
+        balanceBefore: 8,
+        balanceAfter: 7,
+      }),
+    )
+  })
+
+  test('reject: ledger entry is NOT written', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 10 }) })
+    mockLedgerAdd.mockResolvedValue({ id: 'entry-3' })
+
+    const res = await PATCH(makeReq({ action: 'reject' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockLedgerAdd).not.toHaveBeenCalled()
   })
 })

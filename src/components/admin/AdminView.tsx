@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, ExternalLink, CalendarDays, BarChart2, Settings } from "lucide-react";
+import { LogOut, ExternalLink, CalendarDays, BarChart2, Settings, CreditCard } from "lucide-react";
 import Link from "next/link";
 import { Business } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 import AdminScheduleView from "./AdminScheduleView";
 import AdminAnalyticsView from "./AdminAnalyticsView";
 import AdminSettingsView from "./AdminSettingsView";
+import AdminPaymentsView from "./AdminPaymentsView";
 
-type Tab = "schedule" | "analytics" | "settings";
+type Tab = "schedule" | "analytics" | "settings" | "payments";
 
 export default function AdminView({ business }: { business: Business }) {
   const { signOut } = useAuth();
@@ -71,6 +72,13 @@ export default function AdminView({ business }: { business: Business }) {
           label="Settings"
           accent={business.accentColor}
         />
+        <TabButton
+          active={tab === "payments"}
+          onClick={() => setTab("payments")}
+          icon={<CreditCard size={14} />}
+          label="Payments"
+          accent={business.accentColor}
+        />
       </div>
 
       {/* Content */}
@@ -79,8 +87,10 @@ export default function AdminView({ business }: { business: Business }) {
           <AdminScheduleView business={business} />
         ) : tab === "analytics" ? (
           <AdminAnalyticsView business={business} />
-        ) : (
+        ) : tab === "settings" ? (
           <AdminSettingsView business={business} />
+        ) : (
+          <AdminPaymentsView business={business} />
         )}
       </div>
     </div>

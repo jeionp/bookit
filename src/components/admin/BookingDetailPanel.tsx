@@ -142,6 +142,37 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
   const [paymentActionLoading, setPaymentActionLoading] = useState(false);
   const [paymentActionError, setPaymentActionError] = useState<string | null>(null);
 
+  const [simulateLoading, setSimulateLoading] = useState(false);
+  const [simulateError, setSimulateError] = useState<string | null>(null);
+
+  async function callSimulate(outcome: "success" | "failure") {
+    setSimulateLoading(true);
+    setSimulateError(null);
+    try {
+      const res = await fetch("/api/payments/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: booking.id, outcome }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setSimulateError((body as { error?: string }).error ?? "Simulate failed");
+        return;
+      }
+      if (outcome === "success") {
+        setLocalPaymentStatus("paid");
+        setLocalStatus("confirmed");
+      } else {
+        setLocalPaymentStatus("rejected");
+        setLocalStatus("expired");
+      }
+    } catch {
+      setSimulateError("Network error");
+    } finally {
+      setSimulateLoading(false);
+    }
+  }
+
   async function callPaymentAction(action: "approve" | "reject" | "mark_paid") {
     if (!user) return;
     setPaymentActionLoading(true);
@@ -682,6 +713,34 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
               >
                 {paymentActionLoading ? "Processing…" : "Mark as Paid"}
               </button>
+            )}
+
+            {booking.checkout_type === "GATEWAY_SPLIT" && localPaymentStatus === "pending_gateway" && (
+              <div className="space-y-2 border border-dashed border-amber-200 rounded-xl p-3 bg-amber-50">
+                <p className="text-xs font-semibold text-amber-700">Testing Mode — Simulate Payment</p>
+                {simulateError && (
+                  <p className="text-xs text-red-600">{simulateError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void callSimulate("success")}
+                    disabled={simulateLoading}
+                    className="flex-1 text-xs font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "#16a34a" }}
+                    data-testid="simulate-success-btn"
+                  >
+                    {simulateLoading ? "Processing…" : "Simulate Success"}
+                  </button>
+                  <button
+                    onClick={() => void callSimulate("failure")}
+                    disabled={simulateLoading}
+                    className="flex-1 text-xs font-semibold py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    data-testid="simulate-failure-btn"
+                  >
+                    Simulate Failure
+                  </button>
+                </div>
+              </div>
             )}
 
             <div className="pt-2 space-y-2 border-t border-gray-100">
