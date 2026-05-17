@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { X, CalendarDays, Clock, MapPin, Coins, QrCode, Upload, Banknote } from "lucide-react";
+import { X, CalendarDays, Clock, MapPin, Coins, QrCode, Upload, Banknote, CreditCard } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuth } from "@/context/AuthContext";
 import { getCreditsByBusiness, computeBalance } from "@/lib/firebase/credits";
@@ -30,6 +30,7 @@ interface BookingConfirmModalProps {
   accentColor: string;
   acceptsQr?: boolean;
   acceptsCash?: boolean;
+  acceptsGateway?: boolean;
   staticQrUrl?: string | null;
 }
 
@@ -40,7 +41,7 @@ function formatHour(h: number): string {
   return `${h - 12} PM`;
 }
 
-type CheckoutState = "confirmed" | "PAY_AT_VENUE" | "P2P_AI" | "P2P_upload" | "P2P_submitted" | null;
+type CheckoutState = "confirmed" | "PAY_AT_VENUE" | "P2P_AI" | "P2P_upload" | "P2P_submitted" | "GATEWAY_SPLIT" | null;
 
 export default function BookingConfirmModal({
   open,
@@ -54,6 +55,7 @@ export default function BookingConfirmModal({
   accentColor,
   acceptsQr,
   acceptsCash,
+  acceptsGateway,
   staticQrUrl,
 }: BookingConfirmModalProps) {
   const { user } = useAuth();
@@ -67,9 +69,10 @@ export default function BookingConfirmModal({
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // When both payment options are available the player must pick one before confirming.
-  const bothOptions = acceptsQr && acceptsCash;
-  const [selectedPaymentOption, setSelectedPaymentOption] = useState<"P2P_AI" | "PAY_AT_VENUE" | null>(null);
+  // When multiple payment options are available the player must pick one before confirming.
+  const optionCount = [acceptsQr, acceptsCash, acceptsGateway].filter(Boolean).length;
+  const multipleOptions = optionCount > 1;
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState<"P2P_AI" | "PAY_AT_VENUE" | "GATEWAY_SPLIT" | null>(null);
 
   useEffect(() => {
     if (!open || !user) return;
@@ -99,13 +102,14 @@ export default function BookingConfirmModal({
   ].join("-");
 
   // Resolve the checkout_type to send to the API:
-  // — both options: use the player's pick (null = not yet chosen, submit is blocked)
+  // — multiple options: use the player's pick (null = not yet chosen, submit is blocked)
   // — one option: send it explicitly so the server doesn't have to guess
   // — no options: omit (instant-confirm)
-  const resolvedPaymentOption: "P2P_AI" | "PAY_AT_VENUE" | null =
-    bothOptions          ? selectedPaymentOption :
-    acceptsQr            ? "P2P_AI"              :
-    acceptsCash          ? "PAY_AT_VENUE"         :
+  const resolvedPaymentOption: "P2P_AI" | "PAY_AT_VENUE" | "GATEWAY_SPLIT" | null =
+    multipleOptions  ? selectedPaymentOption :
+    acceptsQr        ? "P2P_AI"              :
+    acceptsCash      ? "PAY_AT_VENUE"        :
+    acceptsGateway   ? "GATEWAY_SPLIT"       :
     null;
 
   async function handleConfirm() {
@@ -139,6 +143,32 @@ export default function BookingConfirmModal({
         return;
       }
       setBookingId(body.bookingId ?? null);
+
+      if (body.checkout_type === "GATEWAY_SPLIT") {
+        // Create the payment session and redirect — loading stays true until redirect
+        try {
+          const sessionRes = await fetch("/api/payments/create-session", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({ bookingId: body.bookingId }),
+          });
+          const sessionBody = await sessionRes.json().catch(() => ({})) as { checkoutUrl?: string };
+          if (!sessionRes.ok || !sessionBody.checkoutUrl) {
+            setError("Could not prepare payment. Please try again.");
+            return;
+          }
+          window.location.href = sessionBody.checkoutUrl;
+        } catch {
+          setError("Could not prepare payment. Please try again.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       setCheckoutType(
         body.checkout_type === "P2P_AI"       ? "P2P_AI"       :
         body.checkout_type === "PAY_AT_VENUE" ? "PAY_AT_VENUE" :
@@ -194,11 +224,12 @@ export default function BookingConfirmModal({
   }
 
   function headerTitle() {
-    if (checkoutType === "confirmed")    return "Booking Confirmed!";
-    if (checkoutType === "PAY_AT_VENUE") return "Booking Confirmed!";
-    if (checkoutType === "P2P_AI")       return "Slot Reserved!";
-    if (checkoutType === "P2P_upload")   return "Upload Proof";
+    if (checkoutType === "confirmed")     return "Booking Confirmed!";
+    if (checkoutType === "PAY_AT_VENUE")  return "Booking Confirmed!";
+    if (checkoutType === "P2P_AI")        return "Slot Reserved!";
+    if (checkoutType === "P2P_upload")    return "Upload Proof";
     if (checkoutType === "P2P_submitted") return "Proof Submitted!";
+    if (checkoutType === "GATEWAY_SPLIT") return "Redirecting…";
     return "Confirm Booking";
   }
 
@@ -525,42 +556,64 @@ export default function BookingConfirmModal({
               )}
             </div>
 
-            {/* Payment method choice — shown only when both options are enabled */}
-            {bothOptions && (
+            {/* Payment method choice — shown only when multiple options are enabled */}
+            {multipleOptions && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-500">How would you like to pay?</p>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPaymentOption("P2P_AI")}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors"
-                  style={selectedPaymentOption === "P2P_AI"
-                    ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
-                    : { borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}
-                >
-                  <QrCode size={18} style={{ color: selectedPaymentOption === "P2P_AI" ? accentColor : "#9ca3af" }} />
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: selectedPaymentOption === "P2P_AI" ? accentColor : "#374151" }}>
-                      Pay via GCash QR
-                    </p>
-                    <p className="text-xs text-gray-400">Upload your receipt after paying</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPaymentOption("PAY_AT_VENUE")}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors"
-                  style={selectedPaymentOption === "PAY_AT_VENUE"
-                    ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
-                    : { borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}
-                >
-                  <Banknote size={18} style={{ color: selectedPaymentOption === "PAY_AT_VENUE" ? accentColor : "#9ca3af" }} />
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: selectedPaymentOption === "PAY_AT_VENUE" ? accentColor : "#374151" }}>
-                      Pay at Venue
-                    </p>
-                    <p className="text-xs text-gray-400">Bring cash on the day of your booking</p>
-                  </div>
-                </button>
+                {acceptsQr && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentOption("P2P_AI")}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors"
+                    style={selectedPaymentOption === "P2P_AI"
+                      ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
+                      : { borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}
+                  >
+                    <QrCode size={18} style={{ color: selectedPaymentOption === "P2P_AI" ? accentColor : "#9ca3af" }} />
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: selectedPaymentOption === "P2P_AI" ? accentColor : "#374151" }}>
+                        Pay via GCash QR
+                      </p>
+                      <p className="text-xs text-gray-400">Upload your receipt after paying</p>
+                    </div>
+                  </button>
+                )}
+                {acceptsCash && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentOption("PAY_AT_VENUE")}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors"
+                    style={selectedPaymentOption === "PAY_AT_VENUE"
+                      ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
+                      : { borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}
+                  >
+                    <Banknote size={18} style={{ color: selectedPaymentOption === "PAY_AT_VENUE" ? accentColor : "#9ca3af" }} />
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: selectedPaymentOption === "PAY_AT_VENUE" ? accentColor : "#374151" }}>
+                        Pay at Venue
+                      </p>
+                      <p className="text-xs text-gray-400">Bring cash on the day of your booking</p>
+                    </div>
+                  </button>
+                )}
+                {acceptsGateway && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentOption("GATEWAY_SPLIT")}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-colors"
+                    style={selectedPaymentOption === "GATEWAY_SPLIT"
+                      ? { borderColor: accentColor, backgroundColor: `${accentColor}08` }
+                      : { borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}
+                  >
+                    <CreditCard size={18} style={{ color: selectedPaymentOption === "GATEWAY_SPLIT" ? accentColor : "#9ca3af" }} />
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: selectedPaymentOption === "GATEWAY_SPLIT" ? accentColor : "#374151" }}>
+                        Pay Online
+                      </p>
+                      <p className="text-xs text-gray-400">GCash, Maya, credit/debit card</p>
+                    </div>
+                  </button>
+                )}
               </div>
             )}
 
@@ -579,7 +632,7 @@ export default function BookingConfirmModal({
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={loading || (bothOptions && !selectedPaymentOption)}
+                disabled={loading || (multipleOptions && !selectedPaymentOption)}
                 className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                 style={{ backgroundColor: accentColor }}
               >

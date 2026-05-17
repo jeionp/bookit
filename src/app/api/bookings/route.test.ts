@@ -777,3 +777,138 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
     expect(payload.held_until).toBeUndefined()
   })
 })
+
+// ─── GATEWAY_SPLIT booking creation tests (phase 8) ──────────────────────────
+// Cover the isGateway branch in POST /api/bookings:
+//   1. Booking written with slot_held status and GATEWAY_SPLIT fields + held_until
+//   2. Response includes checkout_type: GATEWAY_SPLIT
+//   3. Confirmation emails are suppressed (same as P2P)
+//   4. accepts_gateway=true triggers GATEWAY_SPLIT auto-resolve when no other options set
+//   5. accepts_gateway combined with other options requires explicit checkout_type
+
+describe('POST /api/bookings — GATEWAY_SPLIT flow', () => {
+  beforeEach(() => {
+    mockVerifyIdToken.mockReset()
+    mockRunTransaction.mockReset()
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email: 'a@b.com', name: 'Alice' })
+  })
+
+  afterEach(() => {
+    vi.resetModules()
+  })
+
+  function makeAdminDbMock(bizData: Record<string, unknown>) {
+    return {
+      collection: (name: string) => ({
+        doc: () => ({
+          id:  'new-booking-id',
+          get: vi.fn().mockResolvedValue({ data: () => (name === 'businesses' ? bizData : {}) }),
+        }),
+        where: function () { return this },
+      }),
+      runTransaction: mockRunTransaction,
+    }
+  }
+
+  async function importRoute(bizData: Record<string, unknown>) {
+    vi.resetModules()
+    const mockSendConfirm  = vi.fn().mockResolvedValue(undefined)
+    const mockSendAdmin    = vi.fn().mockResolvedValue(undefined)
+    vi.doMock('@/lib/firebase/admin-app', () => ({
+      adminAuth: { verifyIdToken: mockVerifyIdToken },
+      adminDb: makeAdminDbMock(bizData),
+    }))
+    vi.doMock('@/lib/firebase/businesses', () => ({
+      getBusinessBySlug: vi.fn().mockResolvedValue({
+        slug: 'paddleup', name: 'PaddleUp', email: 'admin@paddleup.com', address: '1 Court Lane',
+        facilities: [{ id: 'court-1', name: 'Court 1', pricePerHour: 500, currency: 'PHP' }],
+      }),
+    }))
+    vi.doMock('@/lib/notifications/email', () => ({
+      sendBookingConfirmation:      mockSendConfirm,
+      sendAdminBookingNotification: mockSendAdmin,
+      sendLowBalanceWarning:        vi.fn().mockResolvedValue(undefined),
+    }))
+    const route = await import('./route')
+    return { route, mockSendConfirm, mockSendAdmin }
+  }
+
+  function txWithSet(setMock = vi.fn()) {
+    mockRunTransaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({ get: vi.fn().mockResolvedValue({ docs: [] }), set: setMock, update: vi.fn() })
+    })
+    return setMock
+  }
+
+  test('writes slot_held booking with GATEWAY_SPLIT fields when accepts_gateway is true', async () => {
+    const setMock = txWithSet()
+    const { route } = await importRoute({ accepts_gateway: true, saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(
+      { ...VALID_BODY, checkout_type: 'GATEWAY_SPLIT' }, { token: 'tok' }
+    ))
+    expect(res.status).toBe(201)
+    const payload = setMock.mock.calls[0][1] as Record<string, unknown>
+    expect(payload.status).toBe('slot_held')
+    expect(payload.checkout_type).toBe('GATEWAY_SPLIT')
+    expect(payload.payment_status_v2).toBe('pending_gateway')
+    expect(payload.held_until).toBeDefined()
+  })
+
+  test('response includes checkout_type GATEWAY_SPLIT', async () => {
+    txWithSet()
+    const { route } = await importRoute({ accepts_gateway: true, saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(
+      { ...VALID_BODY, checkout_type: 'GATEWAY_SPLIT' }, { token: 'tok' }
+    ))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('GATEWAY_SPLIT')
+  })
+
+  test('does NOT send confirmation emails for GATEWAY_SPLIT slot_held bookings', async () => {
+    txWithSet()
+    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
+      accepts_gateway: true, saas_credit_balance: 10,
+    })
+    await route.POST(makeReq({ ...VALID_BODY, checkout_type: 'GATEWAY_SPLIT' }, { token: 'tok' }))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(mockSendConfirm).not.toHaveBeenCalled()
+    expect(mockSendAdmin).not.toHaveBeenCalled()
+  })
+
+  test('auto-resolves GATEWAY_SPLIT when accepts_gateway is the only option', async () => {
+    const setMock = txWithSet()
+    const { route } = await importRoute({ accepts_gateway: true, saas_credit_balance: 10 })
+    // No checkout_type in request — should auto-resolve to GATEWAY_SPLIT
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const payload = setMock.mock.calls[0][1] as Record<string, unknown>
+    expect(payload.checkout_type).toBe('GATEWAY_SPLIT')
+  })
+
+  test('400 when player sends GATEWAY_SPLIT but business does not accept gateway', async () => {
+    const { route } = await importRoute({ accepts_cash: true, saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(
+      { ...VALID_BODY, checkout_type: 'GATEWAY_SPLIT' }, { token: 'tok' }
+    ))
+    expect(res.status).toBe(400)
+  })
+
+  test('400 when gateway + cash are both enabled but no checkout_type sent', async () => {
+    const { route } = await importRoute({ accepts_gateway: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(400)
+    const body = await res.json() as Record<string, string>
+    expect(body.error).toBe('checkout_type required')
+  })
+
+  test('suspension gate fires for accepts_gateway business when balance <= -5', async () => {
+    const { route } = await importRoute({ accepts_gateway: true, saas_credit_balance: -5 })
+    const res = await route.POST(makeReq(
+      { ...VALID_BODY, checkout_type: 'GATEWAY_SPLIT' }, { token: 'tok' }
+    ))
+    expect(res.status).toBe(503)
+  })
+})

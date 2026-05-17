@@ -69,8 +69,9 @@ export interface Business {
   cancellationPolicy?: CancellationPolicy;
   // Payment options — absent on legacy businesses (instant-confirm flow unchanged).
   // Both can be true; player picks at checkout.
-  accepts_qr?: boolean;   // P2P GCash QR + AI receipt verification
-  accepts_cash?: boolean; // Pay at Venue — cash collected on the day
+  accepts_qr?: boolean;      // P2P GCash QR + AI receipt verification
+  accepts_cash?: boolean;    // Pay at Venue — cash collected on the day
+  accepts_gateway?: boolean; // Online payment gateway (PayMongo / Xendit / HitPay)
   saas_credit_balance?: number;
   static_qr_url?: string | null;
   gateway_sub_account_id?: string | null;

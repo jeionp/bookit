@@ -30,7 +30,7 @@ export interface CreateBookingRequest {
   hours: number[];
   businessSlug: string;
   creditAmount?: number;
-  checkout_type?: "P2P_AI" | "PAY_AT_VENUE";
+  checkout_type?: "P2P_AI" | "PAY_AT_VENUE" | "GATEWAY_SPLIT";
 }
 
 async function calcPrice(businessSlug: string, facilityId: string, hours: number[]): Promise<{
@@ -130,9 +130,10 @@ export async function POST(req: NextRequest) {
   // Reject new bookings when the balance has dropped to the suspension threshold.
   const bizDoc = await adminDb.collection("businesses").doc(businessSlug).get();
   const bizData = bizDoc.data() ?? {};
-  const acceptsQr   = bizData.accepts_qr   === true;
-  const acceptsCash = bizData.accepts_cash === true;
-  const hasPaymentOptions = acceptsQr || acceptsCash;
+  const acceptsQr      = bizData.accepts_qr      === true;
+  const acceptsCash    = bizData.accepts_cash    === true;
+  const acceptsGateway = bizData.accepts_gateway === true;
+  const hasPaymentOptions = acceptsQr || acceptsCash || acceptsGateway;
   const saasBalance = typeof bizData.saas_credit_balance === "number"
     ? bizData.saas_credit_balance
     : undefined;
@@ -142,20 +143,27 @@ export async function POST(req: NextRequest) {
   }
 
   // Resolve the checkout type from the player's explicit choice or the business config.
-  // If both options are enabled the player must send checkout_type — reject if missing.
-  let resolvedCheckoutType: "P2P_AI" | "PAY_AT_VENUE" | null = null;
+  // When the business has exactly one option enabled, auto-resolve without requiring the client
+  // to send checkout_type. When multiple options are enabled, checkout_type is required.
+  let resolvedCheckoutType: "P2P_AI" | "PAY_AT_VENUE" | "GATEWAY_SPLIT" | null = null;
   if (requestedCheckoutType === "P2P_AI") {
     if (!acceptsQr) return NextResponse.json({ error: "Payment method not accepted" }, { status: 400 });
     resolvedCheckoutType = "P2P_AI";
   } else if (requestedCheckoutType === "PAY_AT_VENUE") {
     if (!acceptsCash) return NextResponse.json({ error: "Payment method not accepted" }, { status: 400 });
     resolvedCheckoutType = "PAY_AT_VENUE";
-  } else if (acceptsQr && !acceptsCash) {
-    resolvedCheckoutType = "P2P_AI";
-  } else if (acceptsCash && !acceptsQr) {
-    resolvedCheckoutType = "PAY_AT_VENUE";
-  } else if (acceptsQr && acceptsCash) {
-    return NextResponse.json({ error: "checkout_type required" }, { status: 400 });
+  } else if (requestedCheckoutType === "GATEWAY_SPLIT") {
+    if (!acceptsGateway) return NextResponse.json({ error: "Payment method not accepted" }, { status: 400 });
+    resolvedCheckoutType = "GATEWAY_SPLIT";
+  } else {
+    const enabledOptions = (
+      [acceptsQr && "P2P_AI", acceptsCash && "PAY_AT_VENUE", acceptsGateway && "GATEWAY_SPLIT"] as const
+    ).filter(Boolean) as ("P2P_AI" | "PAY_AT_VENUE" | "GATEWAY_SPLIT")[];
+    if (enabledOptions.length === 1) {
+      resolvedCheckoutType = enabledOptions[0];
+    } else if (enabledOptions.length > 1) {
+      return NextResponse.json({ error: "checkout_type required" }, { status: 400 });
+    }
   }
 
   // Clamp creditAmount to totalPrice — can't overpay with credits
@@ -184,11 +192,13 @@ export async function POST(req: NextRequest) {
 
   // P2P flow: slot is held pending payment proof; confirmed when proof is approved.
   // Pay-at-venue: booking is confirmed immediately, cash collected on the day.
-  const isP2P = resolvedCheckoutType === "P2P_AI";
+  // Gateway: slot is held pending payment completion via the gateway checkout.
+  const isP2P        = resolvedCheckoutType === "P2P_AI";
   const isPayAtVenue = resolvedCheckoutType === "PAY_AT_VENUE";
-  const bookingStatus = isP2P ? "slot_held" : "confirmed";
+  const isGateway    = resolvedCheckoutType === "GATEWAY_SPLIT";
+  const bookingStatus = (isP2P || isGateway) ? "slot_held" : "confirmed";
   const HOLD_HOURS = 24;
-  const heldUntil = isP2P
+  const heldUntil = (isP2P || isGateway)
     ? Timestamp.fromMillis(Date.now() + HOLD_HOURS * 60 * 60 * 1000)
     : null;
 
@@ -238,6 +248,11 @@ export async function POST(req: NextRequest) {
           checkout_type: "PAY_AT_VENUE",
           payment_status_v2: "pending_cash",
         }),
+        ...(isGateway && {
+          checkout_type: "GATEWAY_SPLIT",
+          payment_status_v2: "pending_gateway",
+          held_until: heldUntil,
+        }),
         ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -274,7 +289,7 @@ export async function POST(req: NextRequest) {
   // Low-balance warnings fire at payment confirmation, not here.
 
   // Confirmation emails only after instant-confirm (slot_held bookings are not confirmed yet).
-  if (!isP2P) {
+  if (!isP2P && !isGateway) {
     const notificationData = {
       customerEmail: email,
       customerName: displayName,
@@ -301,6 +316,7 @@ export async function POST(req: NextRequest) {
       creditApplied: appliedCredit > 0 ? appliedCredit : undefined,
       ...(isP2P && { checkout_type: "P2P_AI", static_qr_url: (bizData.static_qr_url as string | null) ?? null }),
       ...(isPayAtVenue && { checkout_type: "PAY_AT_VENUE" }),
+      ...(isGateway && { checkout_type: "GATEWAY_SPLIT" }),
     },
     { status: 201 },
   );
