@@ -7,18 +7,22 @@ const {
   mockBookingUpdate,
   mockAdminGet,
   mockBizGet,
+  mockBizUpdate,
   mockRunTransaction,
   mockSendBookingConfirmation,
   mockSendAdminBookingNotification,
+  mockSendLowBalanceWarning,
 } = vi.hoisted(() => ({
   mockVerifyIdToken:                vi.fn(),
   mockBookingGet:                   vi.fn(),
   mockBookingUpdate:                vi.fn(),
   mockAdminGet:                     vi.fn(),
   mockBizGet:                       vi.fn(),
+  mockBizUpdate:                    vi.fn(),
   mockRunTransaction:               vi.fn(),
   mockSendBookingConfirmation:      vi.fn(),
   mockSendAdminBookingNotification: vi.fn(),
+  mockSendLowBalanceWarning:        vi.fn(),
 }))
 
 vi.mock('@/lib/firebase/admin-app', () => ({
@@ -28,7 +32,7 @@ vi.mock('@/lib/firebase/admin-app', () => ({
       doc: () => {
         if (name === 'bookings')    return { get: mockBookingGet, update: mockBookingUpdate }
         if (name === 'admins')      return { get: mockAdminGet }
-        if (name === 'businesses')  return { get: mockBizGet }
+        if (name === 'businesses')  return { get: mockBizGet, update: mockBizUpdate }
         return {}
       },
     }),
@@ -40,9 +44,17 @@ vi.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => ({ _sentinel: 'serverTimestamp' }) },
 }))
 
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: {
+    serverTimestamp: () => ({ _sentinel: 'serverTimestamp' }),
+    increment: (n: number) => ({ _sentinel: 'increment', value: n }),
+  },
+}))
+
 vi.mock('@/lib/notifications/email', () => ({
   sendBookingConfirmation:      mockSendBookingConfirmation,
   sendAdminBookingNotification: mockSendAdminBookingNotification,
+  sendLowBalanceWarning:        mockSendLowBalanceWarning,
 }))
 
 function makeReq(body: unknown, token = 'valid-token'): NextRequest {
@@ -113,9 +125,11 @@ describe('PATCH /api/bookings/[id]/payment-status', () => {
     mockVerifyIdToken.mockResolvedValue({ uid: 'admin-uid' })
     mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['biz-slug'] }) })
     mockBizGet.mockResolvedValue({ exists: true, data: () => BIZ_DATA })
+    mockBizUpdate.mockResolvedValue(undefined)
     mockBookingUpdate.mockResolvedValue(undefined)
     mockSendBookingConfirmation.mockResolvedValue(undefined)
     mockSendAdminBookingNotification.mockResolvedValue(undefined)
+    mockSendLowBalanceWarning.mockResolvedValue(undefined)
   })
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -346,5 +360,130 @@ describe('PATCH /api/bookings/[id]/payment-status', () => {
     const res = await PATCH(makeReq({ action: 'mark_paid' }), { params })
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: 'Booking is not a pending cash payment' })
+  })
+
+  // ── SaaS credit deduction — approve ──────────────────────────────────────────
+
+  test('approve: decrements saas_credit_balance on biz doc after transaction succeeds', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockApproveTransaction(P2P_BOOKING)
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 10 }) })
+
+    const res = await PATCH(makeReq({ action: 'approve' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockBizUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ saas_credit_balance: expect.objectContaining({ value: -1 }) }),
+    )
+  })
+
+  test('approve: does NOT crash and skips biz update when saas_credit_balance is absent', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockApproveTransaction(P2P_BOOKING)
+    // No saas_credit_balance field on the business doc
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA }) })
+
+    const res = await PATCH(makeReq({ action: 'approve' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockBizUpdate).not.toHaveBeenCalled()
+  })
+
+  test('approve: fires low-balance warning when newBalance is exactly 5', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockApproveTransaction(P2P_BOOKING)
+    // balance 6 → newBalance 5 → warning fires
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 6 }) })
+
+    await PATCH(makeReq({ action: 'approve' }), { params })
+    await Promise.resolve() // flush fire-and-forget
+
+    expect(mockSendLowBalanceWarning).toHaveBeenCalledWith(
+      expect.objectContaining({ balance: 5 }),
+    )
+  })
+
+  test('approve: fires low-balance warning when newBalance is exactly 0', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockApproveTransaction(P2P_BOOKING)
+    // balance 1 → newBalance 0 → warning fires
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 1 }) })
+
+    await PATCH(makeReq({ action: 'approve' }), { params })
+    await Promise.resolve()
+
+    expect(mockSendLowBalanceWarning).toHaveBeenCalledWith(
+      expect.objectContaining({ balance: 0 }),
+    )
+  })
+
+  test('approve: does NOT fire low-balance warning when newBalance is 4 (not a threshold)', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockApproveTransaction(P2P_BOOKING)
+    // balance 5 → newBalance 4 → no warning
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 5 }) })
+
+    await PATCH(makeReq({ action: 'approve' }), { params })
+    await Promise.resolve()
+
+    expect(mockSendLowBalanceWarning).not.toHaveBeenCalled()
+  })
+
+  // ── SaaS credit deduction — mark_paid ────────────────────────────────────────
+
+  test('mark_paid: decrements saas_credit_balance on biz doc after marking paid', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => CASH_BOOKING })
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 10 }) })
+
+    const res = await PATCH(makeReq({ action: 'mark_paid' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockBizUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ saas_credit_balance: expect.objectContaining({ value: -1 }) }),
+    )
+  })
+
+  test('mark_paid: does NOT crash when saas_credit_balance is absent on biz doc', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => CASH_BOOKING })
+    // No saas_credit_balance field on the business doc
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA }) })
+
+    const res = await PATCH(makeReq({ action: 'mark_paid' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockBizUpdate).not.toHaveBeenCalled()
+  })
+
+  test('mark_paid: fires low-balance warning when newBalance is exactly 5', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => CASH_BOOKING })
+    // balance 6 → newBalance 5 → warning fires
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 6 }) })
+
+    await PATCH(makeReq({ action: 'mark_paid' }), { params })
+    await Promise.resolve()
+
+    expect(mockSendLowBalanceWarning).toHaveBeenCalledWith(
+      expect.objectContaining({ balance: 5 }),
+    )
+  })
+
+  test('mark_paid: fires low-balance warning when newBalance is exactly 0', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => CASH_BOOKING })
+    // balance 1 → newBalance 0 → warning fires
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 1 }) })
+
+    await PATCH(makeReq({ action: 'mark_paid' }), { params })
+    await Promise.resolve()
+
+    expect(mockSendLowBalanceWarning).toHaveBeenCalledWith(
+      expect.objectContaining({ balance: 0 }),
+    )
+  })
+
+  // ── SaaS credit — reject must NOT touch biz balance ──────────────────────────
+
+  test('reject: does NOT call biz update (credit only deducted on payment confirmation)', async () => {
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => P2P_BOOKING })
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({ ...BIZ_DATA, saas_credit_balance: 10 }) })
+
+    const res = await PATCH(makeReq({ action: 'reject' }), { params })
+    expect(res.status).toBe(200)
+    expect(mockBizUpdate).not.toHaveBeenCalled()
   })
 })

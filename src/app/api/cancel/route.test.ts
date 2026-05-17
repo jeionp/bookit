@@ -1,12 +1,303 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
+import { NextRequest } from 'next/server'
 
-vi.mock('@/lib/firebase/admin-app', () => ({
-  adminAuth: { verifyIdToken: vi.fn() },
-  adminDb:   { collection: vi.fn() },
+const {
+  mockVerifyIdToken,
+  mockBookingGet,
+  mockBookingUpdate,
+  mockBizGet,
+  mockBatch,
+} = vi.hoisted(() => ({
+  mockVerifyIdToken:  vi.fn(),
+  mockBookingGet:     vi.fn(),
+  mockBookingUpdate:  vi.fn(),
+  mockBizGet:         vi.fn(),
+  mockBatch:          {
+    update:  vi.fn(),
+    set:     vi.fn(),
+    commit:  vi.fn().mockResolvedValue(undefined),
+  },
 }))
 
-import { computeTier, getBookingStartMs } from './route'
+// A ref-like object for credits collection new docs
+const CREDIT_REF = {}
+
+vi.mock('@/lib/firebase/admin-app', () => ({
+  adminAuth: { verifyIdToken: mockVerifyIdToken },
+  adminDb: {
+    collection: (name: string) => {
+      if (name === 'bookings') {
+        return { doc: () => ({ get: mockBookingGet, update: mockBookingUpdate }) }
+      }
+      if (name === 'businesses') {
+        return { doc: () => ({ get: mockBizGet }) }
+      }
+      // 'credits' — returns a ref-like object for batch.set
+      return { doc: () => CREDIT_REF }
+    },
+    batch: () => mockBatch,
+  },
+}))
+
+vi.mock('firebase-admin/firestore', () => ({
+  FieldValue: { serverTimestamp: () => ({ _sentinel: 'serverTimestamp' }) },
+  Timestamp:  { fromMillis: (ms: number) => ({ toMillis: () => ms }) },
+}))
+
+vi.mock('@/lib/notifications/email', () => ({
+  sendCancellationReceipt:         vi.fn().mockResolvedValue(undefined),
+  sendAdminCancellationNotification: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { computeTier, getBookingStartMs, POST } from './route'
 import { DEFAULT_CANCELLATION_POLICY, CancellationPolicy } from '@/lib/types'
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+function makeReq(body: object, token = 'valid-token'): NextRequest {
+  return new NextRequest('http://localhost/api/cancel', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  })
+}
+
+const FAR_FUTURE_DATE = '2099-12-31' // always > 24h away → free tier
+
+// ─── Cancel API integration tests (P2P + PAY_AT_VENUE paths) ─────────────────
+
+describe('POST /api/cancel — slot_held / pending_cash fast paths', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' })
+    mockBatch.update.mockReset()
+    mockBatch.set.mockReset()
+    mockBatch.commit.mockResolvedValue(undefined)
+    mockBizGet.mockResolvedValue({ exists: true, data: () => ({}) })
+  })
+
+  // ── slot_held P2P cancellation ────────────────────────────────────────────
+
+  test('cancels slot_held P2P booking immediately with creditAmount 0', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'slot_held', checkout_type: 'P2P_AI', payment_status_v2: 'pending_proof',
+        userEmail: 'player@example.com', userName: 'Player',
+        businessName: 'Test Biz',
+      }),
+    })
+    mockBookingUpdate.mockResolvedValue(undefined)
+
+    const res = await POST(makeReq({ bookingId: 'b-1', choice: 'credit' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.creditAmount).toBe(0)
+    expect(body.tier).toBe('free')
+    expect(mockBookingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled' }),
+    )
+  })
+
+  test('slot_held P2P: does NOT call batch.commit (no store credits written)', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'slot_held', checkout_type: 'P2P_AI', payment_status_v2: 'pending_proof',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+    mockBookingUpdate.mockResolvedValue(undefined)
+
+    await POST(makeReq({ bookingId: 'b-1', choice: 'credit' }))
+    // Fast-path returns before batch.commit is ever reached
+    expect(mockBatch.commit).not.toHaveBeenCalled()
+  })
+
+  test('slot_held P2P: no choice validation required (missing choice still succeeds)', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'slot_held', checkout_type: 'P2P_AI',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+    mockBookingUpdate.mockResolvedValue(undefined)
+
+    // No choice field — fast path should still succeed
+    const res = await POST(makeReq({ bookingId: 'b-1' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.creditAmount).toBe(0)
+  })
+
+  // ── pending_cash PAY_AT_VENUE cancellation ────────────────────────────────
+
+  test('cancels pending_cash PAY_AT_VENUE booking immediately with creditAmount 0', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'confirmed', checkout_type: 'PAY_AT_VENUE', payment_status_v2: 'pending_cash',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+    mockBookingUpdate.mockResolvedValue(undefined)
+
+    const res = await POST(makeReq({ bookingId: 'b-2', choice: 'credit' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.creditAmount).toBe(0)
+    expect(mockBookingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled' }),
+    )
+  })
+
+  test('pending_cash PAY_AT_VENUE: no store credits written (no batch.commit)', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'confirmed', checkout_type: 'PAY_AT_VENUE', payment_status_v2: 'pending_cash',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+    mockBookingUpdate.mockResolvedValue(undefined)
+
+    await POST(makeReq({ bookingId: 'b-2', choice: 'credit' }))
+    expect(mockBatch.commit).not.toHaveBeenCalled()
+  })
+
+  // ── confirmed P2P (paid) — must go through normal policy ─────────────────
+
+  test('confirmed P2P booking (paid) requires choice and applies cancellation policy', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'confirmed', checkout_type: 'P2P_AI', payment_status_v2: 'paid',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+
+    // No choice → 400 (confirmed path validates choice)
+    const res = await POST(makeReq({ bookingId: 'b-3' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('confirmed P2P (paid) with valid choice → 200 and applies refund policy', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'confirmed', checkout_type: 'P2P_AI', payment_status_v2: 'paid',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+
+    const res = await POST(makeReq({ bookingId: 'b-3', choice: 'credit' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    // Far future date → free tier → creditAmount equals totalPrice
+    expect(body.tier).toBe('free')
+    expect(body.creditAmount).toBe(500)
+  })
+
+  // ── corner: slot_held with no checkout_type → normal cancel flow ──────────
+
+  test('slot_held booking with no checkout_type falls through to normal cancel (choice required)', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'slot_held',
+        // checkout_type absent — does not match "P2P_AI"
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+
+    // No choice → falls to the choice validation → 400
+    const res = await POST(makeReq({ bookingId: 'b-4' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('slot_held booking with checkout_type PAY_AT_VENUE and no checkout_type does NOT hit P2P fast path', async () => {
+    // A slot_held booking with PAY_AT_VENUE should NOT hit the P2P fast path.
+    // PAY_AT_VENUE fast path requires payment_status_v2 === 'pending_cash'.
+    // slot_held with PAY_AT_VENUE is unusual but should fall to normal cancel.
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'slot_held', checkout_type: 'PAY_AT_VENUE',
+        // payment_status_v2 is not pending_cash → PAY_AT_VENUE fast path does not fire
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+
+    // No choice → falls to normal cancel policy → 400
+    const res = await POST(makeReq({ bookingId: 'b-5' }))
+    expect(res.status).toBe(400)
+  })
+
+  // ── already-cancelled guard fires before fast paths ───────────────────────
+
+  test('already-cancelled slot_held P2P booking returns 409', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'user-1', businessSlug: 'biz', facilityName: 'Court', currency: 'PHP',
+        date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        status: 'cancelled', checkout_type: 'P2P_AI', payment_status_v2: 'pending_proof',
+        userEmail: 'player@example.com', userName: 'Player', businessName: 'Test Biz',
+      }),
+    })
+
+    const res = await POST(makeReq({ bookingId: 'b-6', choice: 'credit' }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: 'Already cancelled' })
+  })
+
+  // ── auth guards ───────────────────────────────────────────────────────────
+
+  test('returns 401 when no Authorization header', async () => {
+    const req = new NextRequest('http://localhost/api/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ bookingId: 'b-1', choice: 'credit' }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(401)
+  })
+
+  test('returns 403 when booking belongs to a different user', async () => {
+    mockBookingGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        userId: 'other-user', businessSlug: 'biz',
+        status: 'slot_held', checkout_type: 'P2P_AI',
+        currency: 'PHP', date: FAR_FUTURE_DATE, hours: [9], totalPrice: 500,
+        userEmail: 'other@example.com', userName: 'Other', businessName: 'Test Biz',
+      }),
+    })
+    const res = await POST(makeReq({ bookingId: 'b-1', choice: 'credit' }))
+    expect(res.status).toBe(403)
+  })
+})
 
 // ─── computeTier ──────────────────────────────────────────────────────────────
 

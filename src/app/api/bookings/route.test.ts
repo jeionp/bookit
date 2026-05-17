@@ -423,6 +423,73 @@ describe('POST /api/bookings — SaaS wallet enforcement', () => {
     const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'P2P_AI' }, { token: 'tok' }))
     expect(res.status).toBe(400)
   })
+
+  test('returns 400 when player sends PAY_AT_VENUE but business only accepts QR', async () => {
+    const { POST } = await importRoute({ accepts_qr: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'PAY_AT_VENUE' }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when player sends an invalid checkout_type value', async () => {
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'INVALID_TYPE' }, { token: 'tok' }))
+    // "INVALID_TYPE" is not accepted by the route; both flags set → checkout_type required path
+    // but since it is not "P2P_AI" or "PAY_AT_VENUE", the route falls to the both-flags guard
+    expect(res.status).toBe(400)
+  })
+
+  test('succeeds (201) when both flags set and player supplies P2P_AI checkout_type', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'P2P_AI' }, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('P2P_AI')
+  })
+
+  test('succeeds (201) when both flags set and player supplies PAY_AT_VENUE checkout_type', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'PAY_AT_VENUE' }, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('PAY_AT_VENUE')
+  })
+
+  test('accepts_qr: false (explicit false) behaves same as absent — uses instant-confirm flow', async () => {
+    // Explicit false should NOT enable the QR flow; business acts as legacy instant-confirm
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: false })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    // Legacy flow: no checkout_type in response
+    expect(body.checkout_type).toBeUndefined()
+  })
+
+  test('accepts_cash: false (explicit false) behaves same as absent — legacy instant-confirm', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ accepts_cash: false })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBeUndefined()
+  })
+
+  test('suspension gate fires for accepts_cash-only business when balance <= -5', async () => {
+    const { POST } = await importRoute({ accepts_cash: true, saas_credit_balance: -5 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'SERVICE_SUSPENDED' })
+  })
+
+  test('suspension gate does NOT fire for legacy business even with very negative balance', async () => {
+    // accepts_qr: false, accepts_cash: false → hasPaymentOptions is false → no suspension check
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: false, accepts_cash: false, saas_credit_balance: -999 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+  })
 })
 
 // ─── P2P slot-held flow tests (phase 2) ──────────────────────────────────────

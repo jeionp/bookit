@@ -100,4 +100,67 @@ describe('PATCH /api/businesses/[slug]', () => {
     expect(res.status).toBe(400)
     expect(mockBusinessSet).not.toHaveBeenCalled()
   })
+
+  // ── Phase 7 payment fields ────────────────────────────────────────────────
+
+  test('accepts and persists accepts_qr field', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'alice' })
+    mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['paddleup'] }) })
+    mockBusinessSet.mockResolvedValue(undefined)
+    const res = await PATCH(makeReq({ accepts_qr: true }, 'valid-token'), { params })
+    expect(res.status).toBe(200)
+    expect(mockBusinessSet).toHaveBeenCalledWith({ accepts_qr: true }, { merge: true })
+  })
+
+  test('accepts and persists accepts_cash field', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'alice' })
+    mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['paddleup'] }) })
+    mockBusinessSet.mockResolvedValue(undefined)
+    const res = await PATCH(makeReq({ accepts_cash: true }, 'valid-token'), { params })
+    expect(res.status).toBe(200)
+    expect(mockBusinessSet).toHaveBeenCalledWith({ accepts_cash: true }, { merge: true })
+  })
+
+  test('accepts and persists static_qr_url field', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'alice' })
+    mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['paddleup'] }) })
+    mockBusinessSet.mockResolvedValue(undefined)
+    const res = await PATCH(makeReq({ static_qr_url: 'https://example.com/qr.png' }, 'valid-token'), { params })
+    expect(res.status).toBe(200)
+    expect(mockBusinessSet).toHaveBeenCalledWith({ static_qr_url: 'https://example.com/qr.png' }, { merge: true })
+  })
+
+  test('accepts all three payment fields together', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'alice' })
+    mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['paddleup'] }) })
+    mockBusinessSet.mockResolvedValue(undefined)
+    const body = { accepts_qr: true, accepts_cash: true, static_qr_url: 'https://example.com/qr.png' }
+    const res = await PATCH(makeReq(body, 'valid-token'), { params })
+    expect(res.status).toBe(200)
+    expect(mockBusinessSet).toHaveBeenCalledWith(body, { merge: true })
+  })
+
+  test('blocks saas_credit_balance — cannot be set via settings API', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'alice' })
+    mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['paddleup'] }) })
+    mockBusinessSet.mockResolvedValue(undefined)
+    // Send saas_credit_balance alongside a legitimate field
+    const body = { name: 'Updated', saas_credit_balance: 9999 }
+    const res = await PATCH(makeReq(body, 'valid-token'), { params })
+    expect(res.status).toBe(200)
+    // saas_credit_balance must be stripped from the patched payload
+    expect(mockBusinessSet).toHaveBeenCalledWith({ name: 'Updated' }, { merge: true })
+    expect(mockBusinessSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ saas_credit_balance: expect.anything() }),
+      expect.anything(),
+    )
+  })
+
+  test('saas_credit_balance alone is stripped → 400 (no valid fields)', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'alice' })
+    mockAdminGet.mockResolvedValue({ exists: true, data: () => ({ slugs: ['paddleup'] }) })
+    const res = await PATCH(makeReq({ saas_credit_balance: 100 }, 'valid-token'), { params })
+    expect(res.status).toBe(400)
+    expect(mockBusinessSet).not.toHaveBeenCalled()
+  })
 })
