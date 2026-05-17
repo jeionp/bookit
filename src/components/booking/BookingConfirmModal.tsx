@@ -40,7 +40,7 @@ function formatHour(h: number): string {
   return `${h - 12} PM`;
 }
 
-type CheckoutState = "confirmed" | "P2P_AI" | "P2P_upload" | "P2P_submitted" | null;
+type CheckoutState = "confirmed" | "PAY_AT_VENUE" | "P2P_AI" | "P2P_upload" | "P2P_submitted" | null;
 
 export default function BookingConfirmModal({
   open,
@@ -124,7 +124,11 @@ export default function BookingConfirmModal({
         return;
       }
       setBookingId(body.bookingId ?? null);
-      setCheckoutType(body.checkout_type === "P2P_AI" ? "P2P_AI" : "confirmed");
+      setCheckoutType(
+        body.checkout_type === "P2P_AI"       ? "P2P_AI"       :
+        body.checkout_type === "PAY_AT_VENUE" ? "PAY_AT_VENUE" :
+        "confirmed"
+      );
     } catch {
       setError("Failed to save booking. Please try again.");
     } finally {
@@ -174,9 +178,10 @@ export default function BookingConfirmModal({
   }
 
   function headerTitle() {
-    if (checkoutType === "confirmed") return "Booking Confirmed!";
-    if (checkoutType === "P2P_AI") return "Slot Reserved!";
-    if (checkoutType === "P2P_upload") return "Upload Proof";
+    if (checkoutType === "confirmed")    return "Booking Confirmed!";
+    if (checkoutType === "PAY_AT_VENUE") return "Booking Confirmed!";
+    if (checkoutType === "P2P_AI")       return "Slot Reserved!";
+    if (checkoutType === "P2P_upload")   return "Upload Proof";
     if (checkoutType === "P2P_submitted") return "Proof Submitted!";
     return "Confirm Booking";
   }
@@ -218,6 +223,39 @@ export default function BookingConfirmModal({
               from <strong>{formatHour(startHour)}</strong> to{" "}
               <strong>{formatHour(endHour)}</strong> has been confirmed.
             </p>
+            <button
+              onClick={handleClose}
+              className="w-full py-3 rounded-xl text-sm font-bold text-white"
+              style={{ backgroundColor: accentColor }}
+            >
+              Done
+            </button>
+          </div>
+
+        ) : checkoutType === "PAY_AT_VENUE" ? (
+          /* Pay-at-venue — confirmed, remind customer to pay in person */
+          <div className="px-6 pb-8 text-center space-y-4">
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto text-3xl"
+              style={{ backgroundColor: `${accentColor}15` }}
+            >
+              🎉
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Your booking for <strong>{selection.facilityName}</strong> on{" "}
+              <strong>
+                {selectedDate.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </strong>{" "}
+              from <strong>{formatHour(startHour)}</strong> to{" "}
+              <strong>{formatHour(endHour)}</strong> is confirmed.
+            </p>
+            <div className="bg-amber-50 rounded-2xl px-4 py-3 text-sm text-amber-800 font-semibold">
+              Please pay at the venue on the day of your booking.
+            </div>
             <button
               onClick={handleClose}
               className="w-full py-3 rounded-xl text-sm font-bold text-white"

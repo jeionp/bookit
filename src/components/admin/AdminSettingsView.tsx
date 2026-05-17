@@ -552,7 +552,9 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-semibold text-gray-500">Payment Mode</span>
                     <span className="text-sm font-semibold text-gray-800">
-                      {business.payment_mode === "MANUAL_AI" ? "P2P / AI Verification" : "Gateway Split"}
+                      {business.payment_mode === "MANUAL_AI"       ? "P2P / AI Verification"
+                       : business.payment_mode === "PAY_AT_VENUE" ? "Pay at Venue"
+                       : "Gateway Split"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">

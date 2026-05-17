@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { X, CalendarDays, Clock, User, Mail, Hash, AlertCircle, History } from "lucide-react";
 import {
   Booking,
+  BookingStatus,
+  PaymentStatusV2,
   cancelBooking,
   cancelBookingWithRefund,
   rescheduleBooking,
@@ -12,6 +14,7 @@ import {
   SlotUnavailableError,
 } from "@/lib/firebase/bookings";
 import { Business } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 function parseHour(timeStr: string): number {
   const [time, period] = timeStr.split(" ");
@@ -77,6 +80,46 @@ function PaymentBadge({ status }: { status?: "unpaid" | "paid" | "refunded" | "c
   );
 }
 
+function BookingStatusBadge({ status, accentColor }: { status: BookingStatus; accentColor: string }) {
+  const cfg: Record<BookingStatus, { bg: string; color: string; label: string }> = {
+    confirmed:  { bg: `${accentColor}15`, color: accentColor, label: "Confirmed" },
+    slot_held:  { bg: "#fef3c7",          color: "#d97706",  label: "Slot Held" },
+    expired:    { bg: "#f3f4f6",          color: "#6b7280",  label: "Expired" },
+    cancelled:  { bg: "#fef2f2",          color: "#ef4444",  label: "Cancelled" },
+  };
+  const { bg, color, label } = cfg[status] ?? cfg.confirmed;
+  return (
+    <span
+      className="inline-block text-xs font-bold px-3 py-1 rounded-full"
+      style={{ backgroundColor: bg, color }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PaymentStatusV2Badge({ status }: { status?: PaymentStatusV2 | null }) {
+  if (!status) return null;
+  const cfg: Partial<Record<PaymentStatusV2, { bg: string; color: string; label: string }>> = {
+    pending_proof: { bg: "#eff6ff", color: "#2563eb", label: "Awaiting Proof" },
+    ai_review:     { bg: "#fef3c7", color: "#d97706", label: "Under Review" },
+    paid:          { bg: "#f0fdf4", color: "#16a34a", label: "Paid" },
+    rejected:      { bg: "#fef2f2", color: "#dc2626", label: "Proof Rejected" },
+    pending_cash:  { bg: "#f5f3ff", color: "#7c3aed", label: "Pay at Venue" },
+  };
+  const style = cfg[status];
+  if (!style) return null;
+  return (
+    <span
+      className="inline-block text-xs font-bold px-3 py-1 rounded-full"
+      style={{ backgroundColor: style.bg, color: style.color }}
+      data-testid="payment-status-v2-badge"
+    >
+      {style.label}
+    </span>
+  );
+}
+
 interface Props {
   booking: Booking;
   business: Business;
@@ -87,8 +130,47 @@ interface Props {
 
 export default function BookingDetailPanel({ booking, business, onClose, onCancel, onReschedule }: Props) {
   const { accentColor } = business;
+  const { user } = useAuth();
   const startHour = booking.hours[0];
   const endHour = booking.hours[booking.hours.length - 1] + 1;
+
+  // Local mirrors for fields that admin actions update in-place
+  const [localStatus, setLocalStatus] = useState<BookingStatus>(booking.status);
+  const [localPaymentStatus, setLocalPaymentStatus] = useState<PaymentStatusV2 | undefined>(
+    booking.payment_status_v2
+  );
+  const [paymentActionLoading, setPaymentActionLoading] = useState(false);
+  const [paymentActionError, setPaymentActionError] = useState<string | null>(null);
+
+  async function callPaymentAction(action: "approve" | "reject" | "mark_paid") {
+    if (!user) return;
+    setPaymentActionLoading(true);
+    setPaymentActionError(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(`/api/bookings/${booking.id}/payment-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) {
+        setPaymentActionError("Action failed. Please try again.");
+        return;
+      }
+      if (action === "approve") {
+        setLocalPaymentStatus("paid");
+        setLocalStatus("confirmed");
+      } else if (action === "reject") {
+        setLocalPaymentStatus("rejected");
+      } else {
+        setLocalPaymentStatus("paid");
+      }
+    } catch {
+      setPaymentActionError("Action failed. Please try again.");
+    } finally {
+      setPaymentActionLoading(false);
+    }
+  }
 
   // "idle" → "refund_choice" (paid only) → "confirm" → done
   type CancelStep = "idle" | "refund_choice" | "confirm";
@@ -457,13 +539,9 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
         ) : (
           <>
             <div className="flex items-center gap-2 flex-wrap">
-              <span
-                className="inline-block text-xs font-bold px-3 py-1 rounded-full"
-                style={{ backgroundColor: `${accentColor}15`, color: accentColor }}
-              >
-                Confirmed
-              </span>
+              <BookingStatusBadge status={localStatus} accentColor={accentColor} />
               <PaymentBadge status={booking.paymentStatus} />
+              <PaymentStatusV2Badge status={localPaymentStatus} />
             </div>
 
             <div>
@@ -547,6 +625,63 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* Payment proof preview (P2P bookings) */}
+            {booking.proof_url && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                  Payment Proof
+                </p>
+                <a href={booking.proof_url} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={booking.proof_url}
+                    alt="Payment proof"
+                    className="w-full rounded-xl border border-gray-200 object-cover"
+                    data-testid="proof-image"
+                  />
+                </a>
+              </div>
+            )}
+
+            {/* Admin payment actions */}
+            {paymentActionError && (
+              <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                <AlertCircle size={13} className="shrink-0" />
+                {paymentActionError}
+              </div>
+            )}
+            {booking.checkout_type === "P2P_AI" && localPaymentStatus === "ai_review" && (
+              <div className="space-y-2">
+                <button
+                  onClick={() => callPaymentAction("approve")}
+                  disabled={paymentActionLoading}
+                  className="w-full text-sm font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: "#16a34a" }}
+                  data-testid="approve-payment-btn"
+                >
+                  {paymentActionLoading ? "Processing…" : "Approve Payment"}
+                </button>
+                <button
+                  onClick={() => callPaymentAction("reject")}
+                  disabled={paymentActionLoading}
+                  className="w-full text-sm font-semibold py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                  data-testid="reject-payment-btn"
+                >
+                  Reject Payment
+                </button>
+              </div>
+            )}
+            {booking.checkout_type === "PAY_AT_VENUE" && localPaymentStatus === "pending_cash" && (
+              <button
+                onClick={() => callPaymentAction("mark_paid")}
+                disabled={paymentActionLoading}
+                className="w-full text-sm font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#7c3aed" }}
+                data-testid="mark-paid-btn"
+              >
+                {paymentActionLoading ? "Processing…" : "Mark as Paid"}
+              </button>
             )}
 
             <div className="pt-2 space-y-2 border-t border-gray-100">

@@ -47,7 +47,7 @@ export interface OperatingHours {
   closed?: boolean;
 }
 
-export type PaymentMode = "MANUAL_AI" | "GATEWAY_PLATFORM";
+export type PaymentMode = "MANUAL_AI" | "GATEWAY_PLATFORM" | "PAY_AT_VENUE";
 
 export interface Business {
   slug: string;
