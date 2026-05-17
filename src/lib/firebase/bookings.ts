@@ -13,8 +13,8 @@ import {
 import { db } from "./client";
 
 export type BookingStatus = "confirmed" | "cancelled" | "slot_held" | "expired";
-export type CheckoutType = "P2P_AI" | "GATEWAY_SPLIT";
-export type PaymentStatusV2 = "pending_proof" | "ai_review" | "paid" | "rejected";
+export type CheckoutType = "P2P_AI" | "GATEWAY_SPLIT" | "PAY_AT_VENUE";
+export type PaymentStatusV2 = "pending_proof" | "ai_review" | "paid" | "rejected" | "pending_cash";
 export type CancelledBy = "user" | "merchant" | "system";
 
 export interface Booking {
@@ -41,6 +41,7 @@ export interface Booking {
   checkout_type?: CheckoutType;
   payment_status_v2?: PaymentStatusV2;
   proof_of_payment_url?: string | null;
+  proof_url?: string | null;            // actual Firestore field written by submit-proof
   receipt_reference_number?: string | null;
   gateway_session_id?: string | null;
   held_until?: Timestamp | null;

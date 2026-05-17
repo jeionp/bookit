@@ -163,7 +163,9 @@ export async function POST(req: NextRequest) {
   }
 
   // P2P flow: slot is held pending payment proof; confirmed when proof is approved.
+  // Pay-at-venue: booking is confirmed immediately, cash collected on the day.
   const isP2P = paymentMode === "MANUAL_AI";
+  const isPayAtVenue = paymentMode === "PAY_AT_VENUE";
   const bookingStatus = isP2P ? "slot_held" : "confirmed";
   const HOLD_HOURS = 24;
   const heldUntil = isP2P
@@ -211,6 +213,10 @@ export async function POST(req: NextRequest) {
           checkout_type: "P2P_AI",
           payment_status_v2: "pending_proof",
           held_until: heldUntil,
+        }),
+        ...(isPayAtVenue && {
+          checkout_type: "PAY_AT_VENUE",
+          payment_status_v2: "pending_cash",
         }),
         ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
         createdAt: FieldValue.serverTimestamp(),
@@ -289,6 +295,7 @@ export async function POST(req: NextRequest) {
       bookingId: newDocRef.id,
       creditApplied: appliedCredit > 0 ? appliedCredit : undefined,
       ...(isP2P && { checkout_type: "P2P_AI", static_qr_url: (bizData.static_qr_url as string | null) ?? null }),
+      ...(isPayAtVenue && { checkout_type: "PAY_AT_VENUE" }),
     },
     { status: 201 },
   );
