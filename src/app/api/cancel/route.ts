@@ -71,6 +71,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  // If choice is supplied it must be a recognised value — check before the DB fetch.
+  if (choice !== undefined && choice !== "credit" && choice !== "refund_pending") {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
   const bookingRef = adminDb.collection("bookings").doc(bookingId);
   const bookingSnap = await bookingRef.get();
 
