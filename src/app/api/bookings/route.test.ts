@@ -1,6 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { FieldValue } from 'firebase-admin/firestore'
 
 // ─── Hoisted mocks (used for the "no env vars" / base tests) ─────────────────
 
@@ -301,10 +300,8 @@ describe('POST /api/bookings — input validation', () => {
 })
 
 // ─── SaaS wallet enforcement tests ───────────────────────────────────────────
-// Cover the three behaviours added in Phase 1:
-//   1. SERVICE_SUSPENDED gate (503 when saas_credit_balance ≤ -5)
-//   2. Wallet decrement inside the transaction for payment_mode businesses
-//   3. Low-balance warning email at exactly newBalance === 5 or 0
+// Cover the suspension gate added in Phase 1 (still enforced at booking creation).
+// Credit deduction and low-balance warnings moved to payment confirmation (Phase 7).
 
 describe('POST /api/bookings — SaaS wallet enforcement', () => {
   beforeEach(() => {
@@ -371,7 +368,7 @@ describe('POST /api/bookings — SaaS wallet enforcement', () => {
   // ── Suspension gate ────────────────────────────────────────────────────────
 
   test('returns 503 SERVICE_SUSPENDED when saas_credit_balance is -5', async () => {
-    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: -5 })
+    const { POST } = await importRoute({ accepts_qr: true, saas_credit_balance: -5 })
     const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(503)
     expect(await res.json()).toEqual({ error: 'SERVICE_SUSPENDED' })
@@ -379,87 +376,119 @@ describe('POST /api/bookings — SaaS wallet enforcement', () => {
   })
 
   test('returns 503 when saas_credit_balance is below -5', async () => {
-    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: -99 })
+    const { POST } = await importRoute({ accepts_cash: true, saas_credit_balance: -99 })
     const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(503)
     expect(mockRunTransaction).not.toHaveBeenCalled()
   })
 
-  test('proceeds when payment_mode is set but saas_credit_balance is -4 (boundary — not yet suspended)', async () => {
+  test('proceeds when accepts_qr is set but saas_credit_balance is -4 (boundary — not yet suspended)', async () => {
     txSuccess()
-    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: -4 })
+    const { POST } = await importRoute({ accepts_qr: true, saas_credit_balance: -4 })
     const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
   })
 
-  test('proceeds when payment_mode is set but saas_credit_balance is absent (wallet not initialised)', async () => {
+  test('proceeds when accepts_qr is set but saas_credit_balance is absent (wallet not initialised)', async () => {
     txSuccess()
-    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI' })
+    const { POST } = await importRoute({ accepts_qr: true })
     const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
   })
 
-  test('proceeds for legacy businesses with no payment_mode regardless of balance', async () => {
+  test('proceeds for legacy businesses with no payment options regardless of balance', async () => {
     txSuccess()
     const { POST } = await importRoute({ saas_credit_balance: -100 })
     const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
   })
 
-  // ── Wallet decrement ───────────────────────────────────────────────────────
-
-  test('decrements saas_credit_balance in the transaction for payment_mode businesses', async () => {
+  test('does NOT decrement saas_credit_balance at booking creation (deducted at payment confirmation)', async () => {
     const updateMock = txSuccess()
-    const { POST } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
-    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
-    expect(res.status).toBe(201)
-    expect(updateMock).toHaveBeenCalledWith(
-      expect.anything(),
-      { saas_credit_balance: FieldValue.increment(-1) },
-    )
-  })
-
-  test('does NOT call tx.update for legacy businesses without payment_mode', async () => {
-    const updateMock = txSuccess()
-    const { POST } = await importRoute({})
+    const { POST } = await importRoute({ accepts_qr: true, saas_credit_balance: 10 })
     const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
     expect(updateMock).not.toHaveBeenCalled()
   })
 
-  // ── Low-balance warning email ──────────────────────────────────────────────
-
-  test('sends low-balance warning when new balance hits exactly 5 (saas_credit_balance was 6)', async () => {
-    const mockWarning = vi.fn().mockResolvedValue(undefined)
-    txSuccess()
-    const { POST } = await importRoute(
-      { payment_mode: 'MANUAL_AI', saas_credit_balance: 6, email: 'admin@paddleup.com' },
-      { sendLowBalanceWarning: mockWarning },
-    )
-    await POST(makeReq(VALID_BODY, { token: 'tok' }))
-    expect(mockWarning).toHaveBeenCalledWith(expect.objectContaining({ balance: 5 }))
+  test('returns 400 when both options are enabled but checkout_type is missing', async () => {
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'checkout_type required' })
   })
 
-  test('sends low-balance warning when new balance hits exactly 0 (saas_credit_balance was 1)', async () => {
-    const mockWarning = vi.fn().mockResolvedValue(undefined)
-    txSuccess()
-    const { POST } = await importRoute(
-      { payment_mode: 'MANUAL_AI', saas_credit_balance: 1, email: 'admin@paddleup.com' },
-      { sendLowBalanceWarning: mockWarning },
-    )
-    await POST(makeReq(VALID_BODY, { token: 'tok' }))
-    expect(mockWarning).toHaveBeenCalledWith(expect.objectContaining({ balance: 0 }))
+  test('returns 400 when player sends P2P_AI but business only accepts cash', async () => {
+    const { POST } = await importRoute({ accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'P2P_AI' }, { token: 'tok' }))
+    expect(res.status).toBe(400)
   })
 
-  test('does NOT send warning at a non-threshold new balance (saas_credit_balance was 5, new balance = 4)', async () => {
-    const mockWarning = vi.fn().mockResolvedValue(undefined)
+  test('returns 400 when player sends PAY_AT_VENUE but business only accepts QR', async () => {
+    const { POST } = await importRoute({ accepts_qr: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'PAY_AT_VENUE' }, { token: 'tok' }))
+    expect(res.status).toBe(400)
+  })
+
+  test('returns 400 when player sends an invalid checkout_type value', async () => {
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'INVALID_TYPE' }, { token: 'tok' }))
+    // "INVALID_TYPE" is not accepted by the route; both flags set → checkout_type required path
+    // but since it is not "P2P_AI" or "PAY_AT_VENUE", the route falls to the both-flags guard
+    expect(res.status).toBe(400)
+  })
+
+  test('succeeds (201) when both flags set and player supplies P2P_AI checkout_type', async () => {
     txSuccess()
-    const { POST } = await importRoute(
-      { payment_mode: 'MANUAL_AI', saas_credit_balance: 5, email: 'admin@paddleup.com' },
-      { sendLowBalanceWarning: mockWarning },
-    )
-    await POST(makeReq(VALID_BODY, { token: 'tok' }))
-    expect(mockWarning).not.toHaveBeenCalled()
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'P2P_AI' }, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('P2P_AI')
+  })
+
+  test('succeeds (201) when both flags set and player supplies PAY_AT_VENUE checkout_type', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: true, accepts_cash: true, saas_credit_balance: 10 })
+    const res = await POST(makeReq({ ...VALID_BODY, checkout_type: 'PAY_AT_VENUE' }, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBe('PAY_AT_VENUE')
+  })
+
+  test('accepts_qr: false (explicit false) behaves same as absent — uses instant-confirm flow', async () => {
+    // Explicit false should NOT enable the QR flow; business acts as legacy instant-confirm
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: false })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    // Legacy flow: no checkout_type in response
+    expect(body.checkout_type).toBeUndefined()
+  })
+
+  test('accepts_cash: false (explicit false) behaves same as absent — legacy instant-confirm', async () => {
+    txSuccess()
+    const { POST } = await importRoute({ accepts_cash: false })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
+    const body = await res.json() as Record<string, unknown>
+    expect(body.checkout_type).toBeUndefined()
+  })
+
+  test('suspension gate fires for accepts_cash-only business when balance <= -5', async () => {
+    const { POST } = await importRoute({ accepts_cash: true, saas_credit_balance: -5 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'SERVICE_SUSPENDED' })
+  })
+
+  test('suspension gate does NOT fire for legacy business even with very negative balance', async () => {
+    // accepts_qr: false, accepts_cash: false → hasPaymentOptions is false → no suspension check
+    txSuccess()
+    const { POST } = await importRoute({ accepts_qr: false, accepts_cash: false, saas_credit_balance: -999 })
+    const res = await POST(makeReq(VALID_BODY, { token: 'tok' }))
+    expect(res.status).toBe(201)
   })
 })
 
@@ -531,9 +560,9 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
 
   // ── Booking document fields ────────────────────────────────────────────────
 
-  test('writes slot_held booking with P2P fields when payment_mode is MANUAL_AI', async () => {
+  test('writes slot_held booking with P2P fields when accepts_qr is true', async () => {
     const setMock = txWithSet()
-    const { route } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const { route } = await importRoute({ accepts_qr: true, saas_credit_balance: 10 })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
     const payload = setMock.mock.calls[0][1] as Record<string, unknown>
@@ -557,10 +586,10 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
 
   // ── Response body ─────────────────────────────────────────────────────────
 
-  test('response includes checkout_type P2P_AI and static_qr_url for MANUAL_AI', async () => {
+  test('response includes checkout_type P2P_AI and static_qr_url when accepts_qr is true', async () => {
     txWithSet()
     const { route } = await importRoute({
-      payment_mode: 'MANUAL_AI', saas_credit_balance: 10, static_qr_url: 'https://example.com/qr.png',
+      accepts_qr: true, saas_credit_balance: 10, static_qr_url: 'https://example.com/qr.png',
     })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
@@ -571,7 +600,7 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
 
   test('static_qr_url is null in response when not set on the business document', async () => {
     txWithSet()
-    const { route } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const { route } = await importRoute({ accepts_qr: true, saas_credit_balance: 10 })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     const body = await res.json() as Record<string, unknown>
     expect(body.checkout_type).toBe('P2P_AI')
@@ -592,7 +621,7 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
   test('does NOT send confirmation emails for P2P slot_held bookings', async () => {
     txWithSet()
     const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
-      payment_mode: 'MANUAL_AI', saas_credit_balance: 10,
+      accepts_qr: true, saas_credit_balance: 10,
     })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
@@ -621,7 +650,7 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
         update: vi.fn(),
       })
     })
-    const { route } = await importRoute({ payment_mode: 'MANUAL_AI', saas_credit_balance: 10 })
+    const { route } = await importRoute({ accepts_qr: true, saas_credit_balance: 10 })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'SLOT_UNAVAILABLE' })
@@ -694,9 +723,9 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
 
   // ── Booking document fields ────────────────────────────────────────────────
 
-  test('writes confirmed booking with PAY_AT_VENUE fields when payment_mode is PAY_AT_VENUE', async () => {
+  test('writes confirmed booking with PAY_AT_VENUE fields when accepts_cash is true', async () => {
     const setMock = txWithSet()
-    const { route } = await importRoute({ payment_mode: 'PAY_AT_VENUE', saas_credit_balance: 10 })
+    const { route } = await importRoute({ accepts_cash: true, saas_credit_balance: 10 })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
     const payload = setMock.mock.calls[0][1] as Record<string, unknown>
@@ -709,9 +738,9 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
 
   // ── Response body ─────────────────────────────────────────────────────────
 
-  test('response includes checkout_type PAY_AT_VENUE for PAY_AT_VENUE businesses', async () => {
+  test('response includes checkout_type PAY_AT_VENUE when accepts_cash is true', async () => {
     txWithSet()
-    const { route } = await importRoute({ payment_mode: 'PAY_AT_VENUE', saas_credit_balance: 10 })
+    const { route } = await importRoute({ accepts_cash: true, saas_credit_balance: 10 })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
     const body = await res.json() as Record<string, unknown>
@@ -725,7 +754,7 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
   test('sends confirmation emails immediately for PAY_AT_VENUE bookings', async () => {
     txWithSet()
     const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
-      payment_mode: 'PAY_AT_VENUE', saas_credit_balance: 10,
+      accepts_cash: true, saas_credit_balance: 10,
     })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
@@ -736,7 +765,7 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
 
   // ── Legacy flow regression ────────────────────────────────────────────────
 
-  test('instant-confirm (no payment_mode) still does NOT set checkout_type or payment_status_v2', async () => {
+  test('instant-confirm (no payment options) still does NOT set checkout_type or payment_status_v2', async () => {
     const setMock = txWithSet()
     const { route } = await importRoute({})
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))

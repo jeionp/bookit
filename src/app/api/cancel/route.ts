@@ -4,6 +4,14 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { DEFAULT_CANCELLATION_POLICY, CancellationPolicy } from "@/lib/types";
 import { sendCancellationReceipt, sendAdminCancellationNotification } from "@/lib/notifications/email";
 
+// Returned for slot_held/pending_cash cancellations where no payment was made.
+const NO_PAYMENT_CANCEL_RESPONSE: CancelBookingResponse = {
+  tier: "free",
+  refundRatio: 0,
+  creditAmount: 0,
+  currency: "PHP",
+};
+
 export const dynamic = "force-dynamic";
 
 export interface CancelBookingRequest {
@@ -59,7 +67,12 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as CancelBookingRequest;
   const { bookingId, choice } = body;
 
-  if (!bookingId || (choice !== "credit" && choice !== "refund_pending")) {
+  if (!bookingId) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  // If choice is supplied it must be a recognised value — check before the DB fetch.
+  if (choice !== undefined && choice !== "credit" && choice !== "refund_pending") {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
@@ -77,6 +90,30 @@ export async function POST(req: NextRequest) {
   }
   if (booking.status === "cancelled") {
     return NextResponse.json({ error: "Already cancelled" }, { status: 409 });
+  }
+
+  const checkoutType    = booking.checkout_type    as string | undefined;
+  const paymentStatusV2 = booking.payment_status_v2 as string | undefined;
+
+  // slot_held P2P: no payment was made, just release the slot immediately.
+  if (booking.status === "slot_held" && checkoutType === "P2P_AI") {
+    await bookingRef.update({ status: "cancelled", cancelled_at: FieldValue.serverTimestamp() });
+    return NextResponse.json(
+      { ...NO_PAYMENT_CANCEL_RESPONSE, currency: (booking.currency as string) ?? "PHP" },
+    );
+  }
+
+  // pending_cash PAY_AT_VENUE: cash was never collected, just cancel.
+  if (paymentStatusV2 === "pending_cash" && checkoutType === "PAY_AT_VENUE") {
+    await bookingRef.update({ status: "cancelled", cancelled_at: FieldValue.serverTimestamp() });
+    return NextResponse.json(
+      { ...NO_PAYMENT_CANCEL_RESPONSE, currency: (booking.currency as string) ?? "PHP" },
+    );
+  }
+
+  // Confirmed bookings (instant-confirm or P2P paid): validate choice and apply policy.
+  if (choice !== "credit" && choice !== "refund_pending") {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
   // Load cancellation policy from business (fall back to defaults)
