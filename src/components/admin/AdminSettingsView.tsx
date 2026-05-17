@@ -307,7 +307,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                 <textarea
                   value={draft.description}
                   onChange={(e) => setField("description", e.target.value)}
-                  rows={3}
+                  rows={6}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors resize-none"
                 />
               </div>
@@ -600,7 +600,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-gray-500">Accepted Payment Methods</p>
                   {[
-                    { key: "accepts_qr" as const,      label: "GCash QR (P2P / AI verification)" },
+                    { key: "accepts_qr" as const,      label: "QR Code (P2P / AI verification)" },
                     { key: "accepts_cash" as const,     label: "Pay at Venue (cash on the day)" },
                     { key: "accepts_gateway" as const,  label: "Online Gateway (PayMongo / Xendit)" },
                   ].map(({ key, label }) => (
@@ -619,14 +619,14 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                 {/* QR image upload — only when GCash QR is enabled */}
                 {draft.accepts_qr && (
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold text-gray-500">GCash QR Code Image</p>
+                    <p className="text-xs font-semibold text-gray-500">QR Code Image</p>
                     {draft.static_qr_url && (
                       <div className="flex justify-center">
                         <div className="border border-gray-200 rounded-xl p-2 bg-white">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={draft.static_qr_url}
-                            alt="GCash QR code"
+                            alt="QR code"
                             className="w-32 h-32 object-contain rounded-lg"
                           />
                         </div>

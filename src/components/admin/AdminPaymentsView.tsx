@@ -151,7 +151,7 @@ function RevenueSection({ business }: { business: Business }) {
             value={from}
             max={to}
             onChange={(e) => setFrom(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className="text-xs text-gray-900 bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-300"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ function RevenueSection({ business }: { business: Business }) {
             value={to}
             min={from}
             onChange={(e) => setTo(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className="text-xs text-gray-900 bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-300"
           />
         </div>
         <button
