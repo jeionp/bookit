@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Business, CreditLedgerEntry } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -107,31 +107,32 @@ function RevenueSection({ business }: { business: Business }) {
   const [data, setData] = useState<RevenueResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetch = useCallback(async () => {
+  useEffect(() => {
     if (!user) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const idToken = await user.getIdToken();
-      const res = await window.fetch(
-        `/api/admin/revenue?slug=${encodeURIComponent(business.slug)}&from=${from}&to=${to}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError((body as { error?: string }).error ?? "Failed to load revenue");
-        return;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const idToken = await user.getIdToken();
+        const res = await window.fetch(
+          `/api/admin/revenue?slug=${encodeURIComponent(business.slug)}&from=${from}&to=${to}`,
+          { headers: { Authorization: `Bearer ${idToken}` } },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setError((body as { error?: string }).error ?? "Failed to load revenue");
+          return;
+        }
+        setData(await res.json() as RevenueResponse);
+      } catch {
+        setError("Network error");
+      } finally {
+        setLoading(false);
       }
-      setData(await res.json() as RevenueResponse);
-    } catch {
-      setError("Network error");
-    } finally {
-      setLoading(false);
-    }
-  }, [user, business.slug, from, to]);
-
-  useEffect(() => { void fetch(); }, [fetch]);
+    })();
+  }, [user, business.slug, from, to, refreshKey]);
 
   const rows = data
     ? Object.entries(data.totals).filter(([, v]) => v.count > 0)
@@ -164,7 +165,7 @@ function RevenueSection({ business }: { business: Business }) {
           />
         </div>
         <button
-          onClick={() => void fetch()}
+          onClick={() => setRefreshKey(k => k + 1)}
           disabled={loading}
           className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-50 transition-colors"
           style={{ backgroundColor: business.accentColor }}
@@ -237,32 +238,32 @@ function PaymentAuditSection({ business }: { business: Business }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAudit = useCallback(async (status: string | null) => {
+  useEffect(() => {
     if (!user) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const idToken = await user.getIdToken();
-      const params = new URLSearchParams({ slug: business.slug });
-      if (status) params.set("status", status);
-      const res = await window.fetch(`/api/admin/payment-audit?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError((body as { error?: string }).error ?? "Failed to load audit");
-        return;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const idToken = await user.getIdToken();
+        const params = new URLSearchParams({ slug: business.slug });
+        if (statusFilter) params.set("status", statusFilter);
+        const res = await window.fetch(`/api/admin/payment-audit?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setError((body as { error?: string }).error ?? "Failed to load audit");
+          return;
+        }
+        const json = await res.json() as { bookings: AuditBooking[] };
+        setBookings(json.bookings);
+      } catch {
+        setError("Network error");
+      } finally {
+        setLoading(false);
       }
-      const json = await res.json() as { bookings: AuditBooking[] };
-      setBookings(json.bookings);
-    } catch {
-      setError("Network error");
-    } finally {
-      setLoading(false);
-    }
-  }, [user, business.slug]);
-
-  useEffect(() => { void fetchAudit(statusFilter); }, [fetchAudit, statusFilter]);
+    })();
+  }, [user, business.slug, statusFilter]);
 
   function formatHours(hours: number[]): string {
     if (!hours.length) return "—";
