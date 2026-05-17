@@ -25,6 +25,11 @@ export async function PATCH(
 
   const { id: bookingId } = await params;
 
+  // Guard against empty or obviously invalid booking IDs before hitting Firestore
+  if (!bookingId || bookingId.trim() === "") {
+    return NextResponse.json({ error: "Invalid booking ID" }, { status: 400 });
+  }
+
   let action: Action;
   try {
     const body = (await req.json()) as { action: unknown };
@@ -47,33 +52,53 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const paymentStatus = booking.payment_status_v2 as string | undefined;
-  const checkoutType  = booking.checkout_type  as string | undefined;
-
   if (action === "approve") {
-    if (paymentStatus !== "ai_review") {
-      return NextResponse.json({ error: "Booking is not in ai_review state" }, { status: 409 });
+    // Use a transaction to prevent TOCTOU: two concurrent approve calls must not
+    // both succeed. The transaction re-reads the document inside the atomic unit
+    // and aborts if the state has already changed.
+    let approvedBooking: Record<string, unknown> | null = null;
+    try {
+      await adminDb.runTransaction(async (tx) => {
+        const txSnap = await tx.get(bookingRef);
+        if (!txSnap.exists) throw new Error("NOT_FOUND");
+        const data = txSnap.data()!;
+        if ((data.payment_status_v2 as string | undefined) !== "ai_review") {
+          throw new Error("WRONG_STATE");
+        }
+        tx.update(bookingRef, {
+          payment_status_v2: "paid",
+          status: "confirmed",
+          verified_at: FieldValue.serverTimestamp(),
+        });
+        approvedBooking = data as Record<string, unknown>;
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === "NOT_FOUND") {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      if (err instanceof Error && err.message === "WRONG_STATE") {
+        return NextResponse.json({ error: "Booking is not in ai_review state" }, { status: 409 });
+      }
+      console.error("[payment-status] approve transaction error:", err);
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
-    await bookingRef.update({
-      payment_status_v2: "paid",
-      status: "confirmed",
-      verified_at: FieldValue.serverTimestamp(),
-    });
-    const bizSnap = await adminDb.collection("businesses").doc(booking.businessSlug as string).get();
+
+    const data = approvedBooking!;
+    const bizSnap = await adminDb.collection("businesses").doc(data.businessSlug as string).get();
     const biz = bizSnap.data() ?? {};
     const notificationData = {
-      customerEmail:   booking.userEmail    as string,
-      customerName:    booking.userName     as string,
+      customerEmail:   data.userEmail    as string,
+      customerName:    data.userName     as string,
       bookingId,
-      businessName:    booking.businessName as string,
+      businessName:    data.businessName as string,
       businessEmail:   (biz.email    as string) ?? "",
       businessAddress: (biz.address  as string) ?? "",
-      facilityName:    booking.facilityName as string,
-      date:            booking.date         as string,
-      hours:           booking.hours        as number[],
-      totalPrice:      booking.totalPrice   as number,
-      currency:        booking.currency     as string,
-      ...(booking.creditApplied != null && { creditApplied: booking.creditApplied as number }),
+      facilityName:    data.facilityName as string,
+      date:            data.date         as string,
+      hours:           data.hours        as number[],
+      totalPrice:      data.totalPrice   as number,
+      currency:        data.currency     as string,
+      ...(data.creditApplied != null && { creditApplied: data.creditApplied as number }),
     };
     Promise.all([
       sendBookingConfirmation(notificationData),
@@ -81,6 +106,9 @@ export async function PATCH(
     ]).catch((err) => console.error("[payment-status] approval email error:", err));
     return NextResponse.json({ ok: true });
   }
+
+  const paymentStatus = booking.payment_status_v2 as string | undefined;
+  const checkoutType  = booking.checkout_type  as string | undefined;
 
   if (action === "reject") {
     if (paymentStatus !== "ai_review" && paymentStatus !== "pending_proof") {

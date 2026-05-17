@@ -97,4 +97,24 @@ describe('expireHeldSlots', () => {
     mockBatchCommit.mockRejectedValue(new Error('commit failed'))
     await expect(expireHeldSlots()).rejects.toThrow('commit failed')
   })
+
+  // Firestore's .where("held_until", "<", now) query filters out null values server-side,
+  // so docs with held_until: null should never reach this function in production.
+  // This test documents that the function handles any docs returned by the query,
+  // using only docSnap.ref (never reading held_until inside the loop).
+  test('processes all docs returned by the query regardless of held_until value', async () => {
+    // Even if a doc with a malformed/null held_until somehow slips through the query,
+    // the function only uses docSnap.ref, so it succeeds as long as ref is valid.
+    const refA = { id: 'weird-doc' }
+    mockQueryGet.mockResolvedValue({
+      empty: false,
+      size: 1,
+      docs: [{ ref: refA, data: () => ({ status: 'slot_held', held_until: null }) }],
+    })
+
+    const result = await expireHeldSlots()
+
+    expect(result).toEqual({ expired: 1 })
+    expect(mockBatchUpdate).toHaveBeenCalledWith(refA, expect.objectContaining({ status: 'expired' }))
+  })
 })
