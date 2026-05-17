@@ -351,8 +351,8 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
       headers: { get: (h: string) => h === 'content-type' ? 'image/jpeg' : null },
     }))
 
-    const module = await import('./verify-proof')
-    return { ...module, mockLedgerAdd }
+    const mod = await import('./verify-proof')
+    return { ...mod, mockLedgerAdd }
   }
 
   afterEach(() => {
