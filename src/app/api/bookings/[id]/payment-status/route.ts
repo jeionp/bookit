@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
-import { sendBookingConfirmation, sendAdminBookingNotification } from "@/lib/notifications/email";
+import { sendBookingConfirmation, sendAdminBookingNotification, sendLowBalanceWarning } from "@/lib/notifications/email";
 
 export const dynamic = "force-dynamic";
 
@@ -84,8 +84,24 @@ export async function PATCH(
     }
 
     const data = approvedBooking!;
-    const bizSnap = await adminDb.collection("businesses").doc(data.businessSlug as string).get();
+    const bizRef = adminDb.collection("businesses").doc(data.businessSlug as string);
+    const bizSnap = await bizRef.get();
     const biz = bizSnap.data() ?? {};
+
+    // Deduct one SaaS credit now that payment is confirmed.
+    if (typeof biz.saas_credit_balance === "number") {
+      const newBalance = biz.saas_credit_balance - 1;
+      await bizRef.update({ saas_credit_balance: FieldValue.increment(-1) });
+      if (newBalance === 5 || newBalance === 0) {
+        sendLowBalanceWarning({
+          businessEmail: (biz.email as string) ?? "",
+          businessName:  data.businessName as string,
+          businessSlug:  data.businessSlug as string,
+          balance:       newBalance,
+        }).catch((err) => console.error("[payment-status] low balance warning error:", err));
+      }
+    }
+
     const notificationData = {
       customerEmail:   data.userEmail    as string,
       customerName:    data.userName     as string,
@@ -126,5 +142,23 @@ export async function PATCH(
     payment_status_v2: "paid",
     paid_at: FieldValue.serverTimestamp(),
   });
+
+  // Deduct one SaaS credit now that the cash payment is confirmed by admin.
+  const bizRef = adminDb.collection("businesses").doc(booking.businessSlug as string);
+  const bizSnap = await bizRef.get();
+  const biz = bizSnap.data() ?? {};
+  if (typeof biz.saas_credit_balance === "number") {
+    const newBalance = biz.saas_credit_balance - 1;
+    await bizRef.update({ saas_credit_balance: FieldValue.increment(-1) });
+    if (newBalance === 5 || newBalance === 0) {
+      sendLowBalanceWarning({
+        businessEmail: (biz.email as string) ?? "",
+        businessName:  booking.businessName as string,
+        businessSlug:  booking.businessSlug as string,
+        balance:       newBalance,
+      }).catch((err) => console.error("[payment-status] low balance warning error:", err));
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }

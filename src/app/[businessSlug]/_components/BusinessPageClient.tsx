@@ -28,7 +28,7 @@ export default function BusinessPageClient({ business }: { business: Business })
   const [bookingDate, setBookingDate] = useState<Date>(new Date());
 
   const isStorefrontSuspended =
-    business.payment_mode != null &&
+    (business.accepts_qr || business.accepts_cash) &&
     business.saas_credit_balance != null &&
     business.saas_credit_balance <= -5;
 
@@ -222,7 +222,8 @@ export default function BusinessPageClient({ business }: { business: Business })
         businessName={business.name}
         businessLocation={business.location}
         accentColor={business.accentColor}
-        paymentMode={business.payment_mode}
+        acceptsQr={business.accepts_qr}
+        acceptsCash={business.accepts_cash}
         staticQrUrl={business.static_qr_url}
       />
     </div>

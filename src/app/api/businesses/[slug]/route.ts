@@ -38,6 +38,7 @@ export async function PATCH(
     "name", "tagline", "description", "coverImage", "location",
     "address", "phone", "email", "accentColor",
     "facilities", "amenities", "operatingHours",
+    "accepts_qr", "accepts_cash", "static_qr_url",
   ]);
 
   const raw = await req.json();
