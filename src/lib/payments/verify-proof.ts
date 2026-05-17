@@ -5,8 +5,8 @@ import {
   sendBookingConfirmation,
   sendAdminBookingNotification,
   sendPaymentRejected,
-  sendLowBalanceWarning,
 } from "@/lib/notifications/email";
+import { deductSaasCredit } from "./ledger";
 
 const ALLOWED_PROOF_HOSTNAMES = new Set([
   "firebasestorage.googleapis.com",
@@ -101,19 +101,12 @@ export async function verifyPaymentProof(bookingId: string): Promise<void> {
     const bizSnap = await bizRef.get();
     const biz = bizSnap.data() ?? {};
 
-    // Deduct one SaaS credit now that payment is confirmed.
-    if (typeof biz.saas_credit_balance === "number") {
-      const newBalance = biz.saas_credit_balance - 1;
-      await bizRef.update({ saas_credit_balance: FieldValue.increment(-1) });
-      if (newBalance === 5 || newBalance === 0) {
-        sendLowBalanceWarning({
-          businessEmail: (biz.email as string) ?? "",
-          businessName:  booking.businessName as string,
-          businessSlug:  booking.businessSlug as string,
-          balance:       newBalance,
-        }).catch((err) => console.error("[verify-proof] low balance warning error:", err));
-      }
-    }
+    await deductSaasCredit({
+      businessSlug: booking.businessSlug as string,
+      bookingId,
+      trigger: "ai_verify",
+      biz,
+    });
 
     const notificationData = {
       customerEmail:   booking.userEmail    as string,

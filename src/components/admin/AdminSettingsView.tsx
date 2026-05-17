@@ -14,6 +14,8 @@ import {
   orderBy,
   getDocs,
 } from "firebase/firestore";
+import { linkWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
 import { db } from "@/lib/firebase/client";
 import { computeBalance } from "@/lib/firebase/credits";
 
@@ -92,6 +94,23 @@ export default function AdminSettingsView({ business }: { business: Business }) 
   const [businessCredits, setBusinessCredits] = useState<Credit[]>([]);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [voidingId, setVoidingId] = useState<string | null>(null);
+
+  const isGoogleLinked = user?.providerData.some((p) => p.providerId === "google.com") ?? false;
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkResult, setLinkResult] = useState<"success" | "error" | null>(null);
+
+  async function handleLinkGoogle() {
+    setLinkLoading(true);
+    setLinkResult(null);
+    try {
+      await linkWithPopup(auth.currentUser!, new GoogleAuthProvider());
+      setLinkResult("success");
+    } catch {
+      setLinkResult("error");
+    } finally {
+      setLinkLoading(false);
+    }
+  }
 
   const [courtOpen, setCourtOpen] = useState<Record<string, boolean>>({});
   const [courtRemoveConfirm, setCourtRemoveConfirm] = useState<string | null>(null);
@@ -288,7 +307,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
                 <textarea
                   value={draft.description}
                   onChange={(e) => setField("description", e.target.value)}
-                  rows={3}
+                  rows={6}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 outline-none focus:border-gray-400 transition-colors resize-none"
                 />
               </div>
@@ -556,134 +575,132 @@ export default function AdminSettingsView({ business }: { business: Business }) 
             </div>
           )}
         </div>
-      </div>
 
         {/* ── Section D: Payment ───────────────────────────────────────────── */}
-        {(draft.accepts_qr || draft.accepts_cash || draft.saas_credit_balance != null) && (
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
-            <SectionHeader title="Payment" open={sectionOpen.payment} onToggle={() => toggleSection("payment")} />
-            {sectionOpen.payment && (() => {
-              const bal = draft.saas_credit_balance;
-              const balColor =
-                bal === undefined || bal === null ? "text-gray-400"
-                : bal >= 10 ? "text-green-600"
-                : bal >= 5  ? "text-yellow-600"
-                : bal >= 1  ? "text-orange-500"
-                : "text-red-600";
-              const balLabel =
-                bal === undefined || bal === null ? "—"
-                : bal >= 10 ? "Healthy"
-                : bal >= 5  ? "Watch"
-                : bal >= 1  ? "Low"
-                : bal > -5  ? "Critical"
-                : "Suspended";
-              return (
-                <div className="space-y-4">
-                  {/* Payment options toggles */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-gray-500">Accepted Payment Methods</p>
-                    {[
-                      { key: "accepts_qr" as const,   label: "GCash QR (P2P / AI verification)" },
-                      { key: "accepts_cash" as const,  label: "Pay at Venue (cash on the day)" },
-                    ].map(({ key, label }) => (
-                      <label key={key} className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!draft[key]}
-                          onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.checked }))}
-                          className="w-4 h-4 rounded accent-gray-900"
-                        />
-                        <span className="text-sm text-gray-700">{label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {/* QR image upload — only when GCash QR is enabled */}
-                  {draft.accepts_qr && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-500">GCash QR Code Image</p>
-                      {draft.static_qr_url && (
-                        <div className="flex justify-center">
-                          <div className="border border-gray-200 rounded-xl p-2 bg-white">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={draft.static_qr_url}
-                              alt="GCash QR code"
-                              className="w-32 h-32 object-contain rounded-lg"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => qrFileInputRef.current?.click()}
-                        disabled={qrUploading}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-50"
-                      >
-                        {qrUploading ? (
-                          <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-gray-400 animate-spin" />
-                        ) : (
-                          <><Upload size={14} /><QrCode size={14} /></>
-                        )}
-                        {qrUploading ? "Uploading…" : draft.static_qr_url ? "Replace QR image" : "Upload QR image"}
-                      </button>
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+          <SectionHeader title="Payment" open={sectionOpen.payment} onToggle={() => toggleSection("payment")} />
+          {sectionOpen.payment && (() => {
+            const bal = draft.saas_credit_balance;
+            const balColor =
+              bal === undefined || bal === null ? "text-gray-400"
+              : bal >= 10 ? "text-green-600"
+              : bal >= 5  ? "text-yellow-600"
+              : bal >= 1  ? "text-orange-500"
+              : "text-red-600";
+            const balLabel =
+              bal === undefined || bal === null ? "—"
+              : bal >= 10 ? "Healthy"
+              : bal >= 5  ? "Watch"
+              : bal >= 1  ? "Low"
+              : bal > -5  ? "Critical"
+              : "Suspended";
+            return (
+              <div className="space-y-4">
+                {/* Payment options toggles */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-500">Accepted Payment Methods</p>
+                  {[
+                    { key: "accepts_qr" as const,      label: "QR Code (P2P / AI verification)" },
+                    { key: "accepts_cash" as const,     label: "Pay at Venue (cash on the day)" },
+                    { key: "accepts_gateway" as const,  label: "Online Gateway (PayMongo / Xendit)" },
+                  ].map(({ key, label }) => (
+                    <label key={key} className="flex items-center gap-3 cursor-pointer">
                       <input
-                        ref={qrFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleQrUpload(file);
-                        }}
+                        type="checkbox"
+                        checked={!!draft[key]}
+                        onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.checked }))}
+                        className="w-4 h-4 rounded accent-gray-900"
                       />
-                      {qrUploadError && (
-                        <p className="text-xs text-red-500 font-medium">{qrUploadError}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Wallet balance */}
-                  {bal !== undefined && bal !== null && (
-                    <>
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                        <div>
-                          <p className="text-xs font-semibold text-gray-500 mb-0.5">Wallet Balance</p>
-                          <p className={`text-2xl font-black ${balColor}`}>
-                            {bal}
-                            <span className="text-xs font-semibold text-gray-400 ml-1.5">credits</span>
-                          </p>
-                        </div>
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                          balLabel === "Healthy"    ? "bg-green-100 text-green-700"
-                          : balLabel === "Watch"   ? "bg-yellow-100 text-yellow-700"
-                          : balLabel === "Low"     ? "bg-orange-100 text-orange-700"
-                          : balLabel === "Critical" || balLabel === "Suspended" ? "bg-red-100 text-red-700"
-                          : "bg-gray-100 text-gray-500"
-                        }`}>
-                          {balLabel}
-                        </span>
-                      </div>
-                      {bal <= 0 && (
-                        <p className="text-xs text-red-500 font-semibold">
-                          {bal <= -5
-                            ? "Storefront suspended — online bookings are blocked. Top up your wallet to restore service."
-                            : `Online bookings will be suspended in ${bal + 5} more booking(s). Please top up.`}
-                        </p>
-                      )}
-                    </>
-                  )}
-                  <p className="text-xs text-gray-400">
-                    Wallet balance is managed by the bookit platform. Contact support to top up.
-                  </p>
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </label>
+                  ))}
                 </div>
-              );
-            })()}
-          </div>
-        )}
 
-        {/* ── Credits ─────────────────────────────────────────────────────── */}
-        <div className="space-y-4 pt-2 border-t border-gray-100">
+                {/* QR image upload — only when GCash QR is enabled */}
+                {draft.accepts_qr && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-500">QR Code Image</p>
+                    {draft.static_qr_url && (
+                      <div className="flex justify-center">
+                        <div className="border border-gray-200 rounded-xl p-2 bg-white">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={draft.static_qr_url}
+                            alt="QR code"
+                            className="w-32 h-32 object-contain rounded-lg"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => qrFileInputRef.current?.click()}
+                      disabled={qrUploading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-50"
+                    >
+                      {qrUploading ? (
+                        <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-gray-400 animate-spin" />
+                      ) : (
+                        <><Upload size={14} /><QrCode size={14} /></>
+                      )}
+                      {qrUploading ? "Uploading…" : draft.static_qr_url ? "Replace QR image" : "Upload QR image"}
+                    </button>
+                    <input
+                      ref={qrFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleQrUpload(file);
+                      }}
+                    />
+                    {qrUploadError && (
+                      <p className="text-xs text-red-500 font-medium">{qrUploadError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Wallet balance */}
+                {bal !== undefined && bal !== null && (
+                  <>
+                    <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-0.5">Wallet Balance</p>
+                        <p className={`text-2xl font-black ${balColor}`}>
+                          {bal}
+                          <span className="text-xs font-semibold text-gray-400 ml-1.5">credits</span>
+                        </p>
+                      </div>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        balLabel === "Healthy"    ? "bg-green-100 text-green-700"
+                        : balLabel === "Watch"   ? "bg-yellow-100 text-yellow-700"
+                        : balLabel === "Low"     ? "bg-orange-100 text-orange-700"
+                        : balLabel === "Critical" || balLabel === "Suspended" ? "bg-red-100 text-red-700"
+                        : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {balLabel}
+                      </span>
+                    </div>
+                    {bal <= 0 && (
+                      <p className="text-xs text-red-500 font-semibold">
+                        {bal <= -5
+                          ? "Storefront suspended — online bookings are blocked. Top up your wallet to restore service."
+                          : `Online bookings will be suspended in ${bal + 5} more booking(s). Please top up.`}
+                      </p>
+                    )}
+                  </>
+                )}
+                <p className="text-xs text-gray-400">
+                  Wallet balance is managed by the bookit platform. Contact support to top up.
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* ── Section E: Customer Credits ──────────────────────────────────── */}
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
           <SectionHeader
             title="Customer Credits"
             open={sectionOpen.credits}
@@ -760,6 +777,43 @@ export default function AdminSettingsView({ business }: { business: Business }) 
             </div>
           )}
         </div>
+
+      {/* ── Account ──────────────────────────────────────────────────────── */}
+      {!isGoogleLinked && (
+        <div className="mx-4 mb-4 p-4 rounded-xl border border-amber-200 bg-amber-50">
+          <p className="text-xs font-bold text-amber-800 mb-1">Link Google Sign-in</p>
+          <p className="text-xs text-amber-700 mb-3">
+            Connect your Google account so you can sign in with Google instead of email + password.
+            Your admin access and all data are preserved.
+          </p>
+          {linkResult === "success" && (
+            <p className="text-xs font-semibold text-green-700 mb-2">
+              Google account linked successfully. You can now sign in with Google.
+            </p>
+          )}
+          {linkResult === "error" && (
+            <p className="text-xs font-semibold text-red-600 mb-2">
+              Linking failed. Make sure you select the correct Google account and try again.
+            </p>
+          )}
+          {linkResult !== "success" && (
+            <button
+              onClick={() => void handleLinkGoogle()}
+              disabled={linkLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 transition-colors disabled:opacity-50"
+            >
+              <svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
+              {linkLoading ? "Opening Google…" : "Link Google Account"}
+            </button>
+          )}
+        </div>
+      )}
+      </div>
 
       {/* ── Fixed Save Bar ───────────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3 flex items-center justify-between">

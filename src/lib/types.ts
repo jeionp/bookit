@@ -1,5 +1,21 @@
 export type BusinessType = "court" | "appointment" | "room";
 
+export type CreditLedgerTrigger =
+  | "gateway_webhook"
+  | "ai_verify"
+  | "admin_approve"
+  | "admin_mark_paid";
+
+export interface CreditLedgerEntry {
+  id: string;
+  businessSlug: string;
+  bookingId: string;
+  trigger: CreditLedgerTrigger;
+  balanceBefore: number;
+  balanceAfter: number;
+  createdAt: string; // ISO date string from API
+}
+
 export interface CancellationPolicy {
   freeCancelHours: number;    // default 24 — cancel before this = full credit/refund
   noCancelHours: number;      // default 2  — cancel within this = blocked

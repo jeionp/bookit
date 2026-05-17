@@ -302,11 +302,13 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
     claudeResponse = '{"amount": 500}',
     mockBizUpdate = vi.fn().mockResolvedValue(undefined),
     mockLowBalance = vi.fn().mockResolvedValue(undefined),
+    mockLedgerAdd = vi.fn().mockResolvedValue({ id: 'entry-1' }),
   }: {
     bizData?: Record<string, unknown>
     claudeResponse?: string
     mockBizUpdate?: ReturnType<typeof vi.fn>
     mockLowBalance?: ReturnType<typeof vi.fn>
+    mockLedgerAdd?: ReturnType<typeof vi.fn>
   } = {}) {
     vi.resetModules()
 
@@ -314,7 +316,11 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
       adminDb: {
         collection: (name: string) => ({
           doc: () => (name === 'businesses'
-            ? { get: vi.fn().mockResolvedValue({ data: () => bizData }), update: mockBizUpdate }
+            ? {
+                get: vi.fn().mockResolvedValue({ data: () => bizData }),
+                update: mockBizUpdate,
+                collection: () => ({ add: mockLedgerAdd }),
+              }
             : {
                 get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ ...VALID_BOOKING }) }),
                 update: vi.fn().mockResolvedValue(undefined),
@@ -345,7 +351,8 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
       headers: { get: (h: string) => h === 'content-type' ? 'image/jpeg' : null },
     }))
 
-    return import('./verify-proof')
+    const mod = await import('./verify-proof')
+    return { ...mod, mockLedgerAdd }
   }
 
   afterEach(() => {
@@ -441,5 +448,25 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
     const { verifyPaymentProof } = await import('./verify-proof')
     await verifyPaymentProof('booking-abc')
     expect(mockBizUpdate).not.toHaveBeenCalled()
+  })
+
+  test('ledger add is called on businesses subcollection on OCR match', async () => {
+    const mockLedgerAdd = vi.fn().mockResolvedValue({ id: 'entry-1' })
+    const { verifyPaymentProof } = await importFresh({ mockLedgerAdd })
+    await verifyPaymentProof('booking-abc')
+    expect(mockLedgerAdd).toHaveBeenCalledOnce()
+    expect(mockLedgerAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: 'booking-abc',
+        trigger: 'ai_verify',
+      }),
+    )
+  })
+
+  test('ledger add is NOT called when OCR amount mismatches (rejected proof)', async () => {
+    const mockLedgerAdd = vi.fn().mockResolvedValue({ id: 'entry-x' })
+    const { verifyPaymentProof } = await importFresh({ claudeResponse: '{"amount": 300}', mockLedgerAdd })
+    await verifyPaymentProof('booking-abc')
+    expect(mockLedgerAdd).not.toHaveBeenCalled()
   })
 })

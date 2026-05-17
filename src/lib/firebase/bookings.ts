@@ -14,7 +14,7 @@ import { db } from "./client";
 
 export type BookingStatus = "confirmed" | "cancelled" | "slot_held" | "expired";
 export type CheckoutType = "P2P_AI" | "GATEWAY_SPLIT" | "PAY_AT_VENUE";
-export type PaymentStatusV2 = "pending_proof" | "ai_review" | "paid" | "rejected" | "pending_cash";
+export type PaymentStatusV2 = "pending_proof" | "ai_review" | "paid" | "rejected" | "pending_cash" | "pending_gateway";
 export type CancelledBy = "user" | "merchant" | "system";
 
 export interface Booking {

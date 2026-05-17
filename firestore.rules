@@ -69,5 +69,12 @@ service cloud.firestore {
       // All writes go through Admin SDK (cancel and bookings API routes)
       allow write: if false;
     }
+
+    match /businesses/{slug}/credit_ledger/{entryId} {
+      // Only admins of this business can read ledger entries
+      allow get, list: if isAdminOfSlug(slug);
+      // All writes go through Admin SDK (payment confirmation routes)
+      allow write: if false;
+    }
   }
 }

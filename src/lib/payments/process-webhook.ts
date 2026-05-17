@@ -3,8 +3,8 @@ import { adminDb } from "@/lib/firebase/admin-app";
 import {
   sendBookingConfirmation,
   sendAdminBookingNotification,
-  sendLowBalanceWarning,
 } from "@/lib/notifications/email";
+import { deductSaasCredit } from "./ledger";
 import type { WebhookEvent } from "./gateway";
 
 export interface WebhookResult {
@@ -44,22 +44,15 @@ export async function processWebhookEvent(event: WebhookEvent): Promise<WebhookR
     }
 
     const data = confirmedBooking!;
-    const bizRef = adminDb.collection("businesses").doc(data.businessSlug as string);
-    const bizSnap = await bizRef.get();
+    const bizSnap = await adminDb.collection("businesses").doc(data.businessSlug as string).get();
     const biz = bizSnap.data() ?? {};
 
-    if (typeof biz.saas_credit_balance === "number") {
-      const newBalance = biz.saas_credit_balance - 1;
-      await bizRef.update({ saas_credit_balance: FieldValue.increment(-1) });
-      if (newBalance === 5 || newBalance === 0) {
-        sendLowBalanceWarning({
-          businessEmail: (biz.email as string) ?? "",
-          businessName: data.businessName as string,
-          businessSlug: data.businessSlug as string,
-          balance: newBalance,
-        }).catch((err) => console.error("[process-webhook] low balance warning:", err));
-      }
-    }
+    await deductSaasCredit({
+      businessSlug: data.businessSlug as string,
+      bookingId: event.bookingId,
+      trigger: "gateway_webhook",
+      biz,
+    });
 
     const notificationData = {
       customerEmail: data.userEmail as string,
