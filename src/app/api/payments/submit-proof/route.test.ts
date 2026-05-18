@@ -59,9 +59,10 @@ const VALID_BOOKING = {
   payment_status_v2:  'pending_proof',
 }
 
+// S5: proofUrl path must contain `payment_proofs/{bookingId}/`
 const VALID_BODY = {
   bookingId: 'booking-abc',
-  proofUrl: 'https://firebasestorage.googleapis.com/v0/b/bucket/o/proof.jpg',
+  proofUrl: 'https://firebasestorage.googleapis.com/v0/b/bucket/o/payment_proofs%2Fbooking-abc%2Fproof.jpg',
 }
 
 describe('POST /api/payments/submit-proof', () => {
@@ -175,7 +176,7 @@ describe('POST /api/payments/submit-proof', () => {
     const { POST } = await import('./route')
     const res = await POST(makeReq({
       bookingId: VALID_BODY.bookingId,
-      proofUrl: 'https://storage.googleapis.com/bucket/proof.jpg',
+      proofUrl: `https://storage.googleapis.com/bucket/payment_proofs/${VALID_BODY.bookingId}/proof.jpg`,
     }))
     expect(res.status).toBe(200)
   })
@@ -286,5 +287,64 @@ describe('POST /api/payments/submit-proof', () => {
     const { POST } = await import('./route')
     const res = await POST(makeReq(VALID_BODY))
     expect(res.status).toBe(500)
+  })
+})
+
+// ─── S5: proof URL path validation ───────────────────────────────────────────
+
+describe('POST /api/payments/submit-proof — proof URL path validation (S5)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-123' })
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => ({ ...VALID_BOOKING }) })
+    mockBookingUpdate.mockResolvedValue(undefined)
+    mockVerifyPaymentProof.mockResolvedValue(undefined)
+    mockRunTransaction.mockImplementation(async (fn: Parameters<typeof mockRunTransaction>[0]) => {
+      await fn({ get: mockBookingGet, update: mockBookingUpdate })
+    })
+  })
+
+  test('valid Firebase Storage URL with correct payment_proofs/{bookingId}/ path → 200', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({
+      bookingId: 'booking-abc',
+      proofUrl: 'https://firebasestorage.googleapis.com/v0/b/bucket/o/payment_proofs%2Fbooking-abc%2Fproof.jpg',
+    }))
+    expect(res.status).toBe(200)
+  })
+
+  test('valid hostname but path for a different bookingId → 400', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({
+      bookingId: 'booking-abc',
+      proofUrl: 'https://firebasestorage.googleapis.com/v0/b/bucket/o/payment_proofs%2Fbooking-xyz%2Fproof.jpg',
+    }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'Invalid proofUrl' })
+    expect(mockRunTransaction).not.toHaveBeenCalled()
+  })
+
+  test('valid hostname but path missing payment_proofs/ prefix → 400', async () => {
+    const { POST } = await import('./route')
+    const res = await POST(makeReq({
+      bookingId: 'booking-abc',
+      proofUrl: 'https://firebasestorage.googleapis.com/v0/b/bucket/o/uploads%2Fbooking-abc%2Fproof.jpg',
+    }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'Invalid proofUrl' })
+    expect(mockRunTransaction).not.toHaveBeenCalled()
+  })
+
+  test('URL-encoded path with payment_proofs%2F{bookingId}%2F → passes decodeURIComponent check', async () => {
+    const { POST } = await import('./route')
+    const bookingId = 'booking-abc'
+    // Doubly-encoded: %252F → decodes to %2F → but that's not right.
+    // Single-encode: payment_proofs%2Fbooking-abc%2F → decodes to payment_proofs/booking-abc/
+    const encodedPath = `payment_proofs%2F${bookingId}%2Freceipt.png`
+    const res = await POST(makeReq({
+      bookingId,
+      proofUrl: `https://firebasestorage.googleapis.com/v0/b/bucket/o/${encodedPath}`,
+    }))
+    expect(res.status).toBe(200)
   })
 })

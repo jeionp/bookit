@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
 import { FieldValue } from "firebase-admin/firestore";
 import { isValidSlug } from "@/lib/slugify";
 
+const MAX_ACTIVE_RESERVATIONS = 3;
+
+let ratelimit: Ratelimit | null = null;
+function getRatelimit(): Ratelimit | null {
+  if (ratelimit) return ratelimit;
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  ratelimit = new Ratelimit({
+    redis:   Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(10, "60 m"),
+    prefix:  "bookit:rl:reserve-slug",
+  });
+  return ratelimit;
+}
+
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const idToken = authHeader.replace("Bearer ", "");
+  const authHeader = req.headers.get("authorization") ?? "";
+  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!idToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -16,6 +34,18 @@ export async function POST(req: NextRequest) {
     uid = decoded.uid;
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rl = getRatelimit();
+  if (rl) {
+    try {
+      const { success } = await rl.limit(uid);
+      if (!success) {
+        return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      }
+    } catch (err) {
+      console.error("[api/onboarding/reserve-slug] rate-limit error:", err);
+    }
   }
 
   const body = await req.json().catch(() => ({}));
@@ -51,15 +81,27 @@ export async function POST(req: NextRequest) {
         // Own reservation — update timestamp below (idempotent re-reserve)
       }
 
-      // Compute the new admin slugs array (add new, optionally remove old)
+      // Cap active reservations per user to prevent slug squatting.
+      // Active reservations = slugs in admin doc that point to onboarding_reserved docs.
+      // We approximate by counting slugs in the admin doc minus the one being released.
       const currentSlugs: string[] = adminDoc.data()?.slugs ?? [];
-      let newSlugs = [...new Set([...currentSlugs, slug])];
+      const retainedSlugs = releaseSlug
+        ? currentSlugs.filter((s) => s !== releaseSlug)
+        : currentSlugs;
+
+      // Exclude the current slug if it's already in the list (idempotent re-reserve)
+      const newReservations = retainedSlugs.filter((s) => s !== slug);
+      if (newReservations.length >= MAX_ACTIVE_RESERVATIONS) {
+        throw new Error("RESERVATION_LIMIT");
+      }
+
+      let newSlugs = [...new Set([...retainedSlugs, slug])];
 
       // Writes
       t.set(
         bizRef,
         { status: "onboarding_reserved", reservedBy: uid, reservedAt: FieldValue.serverTimestamp() },
-        { merge: true }
+        { merge: true },
       );
 
       if (
@@ -76,8 +118,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Could not reserve slug";
-    const status = msg === "Slug already taken" ? 409 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    if (msg === "Slug already taken") return NextResponse.json({ error: msg }, { status: 409 });
+    if (msg === "RESERVATION_LIMIT")  return NextResponse.json({ error: "Too many active reservations" }, { status: 429 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

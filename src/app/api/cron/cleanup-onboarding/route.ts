@@ -28,24 +28,39 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ deleted: 0 });
   }
 
-  // Group deletions into batches of 500 (Firestore limit)
+  // Group deletions into batches of 500 (Firestore limit).
+  // Aggregate slug removals per user so each admin doc appears at most once per batch
+  // (Firestore disallows multiple writes to the same document in a single batch).
   const BATCH_LIMIT = 500;
   let deleted = 0;
 
   for (let i = 0; i < stale.docs.length; i += BATCH_LIMIT) {
-    const batch = adminDb.batch();
     const chunk = stale.docs.slice(i, i + BATCH_LIMIT);
 
+    // Accumulate slugs to remove per owner
+    const slugsByOwner = new Map<string, string[]>();
     for (const doc of chunk) {
-      const { reservedBy, slug } = doc.data() as { reservedBy: string; slug: string };
-
-      batch.delete(doc.ref);
-
+      const { reservedBy, slug } = doc.data() as { reservedBy?: string; slug?: string };
       if (reservedBy && slug) {
-        batch.update(adminDb.collection("admins").doc(reservedBy), {
-          slugs: FieldValue.arrayRemove(slug),
-        });
+        const existing = slugsByOwner.get(reservedBy) ?? [];
+        existing.push(slug);
+        slugsByOwner.set(reservedBy, existing);
       }
+    }
+
+    const batch = adminDb.batch();
+
+    for (const doc of chunk) {
+      batch.delete(doc.ref);
+    }
+
+    // One write per admin doc, removing all expired slugs at once
+    for (const [ownerId, slugsToRemove] of slugsByOwner.entries()) {
+      batch.set(
+        adminDb.collection("admins").doc(ownerId),
+        { slugs: FieldValue.arrayRemove(...slugsToRemove) },
+        { merge: true },
+      );
     }
 
     await batch.commit();

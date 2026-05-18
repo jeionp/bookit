@@ -25,7 +25,10 @@ export function createGateway() {
       return new PayMongoGateway(secretKey, webhookSecret);
     }
     case "stub":
-    default:
       return new StubGateway();
+    default:
+      throw new Error(
+        `Unknown PAYMENT_GATEWAY_PROVIDER: "${provider}". Valid values: "paymongo", "stub".`,
+      );
   }
 }

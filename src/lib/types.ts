@@ -36,7 +36,7 @@ export interface Credit {
   amount: number;
   currency: string;
   type: "issued" | "redeemed";
-  reason: "cancellation";
+  reason: "cancellation" | "admin_credit";
   sourceBookingId: string;
   redeemedBookingId?: string;
   expiresAt: import("firebase/firestore").Timestamp;
