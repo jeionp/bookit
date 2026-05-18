@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const {
@@ -151,5 +151,95 @@ describe('POST /api/payments/create-session', () => {
     expect(call.cancelUrl).toContain('/paddleup')
     expect(call.successUrl).toContain('payment=success')
     expect(call.cancelUrl).toContain('payment=cancelled')
+  })
+})
+
+// ─── S6: redirect URL construction from env, not Host header ─────────────────
+
+describe('POST /api/payments/create-session — redirect URL base (S6)', () => {
+  const savedEnv: Record<string, string | undefined> = {}
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' })
+    mockBookingGet.mockResolvedValue({ exists: true, data: () => GATEWAY_BOOKING })
+    mockBookingUpdate.mockResolvedValue(undefined)
+    mockCreateSession.mockResolvedValue(STUB_SESSION)
+    // Save env vars so we can restore them
+    savedEnv.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL
+    savedEnv.VERCEL_URL          = process.env.VERCEL_URL
+  })
+
+  afterEach(() => {
+    // Restore env vars
+    if (savedEnv.NEXT_PUBLIC_APP_URL === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = savedEnv.NEXT_PUBLIC_APP_URL
+    }
+    if (savedEnv.VERCEL_URL === undefined) {
+      delete process.env.VERCEL_URL
+    } else {
+      process.env.VERCEL_URL = savedEnv.VERCEL_URL
+    }
+  })
+
+  test('NEXT_PUBLIC_APP_URL set → success URL uses that base, not the Host header', async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://bookit.example.com'
+    delete process.env.VERCEL_URL
+
+    // Request carries a different Host header — should be ignored
+    const req = new NextRequest('http://localhost/api/payments/create-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer valid-token',
+        host: 'attacker.example.com',
+      },
+      body: JSON.stringify({ bookingId: 'booking-1' }),
+    })
+
+    await POST(req)
+    const call = mockCreateSession.mock.calls[0][0] as { successUrl: string; cancelUrl: string }
+    expect(call.successUrl).toMatch(/^https:\/\/bookit\.example\.com\//)
+    expect(call.successUrl).not.toContain('attacker.example.com')
+  })
+
+  test('NEXT_PUBLIC_APP_URL unset + VERCEL_URL set → success URL uses https://{VERCEL_URL}', async () => {
+    delete process.env.NEXT_PUBLIC_APP_URL
+    process.env.VERCEL_URL = 'my-project.vercel.app'
+
+    await POST(makeReq({ bookingId: 'booking-1' }))
+    const call = mockCreateSession.mock.calls[0][0] as { successUrl: string; cancelUrl: string }
+    expect(call.successUrl).toMatch(/^https:\/\/my-project\.vercel\.app\//)
+  })
+
+  test('both env vars unset → falls back to http://localhost:3000', async () => {
+    delete process.env.NEXT_PUBLIC_APP_URL
+    delete process.env.VERCEL_URL
+
+    await POST(makeReq({ bookingId: 'booking-1' }))
+    const call = mockCreateSession.mock.calls[0][0] as { successUrl: string; cancelUrl: string }
+    expect(call.successUrl).toMatch(/^http:\/\/localhost:3000\//)
+  })
+
+  test('Host header value is NOT used when NEXT_PUBLIC_APP_URL is set (open-redirect regression)', async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://bookit.example.com'
+    delete process.env.VERCEL_URL
+
+    const req = new NextRequest('http://localhost/api/payments/create-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer valid-token',
+        host: 'evil.example.com',
+      },
+      body: JSON.stringify({ bookingId: 'booking-1' }),
+    })
+
+    await POST(req)
+    const call = mockCreateSession.mock.calls[0][0] as { successUrl: string; cancelUrl: string }
+    expect(call.successUrl).not.toContain('evil.example.com')
+    expect(call.cancelUrl).not.toContain('evil.example.com')
   })
 })

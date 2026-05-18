@@ -16,12 +16,14 @@ const {
   mockTransactionGet,
   mockTransactionSet,
   mockTransactionDelete,
+  mockRatelimitLimit,
 } = vi.hoisted(() => ({
   mockVerifyIdToken:     vi.fn(),
   mockRunTransaction:    vi.fn(),
   mockTransactionGet:    vi.fn(),
   mockTransactionSet:    vi.fn(),
   mockTransactionDelete: vi.fn(),
+  mockRatelimitLimit:    vi.fn(),
 }))
 
 // Shared transaction object — methods are mocked individually
@@ -30,6 +32,17 @@ const mockTransaction = {
   set:    mockTransactionSet,
   delete: mockTransactionDelete,
 }
+
+vi.mock('@upstash/ratelimit', () => ({
+  Ratelimit: Object.assign(
+    function MockRatelimit() { return { limit: mockRatelimitLimit }; },
+    { slidingWindow: vi.fn() },
+  ),
+}))
+
+vi.mock('@upstash/redis', () => ({
+  Redis: { fromEnv: vi.fn() },
+}))
 
 vi.mock('@/lib/firebase/admin-app', () => ({
   adminAuth: { verifyIdToken: mockVerifyIdToken },
@@ -331,5 +344,93 @@ describe('POST /api/onboarding/reserve-slug — releaseSlug', () => {
 
     // Release guard requires status === 'onboarding_reserved' — must not delete
     expect(mockTransactionDelete).not.toHaveBeenCalled()
+  })
+})
+
+// ─── S4b: rate limiting ───────────────────────────────────────────────────────
+
+describe('POST /api/onboarding/reserve-slug — rate limiting (S4b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' })
+    mockTransactionSet.mockReturnValue(undefined)
+    mockTransactionDelete.mockReturnValue(undefined)
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://fake.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+  })
+
+  test('returns 429 when per-uid rate limit is exceeded', async () => {
+    mockRatelimitLimit.mockResolvedValue({ success: false })
+    const res = await POST(makeReq({ slug: 'my-biz' }))
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ error: 'Too many requests' })
+    expect(mockRunTransaction).not.toHaveBeenCalled()
+  })
+})
+
+// ─── S4b: reservation cap ─────────────────────────────────────────────────────
+
+describe('POST /api/onboarding/reserve-slug — reservation cap (S4b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' })
+    mockTransactionSet.mockReturnValue(undefined)
+    mockTransactionDelete.mockReturnValue(undefined)
+    // Ensure any cached rate-limiter singleton passes through (success: true)
+    mockRatelimitLimit.mockResolvedValue({ success: true })
+    // Rate limiter inactive — no env vars (module singleton may already be cached)
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+  })
+
+  test('returns 429 "Too many active reservations" when user has 3 reservations and tries to add a 4th (different slug)', async () => {
+    setupTransaction({
+      'businesses/fourth-slug': { exists: false },
+      'admins/user-1': {
+        exists: true,
+        data: () => ({ slugs: ['slug-a', 'slug-b', 'slug-c'] }),
+      },
+    })
+
+    const res = await POST(makeReq({ slug: 'fourth-slug' }))
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ error: 'Too many active reservations' })
+  })
+
+  test('allows re-reserving an already-owned slug when user has 3 total (idempotent)', async () => {
+    // user already owns 'slug-a', 'slug-b', 'slug-c'; re-reserving 'slug-a' is idempotent
+    setupTransaction({
+      'businesses/slug-a': {
+        exists: true,
+        data: () => ({ status: 'onboarding_reserved', reservedBy: 'user-1' }),
+      },
+      'admins/user-1': {
+        exists: true,
+        data: () => ({ slugs: ['slug-a', 'slug-b', 'slug-c'] }),
+      },
+    })
+
+    const res = await POST(makeReq({ slug: 'slug-a' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
+  })
+
+  test('allows reserving a new slug when releasing one of the existing 3', async () => {
+    // user has 3 slugs but releases 'slug-a' while reserving 'new-slug'
+    setupTransaction({
+      'businesses/new-slug': { exists: false },
+      'businesses/slug-a':   {
+        exists: true,
+        data: () => ({ status: 'onboarding_reserved', reservedBy: 'user-1' }),
+      },
+      'admins/user-1': {
+        exists: true,
+        data: () => ({ slugs: ['slug-a', 'slug-b', 'slug-c'] }),
+      },
+    })
+
+    const res = await POST(makeReq({ slug: 'new-slug', releaseSlug: 'slug-a' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
   })
 })

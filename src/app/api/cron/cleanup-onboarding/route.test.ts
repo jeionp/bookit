@@ -14,6 +14,7 @@ const {
   mockQueryGet,
   mockBatchDelete,
   mockBatchUpdate,
+  mockBatchSet,
   mockBatchCommit,
   mockTimestampFromMillis,
   mockArrayRemove,
@@ -21,6 +22,7 @@ const {
   mockQueryGet:            vi.fn(),
   mockBatchDelete:         vi.fn(),
   mockBatchUpdate:         vi.fn(),
+  mockBatchSet:            vi.fn(),
   mockBatchCommit:         vi.fn(),
   mockTimestampFromMillis: vi.fn((ms: number) => ({ _ms: ms })),
   mockArrayRemove:         vi.fn((...args: unknown[]) => ({ _sentinel: 'arrayRemove', args })),
@@ -29,6 +31,7 @@ const {
 const mockBatch = {
   delete: mockBatchDelete,
   update: mockBatchUpdate,
+  set:    mockBatchSet,
   commit: mockBatchCommit,
 }
 
@@ -87,6 +90,7 @@ describe('GET /api/cron/cleanup-onboarding — auth', () => {
     vi.clearAllMocks()
     mockBatchDelete.mockReturnThis()
     mockBatchUpdate.mockReturnThis()
+    mockBatchSet.mockReturnThis()
     mockBatchCommit.mockResolvedValue(undefined)
     mockWhere1.where.mockReturnValue(mockWhere2)
     mockBusinessCollection.where.mockReturnValue(mockWhere1)
@@ -130,6 +134,7 @@ describe('GET /api/cron/cleanup-onboarding — no stale reservations', () => {
     vi.clearAllMocks()
     mockBatchDelete.mockReturnThis()
     mockBatchUpdate.mockReturnThis()
+    mockBatchSet.mockReturnThis()
     mockBatchCommit.mockResolvedValue(undefined)
     mockWhere1.where.mockReturnValue(mockWhere2)
     mockBusinessCollection.where.mockReturnValue(mockWhere1)
@@ -159,6 +164,7 @@ describe('GET /api/cron/cleanup-onboarding — stale reservation deletion', () =
     vi.clearAllMocks()
     mockBatchDelete.mockReturnThis()
     mockBatchUpdate.mockReturnThis()
+    mockBatchSet.mockReturnThis()
     mockBatchCommit.mockResolvedValue(undefined)
     mockWhere1.where.mockReturnValue(mockWhere2)
     mockBusinessCollection.where.mockReturnValue(mockWhere1)
@@ -178,19 +184,20 @@ describe('GET /api/cron/cleanup-onboarding — stale reservation deletion', () =
     expect(mockBatchDelete).toHaveBeenCalledWith(staleDoc.ref)
   })
 
-  test('removes slug from admins/{reservedBy}.slugs via batch.update', async () => {
+  test('removes slug from admins/{reservedBy}.slugs via batch.set+merge (S8: was batch.update)', async () => {
     const staleDoc = makeStaleDoc('stale-biz', 'user-1')
     mockQueryGet.mockResolvedValue({ empty: false, docs: [staleDoc] })
 
     await GET(makeReq())
 
-    expect(mockBatchUpdate).toHaveBeenCalledOnce()
-    const [adminRef, updateData] = mockBatchUpdate.mock.calls[0]
+    expect(mockBatchSet).toHaveBeenCalledOnce()
+    const [adminRef, setData, setOptions] = mockBatchSet.mock.calls[0]
     expect((adminRef as { _collection?: string })._collection).toBe('admins')
     expect((adminRef as { _id?: string })._id).toBe('user-1')
     // slugs field uses arrayRemove sentinel
     expect(mockArrayRemove).toHaveBeenCalledWith('stale-biz')
-    expect((updateData as { slugs: unknown }).slugs).toMatchObject({ _sentinel: 'arrayRemove' })
+    expect((setData as { slugs: unknown }).slugs).toMatchObject({ _sentinel: 'arrayRemove' })
+    expect(setOptions).toMatchObject({ merge: true })
   })
 
   test('commits the batch exactly once for a single stale doc', async () => {
@@ -214,7 +221,8 @@ describe('GET /api/cron/cleanup-onboarding — stale reservation deletion', () =
     expect(await res.json()).toEqual({ deleted: 3 })
 
     expect(mockBatchDelete).toHaveBeenCalledTimes(3)
-    expect(mockBatchUpdate).toHaveBeenCalledTimes(3)
+    // S8: one batch.set per distinct owner (3 owners → 3 set calls)
+    expect(mockBatchSet).toHaveBeenCalledTimes(3)
   })
 
   test('commits once per batch chunk for multiple stale docs', async () => {
@@ -249,5 +257,91 @@ describe('GET /api/cron/cleanup-onboarding — stale reservation deletion', () =
 
     expect(mockBusinessCollection.where).toHaveBeenCalledWith('status', '==', 'onboarding_reserved')
     expect(mockWhere1.where).toHaveBeenCalledWith('reservedAt', '<', expect.anything())
+  })
+})
+
+// ─── S8: per-uid slug aggregation + batch.set instead of batch.update ────────
+
+describe('GET /api/cron/cleanup-onboarding — S8 batch dedup and set+merge', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockBatchDelete.mockReturnThis()
+    mockBatchUpdate.mockReturnThis()
+    mockBatchSet.mockReturnThis()
+    mockBatchCommit.mockResolvedValue(undefined)
+    mockWhere1.where.mockReturnValue(mockWhere2)
+    mockBusinessCollection.where.mockReturnValue(mockWhere1)
+    mockAdminsCollection.doc.mockImplementation((id: string) => ({ _collection: 'admins', _id: id }))
+    process.env.CRON_SECRET = CRON_SECRET
+  })
+
+  test('two expired reservations from the same uid → exactly ONE admin doc write (dedup)', async () => {
+    const docs = [
+      makeStaleDoc('slug-a', 'user-1'),
+      makeStaleDoc('slug-b', 'user-1'),
+    ]
+    mockQueryGet.mockResolvedValue({ empty: false, docs })
+
+    await GET(makeReq())
+
+    // Two business docs deleted
+    expect(mockBatchDelete).toHaveBeenCalledTimes(2)
+    // Only ONE admin write for user-1 (not two separate writes)
+    expect(mockBatchSet).toHaveBeenCalledOnce()
+    const [adminRef, setData, setOptions] = mockBatchSet.mock.calls[0]
+    expect((adminRef as { _id?: string })._id).toBe('user-1')
+    expect(setOptions).toMatchObject({ merge: true })
+    // arrayRemove is called once with both slugs
+    expect(mockArrayRemove).toHaveBeenCalledWith('slug-a', 'slug-b')
+    expect((setData as { slugs: unknown }).slugs).toMatchObject({ _sentinel: 'arrayRemove' })
+  })
+
+  test('two expired reservations from different uids → two separate admin doc writes', async () => {
+    const docs = [
+      makeStaleDoc('slug-a', 'user-1'),
+      makeStaleDoc('slug-b', 'user-2'),
+    ]
+    mockQueryGet.mockResolvedValue({ empty: false, docs })
+
+    await GET(makeReq())
+
+    expect(mockBatchDelete).toHaveBeenCalledTimes(2)
+    expect(mockBatchSet).toHaveBeenCalledTimes(2)
+
+    const ownerIds = mockBatchSet.mock.calls.map(
+      ([ref]) => (ref as { _id?: string })._id,
+    )
+    expect(ownerIds).toContain('user-1')
+    expect(ownerIds).toContain('user-2')
+  })
+
+  test('doc missing reservedBy → doc is deleted but no admin write attempted', async () => {
+    const docWithoutOwner = {
+      ref:  { _collection: 'businesses', _id: 'orphan-slug' },
+      data: () => ({ slug: 'orphan-slug' /* no reservedBy */ }),
+    }
+    mockQueryGet.mockResolvedValue({ empty: false, docs: [docWithoutOwner] })
+
+    const res = await GET(makeReq())
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ deleted: 1 })
+
+    expect(mockBatchDelete).toHaveBeenCalledOnce()
+    expect(mockBatchSet).not.toHaveBeenCalled()
+  })
+
+  test('doc missing slug field → doc is deleted but no admin write attempted', async () => {
+    const docWithoutSlug = {
+      ref:  { _collection: 'businesses', _id: 'no-slug-doc' },
+      data: () => ({ reservedBy: 'user-1' /* no slug */ }),
+    }
+    mockQueryGet.mockResolvedValue({ empty: false, docs: [docWithoutSlug] })
+
+    const res = await GET(makeReq())
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ deleted: 1 })
+
+    expect(mockBatchDelete).toHaveBeenCalledOnce()
+    expect(mockBatchSet).not.toHaveBeenCalled()
   })
 })

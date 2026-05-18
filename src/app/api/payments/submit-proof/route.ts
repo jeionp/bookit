@@ -38,13 +38,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  let proofHostname: string;
+  let parsedProofUrl: URL;
   try {
-    proofHostname = new URL(proofUrl).hostname;
+    parsedProofUrl = new URL(proofUrl);
   } catch {
     return NextResponse.json({ error: "Invalid proofUrl" }, { status: 400 });
   }
-  if (!ALLOWED_PROOF_HOSTNAMES.has(proofHostname)) {
+  if (!ALLOWED_PROOF_HOSTNAMES.has(parsedProofUrl.hostname)) {
+    return NextResponse.json({ error: "Invalid proofUrl" }, { status: 400 });
+  }
+  // Ensure the URL path contains this booking's ID — prevents cross-booking proof reuse.
+  const decodedPath = decodeURIComponent(parsedProofUrl.pathname);
+  if (!decodedPath.includes(`payment_proofs/${bookingId}/`)) {
     return NextResponse.json({ error: "Invalid proofUrl" }, { status: 400 });
   }
 

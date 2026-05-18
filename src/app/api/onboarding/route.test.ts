@@ -228,6 +228,103 @@ describe('POST /api/onboarding — boolean coercion for accepts_* fields', () =>
   })
 })
 
+describe('POST /api/onboarding — S3 field-length and structured validation', () => {
+  beforeEach(() => {
+    mockVerifyIdToken.mockReset().mockResolvedValue({ uid: 'user-1' })
+    mockDocGet.mockReset().mockResolvedValue({ exists: false })
+    mockBatchSet.mockReset().mockReturnThis()
+    mockBatchCommit.mockReset().mockResolvedValue(undefined)
+  })
+
+  test('rejects name longer than 100 chars → 400', async () => {
+    const res = await POST(makeReq({ ...VALID_BODY, name: 'x'.repeat(101) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/name/)
+  })
+
+  test('rejects description longer than 1000 chars → 400', async () => {
+    const res = await POST(makeReq({ ...VALID_BODY, description: 'x'.repeat(1001) }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/description/)
+  })
+
+  test('rejects type: "invalid_type" → 400', async () => {
+    const res = await POST(makeReq({ ...VALID_BODY, type: 'invalid_type' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toHaveProperty('error', 'Invalid business type')
+  })
+
+  test('rejects facilities with more than 10 items → 400', async () => {
+    const facility = { id: 'c1', name: 'Court', pricePerHour: 100 }
+    const facilities = Array.from({ length: 11 }, (_, i) => ({ ...facility, id: `c${i}` }))
+    const res = await POST(makeReq({ ...VALID_BODY, facilities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/10/)
+  })
+
+  test('rejects facility with pricePerHour: -1 → 400', async () => {
+    const facilities = [{ id: 'c1', name: 'Court', pricePerHour: -1 }]
+    const res = await POST(makeReq({ ...VALID_BODY, facilities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/pricePerHour/)
+  })
+
+  test('rejects facility with pricePerHour: 100000 (over max 99999) → 400', async () => {
+    const facilities = [{ id: 'c1', name: 'Court', pricePerHour: 100000 }]
+    const res = await POST(makeReq({ ...VALID_BODY, facilities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/pricePerHour/)
+  })
+
+  test('rejects facility missing name → 400', async () => {
+    const facilities = [{ id: 'c1', pricePerHour: 100 }]
+    const res = await POST(makeReq({ ...VALID_BODY, facilities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/name/)
+  })
+
+  test('rejects facility with name over 100 chars → 400', async () => {
+    const facilities = [{ id: 'c1', name: 'x'.repeat(101), pricePerHour: 100 }]
+    const res = await POST(makeReq({ ...VALID_BODY, facilities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/name/)
+  })
+
+  test('rejects amenities with 51 items → 400', async () => {
+    const amenities = Array.from({ length: 51 }, (_, i) => `Amenity ${i}`)
+    const res = await POST(makeReq({ ...VALID_BODY, amenities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/amenit/)
+  })
+
+  test('rejects amenity string over 100 chars → 400', async () => {
+    const amenities = ['x'.repeat(101)]
+    const res = await POST(makeReq({ ...VALID_BODY, amenities }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/amenity|Amenity/i)
+  })
+
+  test('accepts valid facilities and amenities → 200 and calls batch.commit', async () => {
+    const facilities = [
+      { id: 'c1', name: 'Main Court', pricePerHour: 500 },
+      { id: 'c2', name: 'Side Court', pricePerHour: 300, primePricePerHour: 400, description: 'Smaller court', currency: 'PHP' },
+    ]
+    const amenities = ['Parking', 'Shower', 'Locker']
+    const res = await POST(makeReq({ ...VALID_BODY, facilities, amenities }))
+    expect(res.status).toBe(200)
+    expect(mockBatchCommit).toHaveBeenCalledOnce()
+  })
+})
+
 describe('POST /api/onboarding — success', () => {
   beforeEach(() => {
     mockVerifyIdToken.mockReset().mockResolvedValue({ uid: 'user-1' })

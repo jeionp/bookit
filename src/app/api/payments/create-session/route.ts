@@ -42,9 +42,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Booking is not awaiting gateway payment" }, { status: 409 });
   }
 
-  const host = req.headers.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") ? "http" : "https";
-  const base = `${proto}://${host}`;
+  // Use a trusted base URL from env, never from the Host header (open-redirect risk).
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
   const successUrl = `${base}/${booking.businessSlug as string}?payment=success&bookingId=${bookingId}`;
   const cancelUrl  = `${base}/${booking.businessSlug as string}?payment=cancelled&bookingId=${bookingId}`;
 
