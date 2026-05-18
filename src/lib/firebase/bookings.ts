@@ -256,7 +256,7 @@ export async function getAllBookingsForDay(
     collection(db, "bookings"),
     where("businessSlug", "==", businessSlug),
     where("date", "==", date),
-    where("status", "==", "confirmed")
+    where("status", "in", ["confirmed", "slot_held"])
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));

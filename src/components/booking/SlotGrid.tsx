@@ -6,7 +6,6 @@ import { formatHour, groupByPeriod, SlotState } from "@/lib/slots";
 
 interface SlotGridProps {
   slots: number[];
-  bookedHours: number[];
   facility: Facility;
   accentColor: string;
   loadingSlots: boolean;
@@ -74,7 +73,7 @@ export default function SlotGrid({
             <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
               {periodSlots.map((hour) => {
                 const state = slotState(hour);
-                const unavailable = state === "booked";
+                const unavailable = state === "booked" || state === "pending";
 
                 let cls =
                   "h-9 rounded-xl text-[11px] font-semibold transition-colors border-2 flex items-center justify-center w-full ";
@@ -89,6 +88,9 @@ export default function SlotGrid({
                 } else if (state === "available") {
                   cls += "border-transparent cursor-pointer hover:brightness-95";
                   style = { backgroundColor: `${accentColor}20`, color: accentColor };
+                } else if (state === "pending") {
+                  cls += "border-transparent cursor-not-allowed text-amber-600";
+                  style = { backgroundColor: "#fef3c7" };
                 } else {
                   cls += "border-transparent cursor-not-allowed text-gray-400";
                   style = { backgroundColor: "#f3f4f6" };
@@ -112,7 +114,7 @@ export default function SlotGrid({
                     style={style}
                     draggable={false}
                   >
-                    {state === "booked" ? "Booked" : formatHour(hour)}
+                    {state === "booked" ? "Booked" : state === "pending" ? "Pending" : formatHour(hour)}
                   </button>
                 );
               })}

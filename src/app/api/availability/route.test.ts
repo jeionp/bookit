@@ -39,6 +39,9 @@ function makeSnap(docs: { id: string; data: () => Record<string, unknown> }[]) {
 describe('GET /api/availability', () => {
   beforeEach(() => {
     mockGet.mockReset()
+    // Default: both the confirmed and pending queries return empty snapshots.
+    // Tests that need specific data override with mockResolvedValueOnce chains.
+    mockGet.mockResolvedValue(makeSnap([]))
   })
 
   // ── Validation ──────────────────────────────────────────────────────────────
@@ -96,26 +99,24 @@ describe('GET /api/availability', () => {
 
   // ── Happy-path: no bookings ─────────────────────────────────────────────────
 
-  test('returns { bookedHours: [] } when no confirmed bookings exist', async () => {
-    mockGet.mockResolvedValue(makeSnap([]))
-
+  test('returns { bookedHours: [], pendingHours: [] } when no bookings exist', async () => {
     const res = await GET(
       makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' })
     )
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ bookedHours: [] })
+    expect(await res.json()).toEqual({ bookedHours: [], pendingHours: [] })
   })
 
   // ── Happy-path: bookings present ────────────────────────────────────────────
 
   test('returns the correct booked hours from confirmed bookings', async () => {
-    mockGet.mockResolvedValue(
-      makeSnap([
+    mockGet
+      .mockResolvedValueOnce(makeSnap([
         { id: 'booking-a', data: () => ({ hours: [8, 9], userId: 'u1', userEmail: 'a@example.com', userName: 'Alice' }) },
         { id: 'booking-b', data: () => ({ hours: [14],   userId: 'u2', userEmail: 'b@example.com', userName: 'Bob' }) },
-      ])
-    )
+      ]))
+      .mockResolvedValueOnce(makeSnap([]))
 
     const res = await GET(
       makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' })
@@ -125,16 +126,17 @@ describe('GET /api/availability', () => {
     const body = await res.json()
     expect(body.bookedHours).toEqual(expect.arrayContaining([8, 9, 14]))
     expect(body.bookedHours).toHaveLength(3)
+    expect(body.pendingHours).toEqual([])
   })
 
   test('aggregates hours from multiple booking documents', async () => {
-    mockGet.mockResolvedValue(
-      makeSnap([
+    mockGet
+      .mockResolvedValueOnce(makeSnap([
         { id: 'bk-1', data: () => ({ hours: [6, 7], userId: 'u1', userEmail: 'x@x.com', userName: 'X' }) },
         { id: 'bk-2', data: () => ({ hours: [8],    userId: 'u2', userEmail: 'y@y.com', userName: 'Y' }) },
         { id: 'bk-3', data: () => ({ hours: [9, 10], userId: 'u3', userEmail: 'z@z.com', userName: 'Z' }) },
-      ])
-    )
+      ]))
+      .mockResolvedValueOnce(makeSnap([]))
 
     const res = await GET(
       makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' })
@@ -147,12 +149,12 @@ describe('GET /api/availability', () => {
   // ── excludeBookingId ────────────────────────────────────────────────────────
 
   test('excludes hours from the booking matching excludeBookingId', async () => {
-    mockGet.mockResolvedValue(
-      makeSnap([
+    mockGet
+      .mockResolvedValueOnce(makeSnap([
         { id: 'exclude-me', data: () => ({ hours: [10, 11], userId: 'u1', userEmail: 'a@a.com', userName: 'A' }) },
         { id: 'keep-me',    data: () => ({ hours: [12],     userId: 'u2', userEmail: 'b@b.com', userName: 'B' }) },
-      ])
-    )
+      ]))
+      .mockResolvedValueOnce(makeSnap([]))
 
     const res = await GET(
       makeReq({
@@ -171,11 +173,11 @@ describe('GET /api/availability', () => {
   })
 
   test('returns all hours when excludeBookingId does not match any document', async () => {
-    mockGet.mockResolvedValue(
-      makeSnap([
+    mockGet
+      .mockResolvedValueOnce(makeSnap([
         { id: 'bk-1', data: () => ({ hours: [8, 9], userId: 'u1', userEmail: 'a@a.com', userName: 'A' }) },
-      ])
-    )
+      ]))
+      .mockResolvedValueOnce(makeSnap([]))
 
     const res = await GET(
       makeReq({
@@ -193,8 +195,8 @@ describe('GET /api/availability', () => {
   // ── No PII in response ──────────────────────────────────────────────────────
 
   test('response does not contain userId, userEmail, or userName fields', async () => {
-    mockGet.mockResolvedValue(
-      makeSnap([
+    mockGet
+      .mockResolvedValueOnce(makeSnap([
         {
           id: 'bk-pii',
           data: () => ({
@@ -204,8 +206,8 @@ describe('GET /api/availability', () => {
             userName:  'Secret Name',
           }),
         },
-      ])
-    )
+      ]))
+      .mockResolvedValueOnce(makeSnap([]))
 
     const res = await GET(
       makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' })
@@ -215,7 +217,6 @@ describe('GET /api/availability', () => {
     expect(body).not.toHaveProperty('userId')
     expect(body).not.toHaveProperty('userEmail')
     expect(body).not.toHaveProperty('userName')
-    // Only the safe field should be present
-    expect(Object.keys(body)).toEqual(['bookedHours'])
+    expect(Object.keys(body).sort()).toEqual(['bookedHours', 'pendingHours'])
   })
 })

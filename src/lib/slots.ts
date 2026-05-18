@@ -62,7 +62,7 @@ export function groupByPeriod(slots: number[]) {
   );
 }
 
-export type SlotState = "active" | "preview" | "available" | "booked";
+export type SlotState = "active" | "preview" | "available" | "booked" | "pending";
 
 export interface Selection {
   facilityId: string;

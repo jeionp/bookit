@@ -143,6 +143,13 @@ export default function ScheduleGrid({
                   {/* Booking blocks */}
                   {fBookings.map((b) => {
                     const selected = b.id === selectedBookingId;
+                    const isPending = b.status === "slot_held";
+                    const bgColor = selected
+                      ? isPending ? "#d97706" : business.accentColor
+                      : isPending ? "#fef3c7" : `${business.accentColor}20`;
+                    const borderColor = isPending ? "#d97706" : business.accentColor;
+                    const nameColor = selected ? "white" : isPending ? "#92400e" : business.accentColor;
+                    const subColor = selected ? "rgba(255,255,255,0.75)" : "#6b7280";
                     return (
                       <button
                         key={b.id}
@@ -151,26 +158,27 @@ export default function ScheduleGrid({
                         style={{
                           top: (b.hours[0] - openHour) * SLOT_H + 2,
                           height: b.hours.length * SLOT_H - 4,
-                          backgroundColor: selected
-                            ? business.accentColor
-                            : `${business.accentColor}20`,
-                          borderLeft: `3px solid ${business.accentColor}`,
-                          boxShadow: selected ? `0 0 0 2px ${business.accentColor}` : "none",
+                          backgroundColor: bgColor,
+                          borderLeft: `3px solid ${borderColor}`,
+                          boxShadow: selected ? `0 0 0 2px ${borderColor}` : "none",
                         }}
                       >
                         <div className="p-1.5">
                           <p
                             className="text-xs font-bold truncate leading-tight"
-                            style={{ color: selected ? "white" : business.accentColor }}
+                            style={{ color: nameColor }}
                           >
                             {b.userName}
                           </p>
-                          {b.hours.length > 1 && (
+                          {isPending && !selected && (
+                            <p className="text-[10px] truncate mt-0.5 font-semibold text-amber-600">
+                              Awaiting payment
+                            </p>
+                          )}
+                          {!isPending && b.hours.length > 1 && (
                             <p
                               className="text-[10px] truncate mt-0.5"
-                              style={{
-                                color: selected ? "rgba(255,255,255,0.75)" : "#6b7280",
-                              }}
+                              style={{ color: subColor }}
                             >
                               ₱{b.totalPrice.toLocaleString()}
                             </p>

@@ -9,7 +9,8 @@ import StepIndicator from "./StepIndicator";
 import Step1BusinessInfo from "./steps/Step1BusinessInfo";
 import Step2Branding from "./steps/Step2Branding";
 import Step3Facilities from "./steps/Step3Facilities";
-import Step4Review from "./steps/Step4Review";
+import Step4Payments from "./steps/Step4Payments";
+import Step5Review from "./steps/Step5Review";
 
 export interface WizardDraft {
   // Step 1
@@ -29,6 +30,10 @@ export interface WizardDraft {
   facilities: Facility[];
   operatingHours: OperatingHours[];
   amenities: string[];
+  // Step 4
+  accepts_qr: boolean;
+  accepts_cash: boolean;
+  accepts_gateway: boolean;
 }
 
 const INITIAL: WizardDraft = {
@@ -46,6 +51,9 @@ const INITIAL: WizardDraft = {
   facilities: [],
   operatingHours: [],
   amenities: [],
+  accepts_qr: false,
+  accepts_cash: false,
+  accepts_gateway: false,
 };
 
 export default function OnboardingWizard() {
@@ -129,10 +137,11 @@ export default function OnboardingWizard() {
             {step === 0 && <Step1BusinessInfo draft={draft} patch={patch} onNext={() => setStep(1)} />}
             {step === 1 && <Step2Branding draft={draft} patch={patch} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
             {step === 2 && <Step3Facilities draft={draft} patch={patch} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-            {step === 3 && (
-              <Step4Review
+            {step === 3 && <Step4Payments draft={draft} patch={patch} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
+            {step === 4 && (
+              <Step5Review
                 draft={draft}
-                onBack={() => setStep(2)}
+                onBack={() => setStep(3)}
                 onSubmit={submit}
                 submitting={submitting}
                 error={submitError}

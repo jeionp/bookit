@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Facility } from "@/lib/types";
 import { Selection, DragState, SlotState, getValidRange } from "@/lib/slots";
 
-export function useSlotSelection(facility: Facility, bookedHours: number[]) {
+export function useSlotSelection(facility: Facility, bookedHours: number[], pendingHours: number[] = []) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const slotsRef = useRef<HTMLDivElement>(null);
@@ -15,15 +15,18 @@ export function useSlotSelection(facility: Facility, bookedHours: number[]) {
   // Mirror props into refs so always-on effects read fresh values without
   // needing to be re-registered whenever bookedHours or selection changes.
   const bookedHoursRef = useRef(bookedHours);
+  const pendingHoursRef = useRef(pendingHours);
   const selectionRef = useRef<Selection | null>(null);
   useLayoutEffect(() => {
     bookedHoursRef.current = bookedHours;
+    pendingHoursRef.current = pendingHours;
     selectionRef.current = selection;
   });
 
   const activeSelection = selection?.facilityId === facility.id ? selection : null;
+  const blockedHours = [...bookedHours, ...pendingHours];
   const previewHours = drag
-    ? getValidRange(drag.startHour, drag.currentHour, bookedHours)
+    ? getValidRange(drag.startHour, drag.currentHour, blockedHours)
     : [];
 
   // Registered once — clears selection when clicking outside slot grid / action bar.
@@ -118,7 +121,7 @@ export function useSlotSelection(facility: Facility, bookedHours: number[]) {
   }, []);
 
   function handleSlotMouseDown(hour: number) {
-    if (bookedHoursRef.current.includes(hour)) return;
+    if (bookedHoursRef.current.includes(hour) || pendingHoursRef.current.includes(hour)) return;
     prevSelectionRef.current = selectionRef.current;
     setSelection(null);
     const newDrag: DragState = {
@@ -136,6 +139,7 @@ export function useSlotSelection(facility: Facility, bookedHours: number[]) {
 
   function slotState(hour: number): SlotState {
     if (bookedHours.includes(hour)) return "booked";
+    if (pendingHours.includes(hour)) return "pending";
     if (drag?.facilityId === facility.id && previewHours.includes(hour)) return "preview";
     if (!drag && activeSelection?.hours.includes(hour)) return "active";
     return "available";

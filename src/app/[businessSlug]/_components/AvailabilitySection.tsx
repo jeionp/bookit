@@ -60,6 +60,7 @@ export default function AvailabilitySection({
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [bookedHours, setBookedHours] = useState<number[]>([]);
+  const [pendingHours, setPendingHours] = useState<number[]>([]);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
 
@@ -92,15 +93,17 @@ export default function AvailabilitySection({
     let cancelled = false;
     fetch(`/api/availability?businessSlug=${encodeURIComponent(business.slug)}&facilityId=${encodeURIComponent(facility.id)}&date=${encodeURIComponent(dateKey)}`)
       .then((r) => r.json())
-      .then((data: { bookedHours: number[] }) => {
+      .then((data: { bookedHours: number[]; pendingHours: number[] }) => {
         if (!cancelled) {
           setBookedHours(data.bookedHours ?? []);
+          setPendingHours(data.pendingHours ?? []);
           setLoadedKey(`${facility.id}:${dateKey}`);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setBookedHours([]);
+          setPendingHours([]);
           setLoadedKey(`${facility.id}:${dateKey}`);
         }
       });
@@ -124,7 +127,7 @@ export default function AvailabilitySection({
   }, [calendarOpen]);
 
   const { activeSelection, slotsRef, lastTouchTime, handleSlotMouseDown, slotState } =
-    useSlotSelection(facility, bookedHours);
+    useSlotSelection(facility, bookedHours, pendingHours);
 
   function selectDate(date: Date | undefined) {
     if (!date) return;
@@ -227,7 +230,6 @@ export default function AvailabilitySection({
 
       <SlotGrid
         slots={slots}
-        bookedHours={bookedHours}
         facility={facility}
         accentColor={business.accentColor}
         loadingSlots={loadingSlots}
