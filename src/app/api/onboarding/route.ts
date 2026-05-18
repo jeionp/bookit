@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { slug, name, type, tagline, description, coverImage, location, address, phone, email,
-    accentColor, facilities, amenities, operatingHours } = body;
+    accentColor, facilities, amenities, operatingHours,
+    accepts_qr, accepts_cash, accepts_gateway } = body;
 
   if (!slug || !isValidSlug(slug)) {
     return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest) {
     facilities: facilities ?? [],
     amenities: amenities ?? [],
     operatingHours: operatingHours ?? [],
+    accepts_qr: accepts_qr === true,
+    accepts_cash: accepts_cash === true,
+    accepts_gateway: accepts_gateway === true,
     ownerId: uid,
     status: "active",
   });

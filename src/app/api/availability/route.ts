@@ -25,19 +25,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
   }
 
-  const snap = await adminDb
-    .collection("bookings")
-    .where("businessSlug", "==", businessSlug)
-    .where("facilityId", "==", facilityId)
-    .where("date", "==", date)
-    .where("status", "==", "confirmed")
-    .get();
+  const [confirmedSnap, pendingSnap] = await Promise.all([
+    adminDb
+      .collection("bookings")
+      .where("businessSlug", "==", businessSlug)
+      .where("facilityId", "==", facilityId)
+      .where("date", "==", date)
+      .where("status", "==", "confirmed")
+      .get(),
+    adminDb
+      .collection("bookings")
+      .where("businessSlug", "==", businessSlug)
+      .where("facilityId", "==", facilityId)
+      .where("date", "==", date)
+      .where("status", "==", "slot_held")
+      .get(),
+  ]);
 
   const bookedHours: number[] = [];
-  snap.docs.forEach((doc) => {
+  confirmedSnap.docs.forEach((doc) => {
     if (excludeBookingId && doc.id === excludeBookingId) return;
     (doc.data().hours as number[]).forEach((h) => bookedHours.push(h));
   });
 
-  return NextResponse.json({ bookedHours });
+  const pendingHours: number[] = [];
+  pendingSnap.docs.forEach((doc) => {
+    if (excludeBookingId && doc.id === excludeBookingId) return;
+    (doc.data().hours as number[]).forEach((h) => pendingHours.push(h));
+  });
+
+  return NextResponse.json({ bookedHours, pendingHours });
 }
