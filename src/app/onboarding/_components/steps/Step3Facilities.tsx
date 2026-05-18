@@ -305,7 +305,7 @@ export default function Step3Facilities({ draft, patch, onBack, onNext }: Props)
           disabled={!canProceed}
           className="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-blue-700 transition-colors"
         >
-          Next: Review →
+          Next: Payments →
         </button>
       </div>
     </div>

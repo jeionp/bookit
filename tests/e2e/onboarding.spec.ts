@@ -287,7 +287,7 @@ test.describe('Step navigation & validation', () => {
 
     // Step 3 — no facilities yet; Next must be disabled
     await expect(page.getByRole('heading', { name: 'Facilities & Hours' })).toBeVisible({ timeout: 8_000 })
-    const nextBtn = page.getByRole('button', { name: /next.*review/i })
+    const nextBtn = page.getByRole('button', { name: /next.*payments/i })
     await expect(nextBtn).toBeDisabled()
   })
 
@@ -311,7 +311,7 @@ test.describe('Step navigation & validation', () => {
     await page.locator('input[placeholder="e.g. Court A"]').fill('Court A')
     await page.locator('input[placeholder="e.g. 500"]').fill('500')
 
-    const nextBtn = page.getByRole('button', { name: /next.*review/i })
+    const nextBtn = page.getByRole('button', { name: /next.*payments/i })
     await expect(nextBtn).toBeEnabled({ timeout: 3_000 })
   })
 })
@@ -352,14 +352,15 @@ test.describe('Happy path — full wizard submission', () => {
     await page.locator('input[placeholder="e.g. Court A"]').fill('Court A')
     await page.locator('input[placeholder="e.g. 500"]').fill('500')
 
-    await expect(page.getByRole('button', { name: /next/i }).last()).toBeEnabled({ timeout: 3_000 })
-    await page.getByRole('button', { name: /next/i }).last().click()
+    await expect(page.getByRole('button', { name: /next.*payments/i })).toBeEnabled({ timeout: 3_000 })
+    await page.getByRole('button', { name: /next.*payments/i }).click()
 
     // ── Step 4 — Payments ──
     await expect(page.getByRole('heading', { name: 'Payment Options' })).toBeVisible({ timeout: 8_000 })
     // Enable at least one payment method so "Next →" is enabled
-    await page.getByLabel('Pay at Venue', { exact: false }).click()
-    await page.getByRole('button', { name: /next/i }).click()
+    // Click the label wrapper (not the sr-only checkbox) — the toggle div intercepts direct clicks
+    await page.locator('label').filter({ hasText: 'Pay at Venue' }).click()
+    await page.getByRole('button', { name: /^next →/i }).click()
 
     // ── Step 5 — Review ──
     await expect(page.getByRole('heading', { name: 'Review & Launch' })).toBeVisible({ timeout: 8_000 })
