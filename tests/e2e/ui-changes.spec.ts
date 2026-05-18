@@ -123,7 +123,7 @@ test.describe('StepIndicator — responsive CSS classes', () => {
     // The connectors are between step circles — they carry sm:w-12
     const connectors = page.locator('.sm\\:w-12')
     const count = await connectors.count()
-    expect(count).toBeGreaterThanOrEqual(3) // 3 connectors for 4 steps
+    expect(count).toBeGreaterThanOrEqual(4) // 4 connectors for 5 steps
   })
 
   test('connector lines have sm:mb-5 class (vertical alignment fix)', async ({ page }) => {
@@ -134,13 +134,13 @@ test.describe('StepIndicator — responsive CSS classes', () => {
     expect(count).toBeGreaterThanOrEqual(3)
   })
 
-  test('step circles render for all 4 steps', async ({ page }) => {
+  test('step circles render for all 5 steps', async ({ page }) => {
     await goToStep1Wizard(page)
 
-    // Step circles are w-8 h-8 rounded-full — find all 4
+    // Step circles are w-8 h-8 rounded-full — find all 5
     const circles = page.locator('.w-8.h-8.rounded-full')
     const count = await circles.count()
-    expect(count).toBe(4)
+    expect(count).toBe(5)
   })
 
   test('step labels have hidden sm:block classes (icon-only on mobile)', async ({ page }) => {
@@ -149,17 +149,18 @@ test.describe('StepIndicator — responsive CSS classes', () => {
     // Labels are spans with class "hidden sm:block"
     const labels = page.locator('span.hidden.sm\\:block')
     const count = await labels.count()
-    // There are 4 steps, each with a label (active label text may vary slightly)
-    expect(count).toBeGreaterThanOrEqual(4)
+    // There are 5 steps, each with a label (active label text may vary slightly)
+    expect(count).toBeGreaterThanOrEqual(5)
   })
 
-  test('step label text for all 4 steps is present in DOM (even when hidden on mobile)', async ({ page }) => {
+  test('step label text for all 5 steps is present in DOM (even when hidden on mobile)', async ({ page }) => {
     await goToStep1Wizard(page)
 
     // Labels are in the DOM even when CSS-hidden — check presence
     await expect(page.locator('span', { hasText: 'Business Info' }).first()).toBeAttached()
     await expect(page.locator('span', { hasText: 'Branding' }).first()).toBeAttached()
     await expect(page.locator('span', { hasText: 'Facilities' }).first()).toBeAttached()
+    await expect(page.locator('span', { hasText: 'Payments' }).first()).toBeAttached()
     await expect(page.locator('span', { hasText: 'Review' }).first()).toBeAttached()
   })
 })
