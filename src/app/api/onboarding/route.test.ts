@@ -122,11 +122,26 @@ describe('POST /api/onboarding — validation', () => {
     expect(await res.json()).toHaveProperty('error', 'name is required')
   })
 
-  test('returns 409 when slug is already taken', async () => {
-    mockDocGet.mockResolvedValue({ exists: true })
+  test('returns 409 when slug is already taken by another user', async () => {
+    mockDocGet.mockResolvedValue({ exists: true, data: () => ({ status: 'active', ownerId: 'other-user' }) })
     const res = await POST(makeReq(VALID_BODY))
     expect(res.status).toBe(409)
     expect(await res.json()).toHaveProperty('error', 'Slug already taken')
+  })
+
+  test('returns 409 when slug is reserved by another user', async () => {
+    mockDocGet.mockResolvedValue({ exists: true, data: () => ({ status: 'onboarding_reserved', reservedBy: 'other-user' }) })
+    const res = await POST(makeReq(VALID_BODY))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toHaveProperty('error', 'Slug already taken')
+  })
+
+  test('allows completing onboarding over own reservation', async () => {
+    // uid from makeReq token is 'user-1' (set by mockVerifyIdToken in beforeEach)
+    mockDocGet.mockResolvedValue({ exists: true, data: () => ({ status: 'onboarding_reserved', reservedBy: 'user-1' }) })
+    const res = await POST(makeReq(VALID_BODY))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toHaveProperty('slug', 'test-biz')
   })
 })
 

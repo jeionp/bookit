@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/expire-slots",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-onboarding",
+      "schedule": "0 3 * * *"
     }
   ]
 }
