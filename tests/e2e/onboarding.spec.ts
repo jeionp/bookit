@@ -319,7 +319,7 @@ test.describe('Step navigation & validation', () => {
 // ─── Happy path (full wizard) ─────────────────────────────────────────────────
 
 test.describe('Happy path — full wizard submission', () => {
-  // Complete the 4-step wizard end-to-end and assert redirection to the admin page.
+  // Complete the 5-step wizard end-to-end and assert redirection to the admin page.
   test('new user completes wizard and lands on admin page', async ({ page }) => {
     // Use a fresh email so the wizard is not blocked by an existing admin doc
     const freshEmail = `happy-path-${Date.now()}@bookit-test.internal`
@@ -352,10 +352,16 @@ test.describe('Happy path — full wizard submission', () => {
     await page.locator('input[placeholder="e.g. Court A"]').fill('Court A')
     await page.locator('input[placeholder="e.g. 500"]').fill('500')
 
-    await expect(page.getByRole('button', { name: /next.*review/i })).toBeEnabled({ timeout: 3_000 })
-    await page.getByRole('button', { name: /next.*review/i }).click()
+    await expect(page.getByRole('button', { name: /next/i }).last()).toBeEnabled({ timeout: 3_000 })
+    await page.getByRole('button', { name: /next/i }).last().click()
 
-    // ── Step 4 — Review ──
+    // ── Step 4 — Payments ──
+    await expect(page.getByRole('heading', { name: 'Payment Options' })).toBeVisible({ timeout: 8_000 })
+    // Enable at least one payment method so "Next →" is enabled
+    await page.getByLabel('Pay at Venue', { exact: false }).click()
+    await page.getByRole('button', { name: /next/i }).click()
+
+    // ── Step 5 — Review ──
     await expect(page.getByRole('heading', { name: 'Review & Launch' })).toBeVisible({ timeout: 8_000 })
 
     // Review summary must show the business name and slug URL
