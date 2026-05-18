@@ -132,7 +132,7 @@ function FacilityCard({ facility, index, slug, onChange, onRemove }: FacilityCar
             label="Court / facility image"
             value={facility.image}
             onChange={(url) => onChange({ ...facility, image: url })}
-            path={`facilities/${slug}/${facility.id}`}
+            path={`businesses/${slug}/facilities/${facility.id}`}
           />
         </div>
       )}

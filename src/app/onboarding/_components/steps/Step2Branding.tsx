@@ -29,7 +29,7 @@ export default function Step2Branding({ draft, patch, onBack, onNext }: Props) {
           label="Cover image"
           value={draft.coverImage}
           onChange={(url) => patch({ coverImage: url })}
-          path={`covers/${draft.slug}/cover`}
+          path={`businesses/${draft.slug}/cover`}
           hint="Recommended: 1200 × 400 px. Shown at the top of your booking page."
         />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LogOut, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -61,8 +61,31 @@ export default function OnboardingWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<WizardDraft>(INITIAL);
+  // Slug that was actually reserved in Firestore (may differ from draft.slug if user typed a new one)
+  const [reservedSlug, setReservedSlug] = useState("");
+  const [reserving, setReserving] = useState(false);
+  const [reserveError, setReserveError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // On mount, check if this user already has an in-progress onboarding reservation.
+  // Pre-filling the slug lets the check-slug UI skip the API call for their own reservation.
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then((token) =>
+      fetch("/api/onboarding/my-reservation", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.slug) {
+            setReservedSlug(json.slug);
+            setDraft((prev) => ({ ...prev, slug: json.slug }));
+          }
+        })
+        .catch(() => {})
+    );
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function patch(partial: Partial<WizardDraft>) {
     setDraft((prev) => ({ ...prev, ...partial }));
@@ -72,6 +95,31 @@ export default function OnboardingWizard() {
     const isDirty = step > 0 || draft.name.trim().length > 0;
     if (isDirty && !window.confirm("Exit setup? Your progress will be lost.")) return;
     router.push("/");
+  }
+
+  async function handleStep1Next() {
+    if (!user) return;
+    setReserving(true);
+    setReserveError(null);
+    try {
+      const token = await user.getIdToken(true);
+      // Pass the previously reserved slug so the endpoint can release it atomically
+      const releaseSlug =
+        reservedSlug && reservedSlug !== draft.slug ? reservedSlug : undefined;
+      const res = await fetch("/api/onboarding/reserve-slug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ slug: draft.slug, releaseSlug }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not reserve slug");
+      setReservedSlug(draft.slug);
+      setStep(1);
+    } catch (err) {
+      setReserveError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setReserving(false);
+    }
   }
 
   async function submit() {
@@ -134,7 +182,16 @@ export default function OnboardingWizard() {
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-6">
-            {step === 0 && <Step1BusinessInfo draft={draft} patch={patch} onNext={() => setStep(1)} />}
+            {step === 0 && (
+              <Step1BusinessInfo
+                draft={draft}
+                patch={patch}
+                onNext={handleStep1Next}
+                loading={reserving}
+                error={reserveError}
+                myReservedSlug={reservedSlug}
+              />
+            )}
             {step === 1 && <Step2Branding draft={draft} patch={patch} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
             {step === 2 && <Step3Facilities draft={draft} patch={patch} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
             {step === 3 && <Step4Payments draft={draft} patch={patch} onBack={() => setStep(2)} onNext={() => setStep(4)} />}

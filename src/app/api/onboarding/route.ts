@@ -32,10 +32,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  // Re-check availability atomically before writing
+  // Re-check availability before writing.
+  // Allow overwriting our own onboarding_reserved placeholder (normal completion path).
   const existing = await adminDb.collection("businesses").doc(slug).get();
   if (existing.exists) {
-    return NextResponse.json({ error: "Slug already taken" }, { status: 409 });
+    const data = existing.data()!;
+    if (data.status !== "onboarding_reserved" || data.reservedBy !== uid) {
+      return NextResponse.json({ error: "Slug already taken" }, { status: 409 });
+    }
   }
 
   const batch = adminDb.batch();

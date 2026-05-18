@@ -11,7 +11,7 @@ const BUSINESS_TYPES = [
   { value: "room", label: "Room / Space", available: false },
 ] as const;
 
-type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
+type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid" | "reserved";
 
 function LabeledInput({
   label,
@@ -49,34 +49,43 @@ interface Props {
   draft: WizardDraft;
   patch: (partial: Partial<WizardDraft>) => void;
   onNext: () => void;
+  loading?: boolean;
+  error?: string | null;
+  myReservedSlug?: string;
 }
 
-export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
+export default function Step1BusinessInfo({ draft, patch, onNext, loading, error, myReservedSlug }: Props) {
   const [slugEdited, setSlugEdited] = useState(false);
-  // Only tracks the async check result — "idle"/"invalid" are derived in render
+  // Only tracks the async check result — "idle"/"invalid"/"reserved" are derived in render
   const [asyncCheckResult, setAsyncCheckResult] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isOwnReservation = Boolean(myReservedSlug && draft.slug === myReservedSlug);
 
   // Derive display status synchronously — avoids calling setState inside effect bodies
   const slugStatus: SlugStatus = !draft.slug
     ? "idle"
     : !isValidSlug(draft.slug)
     ? "invalid"
+    : isOwnReservation
+    ? "reserved"
     : asyncCheckResult;
 
-  // Auto-derive slug from name unless user has manually edited it
+  // Auto-derive slug from name unless user has manually edited it.
+  // Guard against empty name overwriting a pre-filled reservation slug.
   useEffect(() => {
     if (slugEdited) return;
+    if (!draft.name.trim()) return;
     const derived = slugify(draft.name);
     if (derived !== draft.slug) {
       patch({ slug: derived });
     }
   }, [draft.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced availability check — only fires for valid slugs
+  // Debounced availability check — skipped for the user's own reservation
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!draft.slug || !isValidSlug(draft.slug)) return;
+    if (!draft.slug || !isValidSlug(draft.slug) || isOwnReservation) return;
 
     debounceRef.current = setTimeout(async () => {
       setAsyncCheckResult("checking");
@@ -90,7 +99,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
     }, 400);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [draft.slug]);
+  }, [draft.slug, isOwnReservation]);
 
   function handleSlugChange(v: string) {
     setSlugEdited(true);
@@ -99,7 +108,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
 
   const canProceed =
     draft.name.trim().length > 0 &&
-    slugStatus === "available";
+    (slugStatus === "available" || slugStatus === "reserved");
 
   return (
     <div className="flex flex-col gap-6">
@@ -131,15 +140,16 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
               value={draft.slug}
               onChange={(e) => handleSlugChange(e.target.value)}
               placeholder="your-business"
-              className="flex-1 px-3 py-2 text-sm text-gray-900 outline-none bg-transparent"
+              className="flex-1 px-3 py2 text-sm text-gray-900 outline-none bg-transparent"
             />
             <div className="px-3">
               {slugStatus === "checking" && <Loader size={14} className="text-gray-400 animate-spin" />}
-              {slugStatus === "available" && <CheckCircle size={14} className="text-green-500" />}
+              {(slugStatus === "available" || slugStatus === "reserved") && <CheckCircle size={14} className="text-green-500" />}
               {(slugStatus === "taken" || slugStatus === "invalid") && <XCircle size={14} className="text-red-400" />}
             </div>
           </div>
           <p className="text-xs mt-0.5">
+            {slugStatus === "reserved" && <span className="text-green-600">Your reservation</span>}
             {slugStatus === "available" && <span className="text-green-600">Available</span>}
             {slugStatus === "taken" && <span className="text-red-500">Already taken — try another</span>}
             {slugStatus === "invalid" && <span className="text-red-500">Use lowercase letters, numbers, and hyphens only (min 3 chars)</span>}
@@ -230,14 +240,15 @@ export default function Step1BusinessInfo({ draft, patch, onNext }: Props) {
         </div>
       </div>
 
-      <div className="flex justify-end pt-2">
+      <div className="flex flex-col items-end gap-2 pt-2">
+        {error && <p className="text-sm text-red-500">{error}</p>}
         <button
           type="button"
           onClick={onNext}
-          disabled={!canProceed}
+          disabled={!canProceed || loading}
           className="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold disabled:opacity-40 hover:bg-blue-700 transition-colors"
         >
-          Next: Branding →
+          {loading ? "Saving…" : "Next: Branding →"}
         </button>
       </div>
     </div>
