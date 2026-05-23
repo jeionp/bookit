@@ -69,8 +69,11 @@ afterAll(async () => {
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 describe('bookings — create', () => {
+  // alice@test.com matches the userEmail set by booking('alice') — rule requires this for non-admin creates.
+  const ALICE_TOKEN = { email: 'alice@test.com' }
+
   test('authenticated user can create a booking for themselves', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertSucceeds(setDoc(doc(db, 'bookings', 'b1'), booking('alice')))
   })
 
@@ -80,47 +83,54 @@ describe('bookings — create', () => {
   })
 
   test('user cannot create a booking with a different userId', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertFails(setDoc(doc(db, 'bookings', 'b1'), booking('bob')))
   })
 
+  test('user cannot spoof userEmail to a different address', async () => {
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
+    await assertFails(
+      setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), userEmail: 'mallory@evil.com' })
+    )
+  })
+
   test('can create a booking with totalPrice of 0 (comp/free slot)', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertSucceeds(
       setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), totalPrice: 0 })
     )
   })
 
   test('cannot create a booking with a negative totalPrice', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertFails(
       setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), totalPrice: -100 })
     )
   })
 
   test('can create a booking with status "slot_held" (P2P payment flow)', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertSucceeds(
       setDoc(doc(db, 'bookings', 'b1'), booking('alice', 'slot_held'))
     )
   })
 
   test('cannot create a booking with an arbitrary invalid status', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertFails(
       setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), status: 'pending' })
     )
   })
 
   test('cannot create a booking with status "expired" (server-only transition)', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertFails(
       setDoc(doc(db, 'bookings', 'b1'), { ...booking('alice'), status: 'expired' })
     )
   })
 
   test('cannot create a booking with status "cancelled" (write-only transition)', async () => {
-    const db = testEnv.authenticatedContext('alice').firestore()
+    const db = testEnv.authenticatedContext('alice', ALICE_TOKEN).firestore()
     await assertFails(
       setDoc(doc(db, 'bookings', 'b1'), booking('alice', 'cancelled'))
     )

@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // ─── Hoisted mocks ────────────────────────────────────────────────────────────
@@ -21,6 +21,29 @@ vi.mock('@/lib/firebase/admin-app', () => ({
 }))
 
 import { GET } from './route'
+
+// ─── Helper: fresh route import with rate-limiter active ─────────────────────
+
+async function importFreshRouteWithRatelimit(
+  mockLimit: ReturnType<typeof vi.fn>
+): Promise<{ GET: (req: NextRequest) => Promise<Response> }> {
+  vi.resetModules()
+
+  vi.doMock('@upstash/ratelimit', () => ({
+    Ratelimit: class {
+      static slidingWindow() { return {} }
+      limit = mockLimit
+    },
+  }))
+  vi.doMock('@upstash/redis', () => ({
+    Redis: { fromEnv: () => ({}) },
+  }))
+  vi.doMock('@/lib/firebase/admin-app', () => ({
+    adminDb: { collection: () => fakeQuery },
+  }))
+
+  return import('./route')
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -218,5 +241,99 @@ describe('GET /api/availability', () => {
     expect(body).not.toHaveProperty('userEmail')
     expect(body).not.toHaveProperty('userName')
     expect(Object.keys(body).sort()).toEqual(['bookedHours', 'pendingHours'])
+  })
+})
+
+// ─── Rate limiting tests ──────────────────────────────────────────────────────
+
+describe('GET /api/availability — rate limiting', () => {
+  let savedUrl:   string | undefined
+  let savedToken: string | undefined
+
+  beforeEach(() => {
+    mockGet.mockReset()
+    mockGet.mockResolvedValue(makeSnap([]))
+    savedUrl   = process.env.UPSTASH_REDIS_REST_URL
+    savedToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  })
+
+  afterEach(() => {
+    if (savedUrl === undefined)   delete process.env.UPSTASH_REDIS_REST_URL
+    else                          process.env.UPSTASH_REDIS_REST_URL = savedUrl
+    if (savedToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN
+    else                          process.env.UPSTASH_REDIS_REST_TOKEN = savedToken
+    vi.resetModules()
+  })
+
+  test('skips rate limiting when Upstash env vars are absent', async () => {
+    delete process.env.UPSTASH_REDIS_REST_URL
+    delete process.env.UPSTASH_REDIS_REST_TOKEN
+
+    const { GET: get } = await import('./route')
+    const res = await get(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' }))
+    expect(res.status).toBe(200)
+  })
+
+  test('returns 429 when rate limit is exceeded', async () => {
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+
+    const mockLimit = vi.fn().mockResolvedValue({ success: false })
+    const { GET: get } = await importFreshRouteWithRatelimit(mockLimit)
+
+    const res = await get(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' }))
+    expect(res.status).toBe(429)
+    expect(await res.json()).toEqual({ error: 'Too many requests' })
+  })
+
+  test('proceeds normally when rate limit passes', async () => {
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+
+    const mockLimit = vi.fn().mockResolvedValue({ success: true })
+    const { GET: get } = await importFreshRouteWithRatelimit(mockLimit)
+
+    const res = await get(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' }))
+    expect(res.status).toBe(200)
+  })
+
+  test('uses x-real-ip as the rate-limit key', async () => {
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+
+    const mockLimit = vi.fn().mockResolvedValue({ success: false })
+    const { GET: get } = await importFreshRouteWithRatelimit(mockLimit)
+
+    const url = new URL('http://localhost/api/availability')
+    url.searchParams.set('businessSlug', 'paddleup')
+    url.searchParams.set('facilityId', 'court-1')
+    url.searchParams.set('date', '2026-05-10')
+    const req = new NextRequest(url.toString(), { headers: { 'x-real-ip': '203.0.113.5' } })
+
+    await get(req)
+    expect(mockLimit).toHaveBeenCalledWith('203.0.113.5')
+  })
+
+  test('falls back to "anonymous" when x-real-ip is absent', async () => {
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+
+    const mockLimit = vi.fn().mockResolvedValue({ success: false })
+    const { GET: get } = await importFreshRouteWithRatelimit(mockLimit)
+
+    await get(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' }))
+    expect(mockLimit).toHaveBeenCalledWith('anonymous')
+  })
+
+  test('fails open (proceeds to Firestore) when Redis throws', async () => {
+    process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
+
+    const mockLimit = vi.fn().mockRejectedValue(new Error('Redis connection refused'))
+    const { GET: get } = await importFreshRouteWithRatelimit(mockLimit)
+
+    // Redis error → fail open → Firestore query proceeds → 200
+    const res = await get(makeReq({ businessSlug: 'paddleup', facilityId: 'court-1', date: '2026-05-10' }))
+    expect(res.status).toBe(200)
   })
 })

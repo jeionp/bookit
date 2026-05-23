@@ -217,18 +217,18 @@ describe('POST /api/bookings — rate limiting', () => {
     expect(mockLimit).toHaveBeenCalledWith('anonymous')
   })
 
-  // ── Redis failure — fail open ────────────────────────────────────────────────
+  // ── Redis failure — fail closed ───────────────────────────────────────────────
 
-  test('fails open (proceeds to auth check) when Redis throws during limit call', async () => {
+  test('fails closed (503) when Redis throws during limit call', async () => {
     process.env.UPSTASH_REDIS_REST_URL   = 'https://example.upstash.io'
     process.env.UPSTASH_REDIS_REST_TOKEN = 'fake-token'
 
     const mockLimit = vi.fn().mockRejectedValue(new Error('Redis connection refused'))
     const { POST } = await importFreshRouteWithRatelimit(mockLimit)
 
-    // Rate limiter throws → fail open → continues to auth check → 401 (no token)
+    // Rate limiter throws → fail closed → 503 (attacker cannot bypass by causing Redis errors)
     const res = await POST(makeReq(VALID_BODY))
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(503)
   })
 })
 
