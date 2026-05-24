@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { v4 as uuid } from "uuid";
 import ImageUpload from "@/components/shared/ImageUpload";
-import { Facility } from "@/lib/types";
+import { Facility, OperatingHours } from "@/lib/types";
 import { WizardDraft } from "../OnboardingWizard";
 import { defaultOperatingHours } from "@/lib/slots";
 
