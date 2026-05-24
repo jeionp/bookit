@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { X, AlertTriangle, Coins, RefreshCw } from "lucide-react";
 import { Booking } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
+import { formatHour } from "@/lib/slots";
 
 interface CancelBookingModalProps {
   open: boolean;
@@ -14,13 +15,6 @@ interface CancelBookingModalProps {
 }
 
 type Tier = "free" | "prorated" | "blocked";
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
-}
 
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);

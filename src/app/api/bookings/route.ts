@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser } from "@/lib/api/auth";
 import { getBusinessBySlug } from "@/lib/firebase/businesses";
-import { sendBookingConfirmation, sendAdminBookingNotification } from "@/lib/notifications/email";
+import { sendConfirmationEmails } from "@/lib/notifications/email";
 
 export const dynamic = "force-dynamic";
 
@@ -82,23 +83,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  let email: string;
-  let displayName: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-    email = decoded.email ?? "";
-    displayName = decoded.name ?? email;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
+  const email = tokenOrRes.email ?? "";
+  const displayName = tokenOrRes.name ?? email;
 
   const body = (await req.json()) as CreateBookingRequest;
   const { facilityId, date, hours, businessSlug, creditAmount = 0, checkout_type: requestedCheckoutType } = body;
@@ -305,10 +294,7 @@ export async function POST(req: NextRequest) {
       currency: priceInfo.currency,
       ...(appliedCredit > 0 && { creditApplied: appliedCredit }),
     };
-    Promise.all([
-      sendBookingConfirmation(notificationData),
-      sendAdminBookingNotification(notificationData),
-    ]).catch((err) => console.error("[api/bookings] notification error:", err));
+    sendConfirmationEmails(notificationData, "api/bookings");
   }
 
   return NextResponse.json(

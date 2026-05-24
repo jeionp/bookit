@@ -1,29 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser } from "@/lib/api/auth";
+import { requireString } from "@/lib/api/validation";
 import { createGateway } from "@/lib/payments/gateway";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   let bookingId: string;
   try {
     const body = (await req.json()) as { bookingId?: unknown };
-    if (!body.bookingId || typeof body.bookingId !== "string" || body.bookingId.trim() === "") {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-    }
-    bookingId = body.bookingId;
+    const id = requireString(body.bookingId);
+    if (!id) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    bookingId = id;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }

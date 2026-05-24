@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { requireUser, isAdminOf } from "@/lib/api/auth";
+import { requireString } from "@/lib/api/validation";
 
 export interface InviteRequest {
   email:        string;
@@ -27,30 +28,19 @@ function getRatelimit(): Ratelimit | null {
 // TODO: replace stub with real email send (e.g. Resend, SendGrid, or Firebase Extensions).
 // The invite should link to /[businessSlug] with a "sign up" prompt pre-filled with the email.
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const body = (await req.json()) as InviteRequest;
-  const { email, businessSlug, businessName } = body;
-
-  if (!email || typeof email !== "string" || !businessSlug || !businessName) {
+  const email        = requireString(body.email);
+  const businessSlug = requireString(body.businessSlug);
+  const businessName = requireString(body.businessName);
+  if (!email || !businessSlug || !businessName) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const adminDoc = await adminDb.collection("admins").doc(uid).get();
-  const slugs: string[] = adminDoc.exists ? (adminDoc.data()?.slugs ?? []) : [];
-  if (!slugs.includes(businessSlug)) {
+  if (!(await isAdminOf(uid, businessSlug))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

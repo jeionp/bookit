@@ -1,33 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser, isAdminOf } from "@/lib/api/auth";
+import { parseLimit } from "@/lib/api/validation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const { searchParams } = new URL(req.url);
   const slug = searchParams.get("slug");
-  const limitParam = parseInt(searchParams.get("limit") ?? "50", 10);
-  const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 200 ? 50 : limitParam;
+  const limit = parseLimit(searchParams.get("limit"), 50);
 
   if (!slug) {
     return NextResponse.json({ error: "slug is required" }, { status: 400 });
   }
 
-  const adminDoc = await adminDb.collection("admins").doc(uid).get();
-  const slugs: string[] = adminDoc.exists ? (adminDoc.data()?.slugs ?? []) : [];
-  if (!slugs.includes(slug)) {
+  if (!(await isAdminOf(uid, slug))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

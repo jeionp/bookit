@@ -5,17 +5,15 @@ const {
   mockBookingUpdate,
   mockBizGet,
   mockMessagesCreate,
-  mockSendBookingConfirmation,
-  mockSendAdminBookingNotification,
+  mockSendConfirmationEmails,
   mockSendPaymentRejected,
 } = vi.hoisted(() => ({
-  mockBookingGet:                  vi.fn(),
-  mockBookingUpdate:               vi.fn(),
-  mockBizGet:                      vi.fn(),
-  mockMessagesCreate:              vi.fn(),
-  mockSendBookingConfirmation:     vi.fn(),
-  mockSendAdminBookingNotification: vi.fn(),
-  mockSendPaymentRejected:         vi.fn(),
+  mockBookingGet:              vi.fn(),
+  mockBookingUpdate:           vi.fn(),
+  mockBizGet:                  vi.fn(),
+  mockMessagesCreate:          vi.fn(),
+  mockSendConfirmationEmails:  vi.fn(),
+  mockSendPaymentRejected:     vi.fn(),
 }))
 
 vi.mock('@/lib/firebase/admin-app', () => ({
@@ -41,9 +39,8 @@ vi.mock('firebase-admin/firestore', () => ({
 }))
 
 vi.mock('@/lib/notifications/email', () => ({
-  sendBookingConfirmation:      mockSendBookingConfirmation,
-  sendAdminBookingNotification: mockSendAdminBookingNotification,
-  sendPaymentRejected:          mockSendPaymentRejected,
+  sendConfirmationEmails: mockSendConfirmationEmails,
+  sendPaymentRejected:    mockSendPaymentRejected,
 }))
 
 const VALID_BOOKING = {
@@ -84,8 +81,6 @@ describe('verifyPaymentProof', () => {
     mockMessagesCreate.mockResolvedValue({
       content: [{ type: 'text', text: '{"amount": 500}' }],
     })
-    mockSendBookingConfirmation.mockResolvedValue(undefined)
-    mockSendAdminBookingNotification.mockResolvedValue(undefined)
     mockSendPaymentRejected.mockResolvedValue(undefined)
   })
 
@@ -104,8 +99,7 @@ describe('verifyPaymentProof', () => {
     await verifyPaymentProof('booking-abc')
     // Promise.all is fire-and-forget — flush microtasks
     await Promise.resolve()
-    expect(mockSendBookingConfirmation).toHaveBeenCalledOnce()
-    expect(mockSendAdminBookingNotification).toHaveBeenCalledOnce()
+    expect(mockSendConfirmationEmails).toHaveBeenCalledOnce()
     expect(mockSendPaymentRejected).not.toHaveBeenCalled()
   })
 
@@ -113,7 +107,7 @@ describe('verifyPaymentProof', () => {
     const { verifyPaymentProof } = await import('./verify-proof')
     await verifyPaymentProof('booking-abc')
     await Promise.resolve()
-    expect(mockSendBookingConfirmation).toHaveBeenCalledWith(
+    expect(mockSendConfirmationEmails).toHaveBeenCalledWith(
       expect.objectContaining({
         customerEmail:   'player@example.com',
         businessEmail:   'admin@biz.com',
@@ -121,6 +115,7 @@ describe('verifyPaymentProof', () => {
         facilityName:    'Court A',
         totalPrice:      500,
       }),
+      'verify-proof',
     )
   })
 
@@ -146,7 +141,7 @@ describe('verifyPaymentProof', () => {
     expect(mockSendPaymentRejected).toHaveBeenCalledWith(
       expect.objectContaining({ submittedAmount: 300, totalPrice: 500 }),
     )
-    expect(mockSendBookingConfirmation).not.toHaveBeenCalled()
+    expect(mockSendConfirmationEmails).not.toHaveBeenCalled()
   })
 
   test('marks as rejected when Claude returns null amount', async () => {
@@ -339,10 +334,9 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
       },
     }))
     vi.doMock('@/lib/notifications/email', () => ({
-      sendBookingConfirmation:      vi.fn().mockResolvedValue(undefined),
-      sendAdminBookingNotification: vi.fn().mockResolvedValue(undefined),
-      sendPaymentRejected:          vi.fn().mockResolvedValue(undefined),
-      sendLowBalanceWarning:        mockLowBalance,
+      sendConfirmationEmails: vi.fn(),
+      sendPaymentRejected:    vi.fn().mockResolvedValue(undefined),
+      sendLowBalanceWarning:  mockLowBalance,
     }))
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -437,7 +431,7 @@ describe('verifyPaymentProof — SaaS credit deduction', () => {
       },
     }))
     vi.doMock('@/lib/notifications/email', () => ({
-      sendBookingConfirmation: vi.fn(), sendAdminBookingNotification: vi.fn(),
+      sendConfirmationEmails: vi.fn(),
       sendPaymentRejected: vi.fn(), sendLowBalanceWarning: vi.fn(),
     }))
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

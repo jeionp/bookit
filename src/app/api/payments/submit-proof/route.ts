@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser } from "@/lib/api/auth";
+import { requireString } from "@/lib/api/validation";
 import { verifyPaymentProof } from "@/lib/payments/verify-proof";
 
 export const dynamic = "force-dynamic";
@@ -17,24 +19,14 @@ const GUARD_SLOT_NOT_HELD  = "GUARD_SLOT_NOT_HELD";
 const GUARD_PROOF_SUBMITTED = "GUARD_PROOF_SUBMITTED";
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-  const { bookingId, proofUrl } = body;
-
-  if (!bookingId || typeof bookingId !== "string" || !proofUrl || typeof proofUrl !== "string") {
+  const bookingId = requireString(body.bookingId);
+  const proofUrl  = requireString(body.proofUrl);
+  if (!bookingId || !proofUrl) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 

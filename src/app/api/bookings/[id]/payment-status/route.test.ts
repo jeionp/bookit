@@ -10,21 +10,19 @@ const {
   mockBizUpdate,
   mockLedgerAdd,
   mockRunTransaction,
-  mockSendBookingConfirmation,
-  mockSendAdminBookingNotification,
+  mockSendConfirmationEmails,
   mockSendLowBalanceWarning,
 } = vi.hoisted(() => ({
-  mockVerifyIdToken:                vi.fn(),
-  mockBookingGet:                   vi.fn(),
-  mockBookingUpdate:                vi.fn(),
-  mockAdminGet:                     vi.fn(),
-  mockBizGet:                       vi.fn(),
-  mockBizUpdate:                    vi.fn(),
-  mockLedgerAdd:                    vi.fn(),
-  mockRunTransaction:               vi.fn(),
-  mockSendBookingConfirmation:      vi.fn(),
-  mockSendAdminBookingNotification: vi.fn(),
-  mockSendLowBalanceWarning:        vi.fn(),
+  mockVerifyIdToken:           vi.fn(),
+  mockBookingGet:              vi.fn(),
+  mockBookingUpdate:           vi.fn(),
+  mockAdminGet:                vi.fn(),
+  mockBizGet:                  vi.fn(),
+  mockBizUpdate:               vi.fn(),
+  mockLedgerAdd:               vi.fn(),
+  mockRunTransaction:          vi.fn(),
+  mockSendConfirmationEmails:  vi.fn(),
+  mockSendLowBalanceWarning:   vi.fn(),
 }))
 
 vi.mock('@/lib/firebase/admin-app', () => ({
@@ -54,9 +52,8 @@ vi.mock('firebase-admin/firestore', () => ({
 }))
 
 vi.mock('@/lib/notifications/email', () => ({
-  sendBookingConfirmation:      mockSendBookingConfirmation,
-  sendAdminBookingNotification: mockSendAdminBookingNotification,
-  sendLowBalanceWarning:        mockSendLowBalanceWarning,
+  sendConfirmationEmails:  mockSendConfirmationEmails,
+  sendLowBalanceWarning:   mockSendLowBalanceWarning,
 }))
 
 function makeReq(body: unknown, token = 'valid-token'): NextRequest {
@@ -129,8 +126,6 @@ describe('PATCH /api/bookings/[id]/payment-status', () => {
     mockBizGet.mockResolvedValue({ exists: true, data: () => BIZ_DATA })
     mockBizUpdate.mockResolvedValue(undefined)
     mockBookingUpdate.mockResolvedValue(undefined)
-    mockSendBookingConfirmation.mockResolvedValue(undefined)
-    mockSendAdminBookingNotification.mockResolvedValue(undefined)
     mockSendLowBalanceWarning.mockResolvedValue(undefined)
   })
 
@@ -258,8 +253,7 @@ describe('PATCH /api/bookings/[id]/payment-status', () => {
       expect.anything(),
       expect.objectContaining({ payment_status_v2: 'paid', status: 'confirmed' }),
     )
-    await vi.waitFor(() => expect(mockSendBookingConfirmation).toHaveBeenCalledOnce())
-    await vi.waitFor(() => expect(mockSendAdminBookingNotification).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(mockSendConfirmationEmails).toHaveBeenCalledOnce())
   })
 
   test('approve: returns 409 when booking is not in ai_review (e.g. already confirmed)', async () => {

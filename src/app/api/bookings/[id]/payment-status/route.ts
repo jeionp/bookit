@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
-import { sendBookingConfirmation, sendAdminBookingNotification } from "@/lib/notifications/email";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser, isAdminOf } from "@/lib/api/auth";
+import { sendConfirmationEmails } from "@/lib/notifications/email";
 import { deductSaasCredit } from "@/lib/payments/ledger";
 
 export const dynamic = "force-dynamic";
@@ -12,17 +13,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const { id: bookingId } = await params;
 
@@ -47,9 +40,7 @@ export async function PATCH(
   if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const booking = snap.data()!;
 
-  const adminDoc = await adminDb.collection("admins").doc(uid).get();
-  const slugs: string[] = adminDoc.exists ? (adminDoc.data()?.slugs ?? []) : [];
-  if (!slugs.includes(booking.businessSlug as string)) {
+  if (!(await isAdminOf(uid, booking.businessSlug as string))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -110,10 +101,7 @@ export async function PATCH(
       currency:        data.currency     as string,
       ...(data.creditApplied != null && { creditApplied: data.creditApplied as number }),
     };
-    Promise.all([
-      sendBookingConfirmation(notificationData),
-      sendAdminBookingNotification(notificationData),
-    ]).catch((err) => console.error("[payment-status] approval email error:", err));
+    sendConfirmationEmails(notificationData, "payment-status");
     return NextResponse.json({ ok: true });
   }
 

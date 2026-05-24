@@ -348,9 +348,8 @@ describe('POST /api/bookings — SaaS wallet enforcement', () => {
     }))
     if (Object.keys(emailOverrides).length > 0) {
       vi.doMock('@/lib/notifications/email', () => ({
-        sendBookingConfirmation:    vi.fn().mockResolvedValue(undefined),
-        sendAdminBookingNotification: vi.fn().mockResolvedValue(undefined),
-        sendLowBalanceWarning:      vi.fn().mockResolvedValue(undefined),
+        sendConfirmationEmails: vi.fn(),
+        sendLowBalanceWarning:  vi.fn().mockResolvedValue(undefined),
         ...emailOverrides,
       }))
     }
@@ -529,9 +528,8 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
   // Returns route + captured email mock fns for assertion
   async function importRoute(bizData: Record<string, unknown>) {
     vi.resetModules()
-    const mockSendConfirm  = vi.fn().mockResolvedValue(undefined)
-    const mockSendAdmin    = vi.fn().mockResolvedValue(undefined)
-    const mockSendWarning  = vi.fn().mockResolvedValue(undefined)
+    const mockSendEmails  = vi.fn()
+    const mockSendWarning = vi.fn().mockResolvedValue(undefined)
     vi.doMock('@/lib/firebase/admin-app', () => ({
       adminAuth: { verifyIdToken: mockVerifyIdToken },
       adminDb: makeAdminDbMock(bizData),
@@ -543,12 +541,11 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
       }),
     }))
     vi.doMock('@/lib/notifications/email', () => ({
-      sendBookingConfirmation:      mockSendConfirm,
-      sendAdminBookingNotification: mockSendAdmin,
-      sendLowBalanceWarning:        mockSendWarning,
+      sendConfirmationEmails: mockSendEmails,
+      sendLowBalanceWarning:  mockSendWarning,
     }))
     const route = await import('./route')
-    return { route, mockSendConfirm, mockSendAdmin }
+    return { route, mockSendEmails }
   }
 
   function txWithSet(setMock = vi.fn()) {
@@ -620,22 +617,20 @@ describe('POST /api/bookings — P2P slot-held flow', () => {
 
   test('does NOT send confirmation emails for P2P slot_held bookings', async () => {
     txWithSet()
-    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
+    const { route, mockSendEmails } = await importRoute({
       accepts_qr: true, saas_credit_balance: 10,
     })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
-    expect(mockSendConfirm).not.toHaveBeenCalled()
-    expect(mockSendAdmin).not.toHaveBeenCalled()
+    expect(mockSendEmails).not.toHaveBeenCalled()
   })
 
   test('sends confirmation emails for legacy confirmed bookings', async () => {
     txWithSet()
-    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({})
+    const { route, mockSendEmails } = await importRoute({})
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
-    expect(mockSendConfirm).toHaveBeenCalled()
-    expect(mockSendAdmin).toHaveBeenCalled()
+    expect(mockSendEmails).toHaveBeenCalled()
   })
 
   // ── slot_held conflict check ───────────────────────────────────────────────
@@ -692,9 +687,8 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
 
   async function importRoute(bizData: Record<string, unknown>) {
     vi.resetModules()
-    const mockSendConfirm  = vi.fn().mockResolvedValue(undefined)
-    const mockSendAdmin    = vi.fn().mockResolvedValue(undefined)
-    const mockSendWarning  = vi.fn().mockResolvedValue(undefined)
+    const mockSendEmails  = vi.fn()
+    const mockSendWarning = vi.fn().mockResolvedValue(undefined)
     vi.doMock('@/lib/firebase/admin-app', () => ({
       adminAuth: { verifyIdToken: mockVerifyIdToken },
       adminDb: makeAdminDbMock(bizData),
@@ -706,12 +700,11 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
       }),
     }))
     vi.doMock('@/lib/notifications/email', () => ({
-      sendBookingConfirmation:      mockSendConfirm,
-      sendAdminBookingNotification: mockSendAdmin,
-      sendLowBalanceWarning:        mockSendWarning,
+      sendConfirmationEmails: mockSendEmails,
+      sendLowBalanceWarning:  mockSendWarning,
     }))
     const route = await import('./route')
-    return { route, mockSendConfirm, mockSendAdmin }
+    return { route, mockSendEmails }
   }
 
   function txWithSet(setMock = vi.fn()) {
@@ -753,14 +746,13 @@ describe('POST /api/bookings — PAY_AT_VENUE flow', () => {
 
   test('sends confirmation emails immediately for PAY_AT_VENUE bookings', async () => {
     txWithSet()
-    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
+    const { route, mockSendEmails } = await importRoute({
       accepts_cash: true, saas_credit_balance: 10,
     })
     const res = await route.POST(makeReq(VALID_BODY, { token: 'tok' }))
     expect(res.status).toBe(201)
     // Emails fire for all non-P2P bookings (PAY_AT_VENUE is not P2P)
-    await vi.waitFor(() => expect(mockSendConfirm).toHaveBeenCalled())
-    await vi.waitFor(() => expect(mockSendAdmin).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockSendEmails).toHaveBeenCalled())
   })
 
   // ── Legacy flow regression ────────────────────────────────────────────────
@@ -814,8 +806,7 @@ describe('POST /api/bookings — GATEWAY_SPLIT flow', () => {
 
   async function importRoute(bizData: Record<string, unknown>) {
     vi.resetModules()
-    const mockSendConfirm  = vi.fn().mockResolvedValue(undefined)
-    const mockSendAdmin    = vi.fn().mockResolvedValue(undefined)
+    const mockSendEmails = vi.fn()
     vi.doMock('@/lib/firebase/admin-app', () => ({
       adminAuth: { verifyIdToken: mockVerifyIdToken },
       adminDb: makeAdminDbMock(bizData),
@@ -827,12 +818,11 @@ describe('POST /api/bookings — GATEWAY_SPLIT flow', () => {
       }),
     }))
     vi.doMock('@/lib/notifications/email', () => ({
-      sendBookingConfirmation:      mockSendConfirm,
-      sendAdminBookingNotification: mockSendAdmin,
-      sendLowBalanceWarning:        vi.fn().mockResolvedValue(undefined),
+      sendConfirmationEmails: mockSendEmails,
+      sendLowBalanceWarning:  vi.fn().mockResolvedValue(undefined),
     }))
     const route = await import('./route')
-    return { route, mockSendConfirm, mockSendAdmin }
+    return { route, mockSendEmails }
   }
 
   function txWithSet(setMock = vi.fn()) {
@@ -869,13 +859,12 @@ describe('POST /api/bookings — GATEWAY_SPLIT flow', () => {
 
   test('does NOT send confirmation emails for GATEWAY_SPLIT slot_held bookings', async () => {
     txWithSet()
-    const { route, mockSendConfirm, mockSendAdmin } = await importRoute({
+    const { route, mockSendEmails } = await importRoute({
       accepts_gateway: true, saas_credit_balance: 10,
     })
     await route.POST(makeReq({ ...VALID_BODY, checkout_type: 'GATEWAY_SPLIT' }, { token: 'tok' }))
     await new Promise((r) => setTimeout(r, 50))
-    expect(mockSendConfirm).not.toHaveBeenCalled()
-    expect(mockSendAdmin).not.toHaveBeenCalled()
+    expect(mockSendEmails).not.toHaveBeenCalled()
   })
 
   test('auto-resolves GATEWAY_SPLIT when accepts_gateway is the only option', async () => {

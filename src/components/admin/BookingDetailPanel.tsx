@@ -15,20 +15,7 @@ import {
 } from "@/lib/firebase/bookings";
 import { Business } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
-
-function parseHour(timeStr: string): number {
-  const [time, period] = timeStr.split(" ");
-  const h = parseInt(time.split(":")[0], 10);
-  if (period === "AM") return h === 12 ? 0 : h;
-  return h === 12 ? 12 : h + 12;
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
-}
+import { parseHour, formatHour, getOperatingHoursForDate } from "@/lib/slots";
 
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -38,16 +25,6 @@ function formatDate(dateStr: string): string {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function getOperatingHoursForDate(business: Business, dateStr: string): number[] {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dayName = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
-  const oh = business.operatingHours.find((h) => h.day === dayName);
-  if (!oh || oh.closed) return [];
-  const open = parseHour(oh.open);
-  const close = parseHour(oh.close);
-  return Array.from({ length: close - open }, (_, i) => open + i);
 }
 
 function computePrice(business: Business, facilityId: string, hours: number[]): number {

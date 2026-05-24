@@ -1,4 +1,5 @@
 import { Sunrise, Sun, Moon } from "lucide-react";
+import type { Business } from "@/lib/types";
 
 export function toDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -26,6 +27,26 @@ export function formatHour(h: number): string {
   if (h < 12) return `${h} AM`;
   if (h === 12) return "12 PM";
   return `${h - 12} PM`;
+}
+
+export function formatDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function getOperatingHoursForDate(business: Business, dateStr: string): number[] {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dayName = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
+  const oh = business.operatingHours.find((h) => h.day === dayName);
+  if (!oh || oh.closed) return [];
+  const open = parseHour(oh.open);
+  const close = parseHour(oh.close);
+  return Array.from({ length: close - open }, (_, i) => open + i);
 }
 
 export function formatRange(hours: number[]): string {

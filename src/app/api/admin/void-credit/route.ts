@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser, isAdminOf } from "@/lib/api/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const { creditId } = (await req.json()) as { creditId: string };
   if (!creditId) {
@@ -30,10 +21,7 @@ export async function POST(req: NextRequest) {
 
   const credit = creditSnap.data()!;
 
-  // Verify caller is an admin of the business that issued this credit
-  const adminSnap = await adminDb.collection("admins").doc(uid).get();
-  const slugs: string[] = adminSnap.exists ? (adminSnap.data()?.slugs ?? []) : [];
-  if (!slugs.includes(credit.businessSlug as string)) {
+  if (!(await isAdminOf(uid, credit.businessSlug as string))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
