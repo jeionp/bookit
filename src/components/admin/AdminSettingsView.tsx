@@ -4,22 +4,20 @@ import { useState } from "react";
 import { X, Plus } from "lucide-react";
 import { Business, Facility, OperatingHours } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import ImageUpload from "@/components/shared/ImageUpload";
 import { linkWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { SectionHeader, LabeledInput } from "./SettingsShared";
+import { DAYS, defaultOperatingHours } from "@/lib/slots";
 import SettingsCourtsSection from "./SettingsCourtsSection";
 import SettingsPaymentSection from "./SettingsPaymentSection";
 import SettingsCreditsSection from "./SettingsCreditsSection";
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-function defaultOperatingHours(): OperatingHours[] {
-  return DAYS.map((day) => ({ day, open: "6:00 AM", close: "10:00 PM", closed: false }));
-}
 
 export default function AdminSettingsView({ business }: { business: Business }) {
   const { user } = useAuth();
+  const authedFetch = useAuthedFetch();
 
   const [draft, setDraft] = useState<Business>(() => JSON.parse(JSON.stringify(business)));
 
@@ -125,10 +123,8 @@ export default function AdminSettingsView({ business }: { business: Business }) 
     setSaving(true);
     setSaveResult(null);
     try {
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/businesses/${draft.slug}`, {
+      const res = await authedFetch(`/api/businesses/${draft.slug}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify(draft),
       });
       setSaveResult(res.ok ? "success" : "error");

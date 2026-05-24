@@ -5,8 +5,8 @@ import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Facility, OperatingHours } from "@/lib/types";
 import ImageUpload from "@/components/shared/ImageUpload";
 import { SectionHeader, LabeledInput } from "./SettingsShared";
+import { DAYS } from "@/lib/slots";
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 interface Props {
   facilities: Facility[];

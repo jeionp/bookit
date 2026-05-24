@@ -6,6 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase/client";
 import { Business } from "@/lib/types";
 import { SectionHeader } from "./SettingsShared";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import type { User } from "firebase/auth";
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function SettingsPaymentSection({ draft, setDraft, user, open, onToggle }: Props) {
+  const authedFetch = useAuthedFetch();
   const [qrUploading, setQrUploading] = useState(false);
   const [qrUploadError, setQrUploadError] = useState("");
   const qrFileInputRef = useRef<HTMLInputElement>(null);
@@ -26,14 +28,12 @@ export default function SettingsPaymentSection({ draft, setDraft, user, open, on
     setQrUploading(true);
     setQrUploadError("");
     try {
-      const idToken = await user.getIdToken();
       const ext = file.name.split(".").pop() ?? "jpg";
       const storageRef = ref(storage, `businesses/${draft.slug}/qr_code.${ext}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
-      await fetch(`/api/businesses/${draft.slug}`, {
+      await authedFetch(`/api/businesses/${draft.slug}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ static_qr_url: url }),
       });
       setDraft((d) => ({ ...d, static_qr_url: url }));

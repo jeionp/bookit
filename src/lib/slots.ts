@@ -1,5 +1,11 @@
 import { Sunrise, Sun, Moon } from "lucide-react";
-import type { Business } from "@/lib/types";
+import type { Business, OperatingHours } from "@/lib/types";
+
+export const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+
+export function defaultOperatingHours(): OperatingHours[] {
+  return DAYS.map((day) => ({ day, open: "6:00 AM", close: "10:00 PM", closed: false }));
+}
 
 export function toDateKey(date: Date): string {
   const y = date.getFullYear();

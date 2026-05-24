@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Business, CreditLedgerEntry } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,6 +100,7 @@ function triggerLabel(trigger: string): string {
 
 function RevenueSection({ business }: { business: Business }) {
   const { user } = useAuth();
+  const authedFetch = useAuthedFetch();
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + "01";
 
@@ -115,10 +117,8 @@ function RevenueSection({ business }: { business: Business }) {
       setLoading(true);
       setError(null);
       try {
-        const idToken = await user.getIdToken();
-        const res = await window.fetch(
+        const res = await authedFetch(
           `/api/admin/revenue?slug=${encodeURIComponent(business.slug)}&from=${from}&to=${to}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -233,6 +233,7 @@ const AUDIT_STATUSES = [
 
 function PaymentAuditSection({ business }: { business: Business }) {
   const { user } = useAuth();
+  const authedFetch = useAuthedFetch();
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [bookings, setBookings] = useState<AuditBooking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,12 +245,9 @@ function PaymentAuditSection({ business }: { business: Business }) {
       setLoading(true);
       setError(null);
       try {
-        const idToken = await user.getIdToken();
         const params = new URLSearchParams({ slug: business.slug });
         if (statusFilter) params.set("status", statusFilter);
-        const res = await window.fetch(`/api/admin/payment-audit?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
+        const res = await authedFetch(`/api/admin/payment-audit?${params.toString()}`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           setError((body as { error?: string }).error ?? "Failed to load audit");
@@ -365,6 +363,7 @@ function PaymentAuditSection({ business }: { business: Business }) {
 
 function CreditLedgerSection({ business }: { business: Business }) {
   const { user } = useAuth();
+  const authedFetch = useAuthedFetch();
   const [entries, setEntries] = useState<CreditLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -375,10 +374,8 @@ function CreditLedgerSection({ business }: { business: Business }) {
       setLoading(true);
       setError(null);
       try {
-        const idToken = await user.getIdToken();
-        const res = await window.fetch(
+        const res = await authedFetch(
           `/api/admin/credit-ledger?slug=${encodeURIComponent(business.slug)}`,
-          { headers: { Authorization: `Bearer ${idToken}` } },
         );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { X, AlertTriangle, Coins, RefreshCw } from "lucide-react";
 import { Booking } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import { formatHour } from "@/lib/slots";
 
 interface CancelBookingModalProps {
@@ -55,6 +56,7 @@ export default function CancelBookingModal({
   accentColor = "#6366f1",
 }: CancelBookingModalProps) {
   const { user } = useAuth();
+  const authedFetch = useAuthedFetch();
   const [choice, setChoice] = useState<"credit" | "refund_pending" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -80,13 +82,8 @@ export default function CancelBookingModal({
     setError("");
     setLoading(true);
     try {
-      const idToken = await user.getIdToken();
-      const res = await fetch("/api/cancel", {
+      const res = await authedFetch("/api/cancel", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
         body: JSON.stringify({ bookingId: booking.id, choice }),
       });
       const data = await res.json();

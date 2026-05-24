@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, CalendarDays, Clock, MapPin, Coins, QrCode, Upload, Banknote, CreditCard } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuth } from "@/context/AuthContext";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import { getCreditsByBusiness, computeBalance } from "@/lib/firebase/credits";
 import { storage } from "@/lib/firebase/client";
 import { formatHour } from "@/lib/slots";
@@ -53,6 +54,7 @@ export default function BookingConfirmModal({
   staticQrUrl,
 }: BookingConfirmModalProps) {
   const { user } = useAuth();
+  const authedFetch = useAuthedFetch();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [checkoutType, setCheckoutType] = useState<CheckoutState>(null);
@@ -111,13 +113,8 @@ export default function BookingConfirmModal({
     setError("");
     setLoading(true);
     try {
-      const idToken = await user.getIdToken();
-      const res = await fetch("/api/bookings", {
+      const res = await authedFetch("/api/bookings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
         body: JSON.stringify({
           businessSlug,
           facilityId: selection!.facilityId,
@@ -141,12 +138,8 @@ export default function BookingConfirmModal({
       if (body.checkout_type === "GATEWAY_SPLIT") {
         // Create the payment session and redirect — loading stays true until redirect
         try {
-          const sessionRes = await fetch("/api/payments/create-session", {
+          const sessionRes = await authedFetch("/api/payments/create-session", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${idToken}`,
-            },
             body: JSON.stringify({ bookingId: body.bookingId }),
           });
           const sessionBody = await sessionRes.json().catch(() => ({})) as { checkoutUrl?: string };
@@ -180,16 +173,11 @@ export default function BookingConfirmModal({
     setUploadLoading(true);
     setUploadError("");
     try {
-      const idToken = await user.getIdToken();
       const storageRef = ref(storage, `payment_proofs/${bookingId}/${Date.now()}_${proofFile.name}`);
       await uploadBytes(storageRef, proofFile);
       const proofUrl = await getDownloadURL(storageRef);
-      const res = await fetch("/api/payments/submit-proof", {
+      const res = await authedFetch("/api/payments/submit-proof", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
         body: JSON.stringify({ bookingId, proofUrl }),
       });
       if (!res.ok) {

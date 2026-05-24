@@ -4,20 +4,15 @@ import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { v4 as uuid } from "uuid";
 import ImageUpload from "@/components/shared/ImageUpload";
-import { Facility, OperatingHours } from "@/lib/types";
+import { Facility } from "@/lib/types";
 import { WizardDraft } from "../OnboardingWizard";
-
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+import { DAYS, defaultOperatingHours } from "@/lib/slots";
 
 const COMMON_AMENITIES = [
   "Parking", "Restrooms", "Showers", "Locker rooms",
   "Equipment rental", "Café / Snack bar", "WiFi", "Air conditioning",
   "Wheelchair accessible", "Security cameras",
 ];
-
-function defaultHours(): OperatingHours[] {
-  return DAYS.map((day) => ({ day, open: "06:00 AM", close: "10:00 PM", closed: false }));
-}
 
 function defaultFacility(): Facility {
   return {
@@ -148,7 +143,7 @@ interface Props {
 }
 
 export default function Step3Facilities({ draft, patch, onBack, onNext }: Props) {
-  const hours = draft.operatingHours.length > 0 ? draft.operatingHours : defaultHours();
+  const hours = draft.operatingHours.length > 0 ? draft.operatingHours : defaultOperatingHours();
 
   function setFacility(i: number, f: Facility) {
     const updated = [...draft.facilities];
