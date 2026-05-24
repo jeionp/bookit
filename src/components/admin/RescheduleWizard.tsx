@@ -4,12 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import { AlertCircle } from "lucide-react";
 import {
   Booking,
-  rescheduleBooking,
   getBookedHoursExcluding,
   SlotUnavailableError,
 } from "@/lib/firebase/bookings";
 import { Business } from "@/lib/types";
 import { formatHour, getOperatingHoursForDate } from "@/lib/slots";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -50,6 +50,7 @@ export default function RescheduleWizard({ booking, business, accentColor, onExi
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState<string | null>(null);
+  const authedFetch = useAuthedFetch();
 
   const slotRequestRef = useRef(0);
 
@@ -96,26 +97,18 @@ export default function RescheduleWizard({ booking, business, accentColor, onExi
     setSaving(true);
     setError(null);
     const sorted = newHours.slice().sort((a, b) => a - b);
-    const newFacility = business.facilities.find((f) => f.id === newFacilityId)!;
-    const newTotalPrice = computePrice(business, newFacilityId, sorted);
     try {
-      await rescheduleBooking(
-        booking.id,
-        business.slug,
-        newFacilityId,
-        newFacility.name,
-        newDate,
-        sorted,
-        newTotalPrice,
-      );
-      onReschedule({
-        ...booking,
-        facilityId: newFacilityId,
-        facilityName: newFacility.name,
-        date: newDate,
-        hours: sorted,
-        totalPrice: newTotalPrice,
+      const res = await authedFetch("/api/reschedule", {
+        method: "POST",
+        body: JSON.stringify({ bookingId: booking.id, facilityId: newFacilityId, date: newDate, hours: sorted }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        if (res.status === 409) throw new SlotUnavailableError();
+        throw new Error(body.error ?? "Failed to reschedule");
+      }
+      const { totalPrice, facilityName } = await res.json() as { totalPrice: number; facilityName: string };
+      onReschedule({ ...booking, facilityId: newFacilityId, facilityName, date: newDate, hours: sorted, totalPrice });
     } catch (e) {
       setError(e instanceof SlotUnavailableError ? e.message : "Failed to reschedule. Please try again.");
     } finally {

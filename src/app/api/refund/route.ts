@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
     });
     batch.update(adminDb.collection("bookings").doc(bookingId), {
+      status: "cancelled",
       paymentStatus: "credited",
     });
     await batch.commit();
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
 
   const newPaymentStatus = result.status === "succeeded" ? "refunded" : "refund_pending";
   await adminDb.collection("bookings").doc(bookingId).update({
+    status: "cancelled",
     paymentStatus: newPaymentStatus,
     payment_status_v2: newPaymentStatus,
     refund_id: result.refundId,

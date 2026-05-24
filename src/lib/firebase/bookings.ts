@@ -91,24 +91,6 @@ export async function cancelBooking(bookingId: string): Promise<void> {
   await updateDoc(doc(db, "bookings", bookingId), { status: "cancelled" });
 }
 
-// TOCTOU note: Firestore is updated before the /api/refund call resolves.
-// If the API call fails, the booking appears refunded in the UI but the actual
-// payment refund was never issued. This is acceptable until PayMongo is wired up,
-// but should be addressed (idempotent retry or server-side transaction) before go-live.
-export async function cancelBookingWithRefund(
-  bookingId: string,
-  refundMethod: "refund" | "credit",
-): Promise<void> {
-  await updateDoc(doc(db, "bookings", bookingId), {
-    status: "cancelled",
-    paymentStatus: "refunded",
-  });
-  await fetch("/api/refund", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ bookingId, method: refundMethod }),
-  });
-}
 
 export async function getBookingsForDate(
   businessSlug: string,
@@ -147,34 +129,6 @@ export async function getBookedHoursExcluding(
     .flatMap((b) => b.hours);
 }
 
-export async function rescheduleBooking(
-  bookingId: string,
-  businessSlug: string,
-  newFacilityId: string,
-  newFacilityName: string,
-  newDate: string,
-  newHours: number[],
-  newTotalPrice: number,
-): Promise<void> {
-  const bookingRef = doc(db, "bookings", bookingId);
-
-  await runTransaction(db, async (tx) => {
-    const existing = await getBookingsForDate(businessSlug, newFacilityId, newDate);
-    // Exclude the booking being rescheduled — same court/date means its own hours aren't a conflict.
-    const takenHours = new Set<number>(
-      existing.filter((b) => b.id !== bookingId).flatMap((b) => b.hours)
-    );
-    if (newHours.some((h) => takenHours.has(h))) throw new SlotUnavailableError();
-
-    tx.update(bookingRef, {
-      facilityId: newFacilityId,
-      facilityName: newFacilityName,
-      date: newDate,
-      hours: newHours,
-      totalPrice: newTotalPrice,
-    });
-  });
-}
 
 // Requires composite index: businessSlug ASC, date ASC
 // Firebase will surface a link to auto-create it on first run if missing.

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { cancelBooking, cancelBookingWithRefund } from "@/lib/firebase/bookings";
+import { cancelBooking } from "@/lib/firebase/bookings";
 import type { Booking } from "@/lib/firebase/bookings";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 
 interface Props {
   booking: Booking;
@@ -16,6 +17,7 @@ export default function BookingCancelSection({ booking, isPaid, onOpenReschedule
   const [cancelStep, setCancelStep] = useState<CancelStep>("idle");
   const [refundMethod, setRefundMethod] = useState<"refund" | "credit">("refund");
   const [cancelling, setCancelling] = useState(false);
+  const authedFetch = useAuthedFetch();
 
   function startCancel() {
     setCancelStep(isPaid ? "refund_choice" : "confirm");
@@ -25,7 +27,19 @@ export default function BookingCancelSection({ booking, isPaid, onOpenReschedule
     setCancelling(true);
     try {
       if (isPaid) {
-        await cancelBookingWithRefund(booking.id, refundMethod);
+        const res = await authedFetch("/api/refund", {
+          method: "POST",
+          body: JSON.stringify({
+            bookingId: booking.id,
+            businessSlug: booking.businessSlug,
+            method: refundMethod,
+            amountCents: Math.round(booking.totalPrice * 100),
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error ?? "Refund failed");
+        }
       } else {
         await cancelBooking(booking.id);
       }
