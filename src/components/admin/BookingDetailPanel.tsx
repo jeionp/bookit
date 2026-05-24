@@ -1,21 +1,19 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { X, CalendarDays, Clock, User, Mail, Hash, AlertCircle, History } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, CalendarDays, Clock, User, Mail, Hash, History } from "lucide-react";
 import {
   Booking,
   BookingStatus,
   PaymentStatusV2,
-  cancelBooking,
-  cancelBookingWithRefund,
-  rescheduleBooking,
-  getBookedHoursExcluding,
   getCustomerHistory,
-  SlotUnavailableError,
 } from "@/lib/firebase/bookings";
 import { Business } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
-import { parseHour, formatHour, getOperatingHoursForDate } from "@/lib/slots";
+import { formatHour } from "@/lib/slots";
+import RescheduleWizard from "./RescheduleWizard";
+import PaymentActionsSection from "./PaymentActionsSection";
+import BookingCancelSection from "./BookingCancelSection";
 
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -25,15 +23,6 @@ function formatDate(dateStr: string): string {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function computePrice(business: Business, facilityId: string, hours: number[]): number {
-  const facility = business.facilities.find((f) => f.id === facilityId);
-  if (!facility) return 0;
-  return hours.reduce((sum, h) => {
-    const isPrime = facility.primeTimeStart != null && h >= facility.primeTimeStart;
-    return sum + (isPrime ? (facility.primePricePerHour ?? facility.pricePerHour) : facility.pricePerHour);
-  }, 0);
 }
 
 function PaymentBadge({ status }: { status?: "unpaid" | "paid" | "refunded" | "credited" | "refund_pending" }) {
@@ -66,10 +55,7 @@ function BookingStatusBadge({ status, accentColor }: { status: BookingStatus; ac
   };
   const { bg, color, label } = cfg[status] ?? cfg.confirmed;
   return (
-    <span
-      className="inline-block text-xs font-bold px-3 py-1 rounded-full"
-      style={{ backgroundColor: bg, color }}
-    >
+    <span className="inline-block text-xs font-bold px-3 py-1 rounded-full" style={{ backgroundColor: bg, color }}>
       {label}
     </span>
   );
@@ -111,196 +97,29 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
   const startHour = booking.hours[0];
   const endHour = booking.hours[booking.hours.length - 1] + 1;
 
-  // Local mirrors for fields that admin actions update in-place
   const [localStatus, setLocalStatus] = useState<BookingStatus>(booking.status);
   const [localPaymentStatus, setLocalPaymentStatus] = useState<PaymentStatusV2 | undefined>(
     booking.payment_status_v2
   );
-  const [paymentActionLoading, setPaymentActionLoading] = useState(false);
-  const [paymentActionError, setPaymentActionError] = useState<string | null>(null);
-
-  const [simulateLoading, setSimulateLoading] = useState(false);
-  const [simulateError, setSimulateError] = useState<string | null>(null);
-
-  async function callSimulate(outcome: "success" | "failure") {
-    setSimulateLoading(true);
-    setSimulateError(null);
-    try {
-      const res = await fetch("/api/payments/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking.id, outcome }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setSimulateError((body as { error?: string }).error ?? "Simulate failed");
-        return;
-      }
-      if (outcome === "success") {
-        setLocalPaymentStatus("paid");
-        setLocalStatus("confirmed");
-      } else {
-        setLocalPaymentStatus("rejected");
-        setLocalStatus("expired");
-      }
-    } catch {
-      setSimulateError("Network error");
-    } finally {
-      setSimulateLoading(false);
-    }
-  }
-
-  async function callPaymentAction(action: "approve" | "reject" | "mark_paid") {
-    if (!user) return;
-    setPaymentActionLoading(true);
-    setPaymentActionError(null);
-    try {
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/bookings/${booking.id}/payment-status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ action }),
-      });
-      if (!res.ok) {
-        setPaymentActionError("Action failed. Please try again.");
-        return;
-      }
-      if (action === "approve") {
-        setLocalPaymentStatus("paid");
-        setLocalStatus("confirmed");
-      } else if (action === "reject") {
-        setLocalPaymentStatus("rejected");
-      } else {
-        setLocalPaymentStatus("paid");
-      }
-    } catch {
-      setPaymentActionError("Action failed. Please try again.");
-    } finally {
-      setPaymentActionLoading(false);
-    }
-  }
-
-  // "idle" → "refund_choice" (paid only) → "confirm" → done
-  type CancelStep = "idle" | "refund_choice" | "confirm";
-  const [cancelStep, setCancelStep] = useState<CancelStep>("idle");
-  const [refundMethod, setRefundMethod] = useState<"refund" | "credit">("refund");
-  const [cancelling, setCancelling] = useState(false);
-  const isPaid = booking.paymentStatus === "paid";
-
   const [rescheduleMode, setRescheduleMode] = useState(false);
-  const [newFacilityId, setNewFacilityId] = useState(booking.facilityId);
-  const [newDate, setNewDate] = useState(booking.date);
-  const [newHours, setNewHours] = useState<number[]>(booking.hours);
-  const [takenHours, setTakenHours] = useState<Set<number>>(new Set());
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [error, setError] = useState<string | null>(null);
-
   const [history, setHistory] = useState<Booking[]>([]);
 
   useEffect(() => {
     getCustomerHistory(business.slug, booking.userEmail, booking.id).then(setHistory);
   }, [business.slug, booking.userEmail, booking.id]);
 
-  // Incremented on each new request so stale responses are discarded
-  const slotRequestRef = useRef(0);
-
-  function loadSlots(facilityId: string, date: string, clearSelection = false) {
-    const reqId = ++slotRequestRef.current;
-    setLoadingSlots(true);
-    if (clearSelection) setNewHours([]);
-    getBookedHoursExcluding(business.slug, facilityId, date, booking.id).then((taken) => {
-      if (reqId !== slotRequestRef.current) return;
-      setTakenHours(new Set(taken));
-      setLoadingSlots(false);
-    });
+  function handleStatusChange(paymentStatus: PaymentStatusV2 | undefined, bookingStatus?: BookingStatus) {
+    setLocalPaymentStatus(paymentStatus);
+    if (bookingStatus) setLocalStatus(bookingStatus);
   }
 
   function openReschedule() {
     setRescheduleMode(true);
-    setStep(1);
-    setError(null);
-    setNewFacilityId(booking.facilityId);
-    setNewDate(booking.date);
-    setNewHours(booking.hours);
-    loadSlots(booking.facilityId, booking.date);
   }
 
   function exitReschedule() {
     setRescheduleMode(false);
-    setStep(1);
-    setError(null);
-    setLoadingSlots(false);
-    setNewFacilityId(booking.facilityId);
-    setNewDate(booking.date);
-    setNewHours(booking.hours);
   }
-
-  function handleCourtChange(facilityId: string) {
-    setNewFacilityId(facilityId);
-    loadSlots(facilityId, newDate, true);
-  }
-
-  function handleDateChange(date: string) {
-    setNewDate(date);
-    loadSlots(newFacilityId, date, true);
-  }
-
-  function startCancel() {
-    setCancelStep(isPaid ? "refund_choice" : "confirm");
-  }
-
-  async function handleCancel() {
-    setCancelling(true);
-    try {
-      if (isPaid) {
-        await cancelBookingWithRefund(booking.id, refundMethod);
-      } else {
-        await cancelBooking(booking.id);
-      }
-      onCancel();
-    } finally {
-      setCancelling(false);
-    }
-  }
-
-  async function handleReschedule() {
-    if (newHours.length === 0) return;
-    setSaving(true);
-    setError(null);
-    const sorted = newHours.slice().sort((a, b) => a - b);
-    const newFacility = business.facilities.find((f) => f.id === newFacilityId)!;
-    const newTotalPrice = computePrice(business, newFacilityId, sorted);
-    try {
-      await rescheduleBooking(
-        booking.id,
-        business.slug,
-        newFacilityId,
-        newFacility.name,
-        newDate,
-        sorted,
-        newTotalPrice,
-      );
-      setRescheduleMode(false);
-      onReschedule({ ...booking, facilityId: newFacilityId, facilityName: newFacility.name, date: newDate, hours: sorted, totalPrice: newTotalPrice });
-    } catch (e) {
-      setError(e instanceof SlotUnavailableError ? e.message : "Failed to reschedule. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function toggleHour(h: number) {
-    setNewHours((prev) =>
-      prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]
-    );
-  }
-
-  const operatingHours = rescheduleMode ? getOperatingHoursForDate(business, newDate) : [];
-  const newPrice = computePrice(business, newFacilityId, newHours);
-  const sortedNewHours = newHours.slice().sort((a, b) => a - b);
-  const newFacilityName = business.facilities.find((f) => f.id === newFacilityId)?.name ?? "";
 
   return (
     <div data-testid="booking-detail-panel" className="w-72 shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-y-auto">
@@ -319,231 +138,13 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
 
       <div className="p-4 space-y-5">
         {rescheduleMode ? (
-          <>
-            {/* Step progress bar */}
-            <div className="flex gap-1.5 mb-2">
-              {([1, 2, 3] as const).map((s) => (
-                <div
-                  key={s}
-                  className="h-1 flex-1 rounded-full transition-colors"
-                  style={{ backgroundColor: s <= step ? accentColor : "#e5e7eb" }}
-                />
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-400 mb-3">
-              Step {step} of 3 — {(["Date & Court", "Time Slots", "Confirm"] as const)[step - 1]}
-            </p>
-
-            {/* Currently booked — always visible */}
-            <div className="rounded-lg border border-dashed border-gray-300 px-3 py-2.5 text-xs space-y-0.5 mb-1">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Currently booked</p>
-              <p data-testid="reschedule-current-facility" className="text-gray-700 font-semibold">{booking.facilityName}</p>
-              <p className="text-gray-500">{formatDate(booking.date)}</p>
-              <p className="text-gray-500">
-                {formatHour(startHour)} – {formatHour(endHour)}
-                <span className="text-gray-400 ml-1">({booking.hours.length}h · ₱{booking.totalPrice.toLocaleString()})</span>
-              </p>
-            </div>
-
-            {/* Step 1: Date & Court */}
-            {step === 1 && (
-              <>
-                <div>
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1">
-                    Court
-                  </label>
-                  <select
-                    value={newFacilityId}
-                    onChange={(e) => handleCourtChange(e.target.value)}
-                    className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
-                    data-testid="reschedule-court-select"
-                  >
-                    {business.facilities.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={(e) => handleDateChange(e.target.value)}
-                    className="w-full text-sm text-gray-900 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-offset-0"
-                    data-testid="reschedule-date-input"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={exitReschedule}
-                    className="flex-1 text-sm font-semibold py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => setStep(2)}
-                    className="flex-1 text-sm font-semibold py-2 rounded-lg text-white transition-colors"
-                    style={{ backgroundColor: accentColor }}
-                  >
-                    Next
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Step 2: Time Slots */}
-            {step === 2 && (
-              <>
-                <div>
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide block mb-1">
-                    Time Slots
-                  </label>
-                  <p
-                    className="text-xs mb-2"
-                    data-testid="reschedule-advisory"
-                    style={{ color: newHours.length === booking.hours.length ? "#6b7280" : "#f59e0b" }}
-                  >
-                    {newHours.length === 0
-                      ? `Select ${booking.hours.length} hour${booking.hours.length > 1 ? "s" : ""} to match original`
-                      : newHours.length === booking.hours.length
-                      ? `${newHours.length} hour${newHours.length > 1 ? "s" : ""} selected — matches original`
-                      : `${newHours.length} of ${booking.hours.length} hour${booking.hours.length > 1 ? "s" : ""} selected`}
-                  </p>
-                  {loadingSlots ? (
-                    <p className="text-xs text-gray-400 py-2">Loading availability…</p>
-                  ) : operatingHours.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-2">Closed on this day</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {operatingHours.map((h) => {
-                        const taken = takenHours.has(h);
-                        const selected = newHours.includes(h);
-                        const wasOriginal =
-                          booking.hours.includes(h) &&
-                          newFacilityId === booking.facilityId &&
-                          newDate === booking.date;
-                        return (
-                          <button
-                            key={h}
-                            type="button"
-                            disabled={taken}
-                            onClick={() => toggleHour(h)}
-                            data-testid={`reschedule-slot-${h}`}
-                            className="text-xs py-1.5 px-2 rounded-md border font-medium transition-colors"
-                            style={
-                              selected
-                                ? { backgroundColor: accentColor, borderColor: accentColor, color: "white" }
-                                : taken
-                                ? { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#d1d5db", cursor: "not-allowed" }
-                                : wasOriginal
-                                ? { backgroundColor: `${accentColor}18`, borderColor: accentColor, borderStyle: "dashed", color: accentColor }
-                                : { backgroundColor: "white", borderColor: "#e5e7eb", color: "#374151" }
-                            }
-                          >
-                            {formatHour(h)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {newHours.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-                    <span className="text-xs text-gray-500">New total: </span>
-                    <span className="text-sm font-bold text-gray-900">₱{newPrice.toLocaleString()}</span>
-                    <span className="text-xs text-gray-400 ml-1">({newHours.length}h)</span>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="flex-1 text-sm font-semibold py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setStep(3)}
-                    disabled={newHours.length === 0 || loadingSlots}
-                    className="flex-1 text-sm font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
-                    style={{ backgroundColor: accentColor }}
-                  >
-                    Next
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Step 3: Confirm */}
-            {step === 3 && (() => {
-              const priceDiff = newPrice - booking.totalPrice;
-              return (
-                <>
-                  <div className="rounded-lg border border-gray-200 overflow-hidden text-xs">
-                    <div className="grid grid-cols-2 divide-x divide-gray-200">
-                      <div className="p-3 space-y-1 bg-gray-50">
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Before</p>
-                        <p data-testid="reschedule-before-facility" className="font-semibold text-gray-700">{booking.facilityName}</p>
-                        <p className="text-gray-500">{formatDate(booking.date)}</p>
-                        <p className="text-gray-500">{formatHour(startHour)} – {formatHour(endHour)}</p>
-                        <p className="font-bold text-gray-900 pt-0.5">₱{booking.totalPrice.toLocaleString()}</p>
-                      </div>
-                      <div className="p-3 space-y-1">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: accentColor }}>After</p>
-                        <p data-testid="reschedule-after-facility" className="font-semibold text-gray-700">{newFacilityName}</p>
-                        <p className="text-gray-500">{formatDate(newDate)}</p>
-                        <p className="text-gray-500">
-                          {sortedNewHours.length > 0
-                            ? `${formatHour(sortedNewHours[0])} – ${formatHour(sortedNewHours[sortedNewHours.length - 1] + 1)}`
-                            : "—"}
-                        </p>
-                        <p className="font-bold text-gray-900 pt-0.5">₱{newPrice.toLocaleString()}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {priceDiff !== 0 && (
-                    <p className="text-xs text-center" data-testid="reschedule-price-diff" style={{ color: priceDiff > 0 ? "#dc2626" : "#16a34a" }}>
-                      {priceDiff > 0
-                        ? `+₱${priceDiff.toLocaleString()} more than original`
-                        : `-₱${Math.abs(priceDiff).toLocaleString()} less than original`}
-                    </p>
-                  )}
-
-                  {error && (
-                    <div className="flex items-start gap-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2.5">
-                      <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                      {error}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setStep(2); setError(null); }}
-                      disabled={saving}
-                      className="flex-1 text-sm font-semibold py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={handleReschedule}
-                      disabled={saving}
-                      className="flex-1 text-sm font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
-                      style={{ backgroundColor: accentColor }}
-                      data-testid="confirm-reschedule-btn"
-                    >
-                      {saving ? "Saving…" : "Confirm"}
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
-          </>
+          <RescheduleWizard
+            booking={booking}
+            business={business}
+            accentColor={accentColor}
+            onExit={exitReschedule}
+            onReschedule={(updated) => { setRescheduleMode(false); onReschedule(updated); }}
+          />
         ) : (
           <>
             <div className="flex items-center gap-2 flex-wrap">
@@ -553,16 +154,12 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                Facility
-              </p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Facility</p>
               <p className="text-sm font-bold text-gray-900">{booking.facilityName}</p>
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Date & Time
-              </p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Date & Time</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-sm text-gray-700">
                   <CalendarDays size={14} className="text-gray-400 shrink-0" />
@@ -577,9 +174,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Customer
-              </p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Customer</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-sm text-gray-700">
                   <User size={14} className="text-gray-400 shrink-0" />
@@ -593,18 +188,12 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                Total
-              </p>
-              <p className="text-2xl font-black text-gray-900">
-                ₱{booking.totalPrice.toLocaleString()}
-              </p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Total</p>
+              <p className="text-2xl font-black text-gray-900">₱{booking.totalPrice.toLocaleString()}</p>
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                Booking ID
-              </p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Booking ID</p>
               <div className="flex items-start gap-1.5 text-xs text-gray-400 font-mono break-all">
                 <Hash size={11} className="text-gray-300 shrink-0 mt-0.5" />
                 {booking.id}
@@ -615,9 +204,7 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
               <div data-testid="customer-history">
                 <div className="flex items-center gap-1.5 mb-2">
                   <History size={13} className="text-gray-400 shrink-0" />
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                    Past bookings
-                  </p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Past bookings</p>
                 </div>
                 <div className="space-y-1.5">
                   {history.map((b) => (
@@ -635,12 +222,9 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
               </div>
             )}
 
-            {/* Payment proof preview (P2P bookings) */}
             {booking.proof_url && (
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                  Payment Proof
-                </p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Payment Proof</p>
                 <a href={booking.proof_url} target="_blank" rel="noopener noreferrer">
                   <img
                     src={booking.proof_url}
@@ -652,169 +236,19 @@ export default function BookingDetailPanel({ booking, business, onClose, onCance
               </div>
             )}
 
-            {/* Admin payment actions */}
-            {paymentActionError && (
-              <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                <AlertCircle size={13} className="shrink-0" />
-                {paymentActionError}
-              </div>
-            )}
-            {booking.checkout_type === "P2P_AI" && localPaymentStatus === "ai_review" && (
-              <div className="space-y-2">
-                <button
-                  onClick={() => callPaymentAction("approve")}
-                  disabled={paymentActionLoading}
-                  className="w-full text-sm font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
-                  style={{ backgroundColor: "#16a34a" }}
-                  data-testid="approve-payment-btn"
-                >
-                  {paymentActionLoading ? "Processing…" : "Approve Payment"}
-                </button>
-                <button
-                  onClick={() => callPaymentAction("reject")}
-                  disabled={paymentActionLoading}
-                  className="w-full text-sm font-semibold py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                  data-testid="reject-payment-btn"
-                >
-                  Reject Payment
-                </button>
-              </div>
-            )}
-            {booking.checkout_type === "PAY_AT_VENUE" && localPaymentStatus === "pending_cash" && (
-              <button
-                onClick={() => callPaymentAction("mark_paid")}
-                disabled={paymentActionLoading}
-                className="w-full text-sm font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
-                style={{ backgroundColor: "#7c3aed" }}
-                data-testid="mark-paid-btn"
-              >
-                {paymentActionLoading ? "Processing…" : "Mark as Paid"}
-              </button>
-            )}
+            <PaymentActionsSection
+              booking={booking}
+              user={user}
+              localPaymentStatus={localPaymentStatus}
+              onStatusChange={handleStatusChange}
+            />
 
-            {booking.checkout_type === "GATEWAY_SPLIT" && localPaymentStatus === "pending_gateway" && (
-              <div className="space-y-2 border border-dashed border-amber-200 rounded-xl p-3 bg-amber-50">
-                <p className="text-xs font-semibold text-amber-700">Testing Mode — Simulate Payment</p>
-                {simulateError && (
-                  <p className="text-xs text-red-600">{simulateError}</p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => void callSimulate("success")}
-                    disabled={simulateLoading}
-                    className="flex-1 text-xs font-semibold py-2 rounded-lg text-white transition-colors disabled:opacity-50"
-                    style={{ backgroundColor: "#16a34a" }}
-                    data-testid="simulate-success-btn"
-                  >
-                    {simulateLoading ? "Processing…" : "Simulate Success"}
-                  </button>
-                  <button
-                    onClick={() => void callSimulate("failure")}
-                    disabled={simulateLoading}
-                    className="flex-1 text-xs font-semibold py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    data-testid="simulate-failure-btn"
-                  >
-                    Simulate Failure
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="pt-2 space-y-2 border-t border-gray-100">
-              <button
-                onClick={openReschedule}
-                className="w-full text-sm font-semibold py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
-                data-testid="reschedule-btn"
-              >
-                Reschedule
-              </button>
-
-              {cancelStep === "refund_choice" && (
-                <div className="space-y-3 bg-amber-50 rounded-lg p-3" data-testid="refund-choice">
-                  <p className="text-xs font-semibold text-amber-800">
-                    This booking was paid. How would you like to handle the refund?
-                  </p>
-                  <div className="space-y-1.5">
-                    {(["refund", "credit"] as const).map((opt) => (
-                      <label
-                        key={opt}
-                        className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer"
-                      >
-                        <input
-                          type="radio"
-                          name="refundMethod"
-                          value={opt}
-                          checked={refundMethod === opt}
-                          onChange={() => setRefundMethod(opt)}
-                          className="mt-0.5 shrink-0"
-                        />
-                        {opt === "refund" ? (
-                          <span>
-                            <span className="font-semibold">Refund to payment method</span>
-                            <br />
-                            <span className="text-gray-400">5–10 business days via PayMongo</span>
-                          </span>
-                        ) : (
-                          <span>
-                            <span className="font-semibold">Issue store credit</span>
-                            <br />
-                            <span className="text-gray-400">Instant — customer can use it to rebook</span>
-                          </span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCancelStep("idle")}
-                      className="flex-1 text-xs font-semibold py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setCancelStep("confirm")}
-                      className="flex-1 text-xs font-semibold py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-                      data-testid="refund-choice-next-btn"
-                    >
-                      Continue
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {cancelStep === "confirm" && (
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-500 text-center">Cancel this booking?</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCancelStep(isPaid ? "refund_choice" : "idle")}
-                      disabled={cancelling}
-                      className="flex-1 text-xs font-semibold py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={handleCancel}
-                      disabled={cancelling}
-                      className="flex-1 text-xs font-semibold py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
-                      data-testid="confirm-cancel-btn"
-                    >
-                      {cancelling ? "Cancelling…" : "Yes, cancel"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {cancelStep === "idle" && (
-                <button
-                  onClick={startCancel}
-                  className="w-full text-sm font-semibold py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
-                  data-testid="cancel-booking-btn"
-                >
-                  Cancel booking
-                </button>
-              )}
-            </div>
+            <BookingCancelSection
+              booking={booking}
+              isPaid={booking.paymentStatus === "paid"}
+              onOpenReschedule={openReschedule}
+              onCancel={onCancel}
+            />
           </>
         )}
       </div>
