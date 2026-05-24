@@ -46,7 +46,7 @@ export default function RescheduleWizard({ booking, business, accentColor, onExi
   const [newDate, setNewDate] = useState(booking.date);
   const [newHours, setNewHours] = useState<number[]>(booking.hours);
   const [takenHours, setTakenHours] = useState<Set<number>>(new Set());
-  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(true);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState<string | null>(null);
@@ -64,9 +64,16 @@ export default function RescheduleWizard({ booking, business, accentColor, onExi
     });
   }
 
-  // Load availability for the initial facility + date on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadSlots(booking.facilityId, booking.date); }, []);
+  // Fetch initial availability on mount; loadingSlots initializes as true so no synchronous setState needed
+  useEffect(() => {
+    const reqId = ++slotRequestRef.current;
+    getBookedHoursExcluding(business.slug, booking.facilityId, booking.date, booking.id).then((taken) => {
+      if (reqId !== slotRequestRef.current) return;
+      setTakenHours(new Set(taken));
+      setLoadingSlots(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleCourtChange(facilityId: string) {
     setNewFacilityId(facilityId);
