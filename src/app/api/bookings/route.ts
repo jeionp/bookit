@@ -76,8 +76,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Too many requests" }, { status: 429 });
       }
     } catch (err) {
-      // Redis unavailable — fail open so bookings are not blocked by infra issues.
+      // Redis unavailable — fail closed so an attacker cannot trigger Redis errors to bypass the limit.
       console.error("[api/bookings] rate-limit check failed:", err);
+      return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
     }
   }
 
