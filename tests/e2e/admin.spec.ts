@@ -727,6 +727,8 @@ test.describe('Admin refund prompt', () => {
     await goToScheduleView(page, adminUid)
     await page.getByText('Paid User').click()
     await page.getByTestId('cancel-booking-btn').click()
+    // Test bookings have no gateway session — use credit path
+    await page.locator('input[name="refundMethod"][value="credit"]').click()
     await page.getByTestId('refund-choice-next-btn').click()
     await page.getByTestId('confirm-cancel-btn').click()
     await expect(page.getByRole('button', { name: /Paid User/ })).not.toBeAttached({ timeout: 8_000 })

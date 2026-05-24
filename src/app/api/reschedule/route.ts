@@ -26,7 +26,12 @@ export async function POST(req: NextRequest) {
   if (tokenOrRes instanceof NextResponse) return tokenOrRes;
   const uid = tokenOrRes.uid;
 
-  const body = (await req.json()) as RescheduleRequest;
+  let body: RescheduleRequest;
+  try {
+    body = (await req.json()) as RescheduleRequest;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   const { bookingId, facilityId, date, hours } = body;
 
   if (!bookingId || !facilityId || !isYmdDate(date)) {
