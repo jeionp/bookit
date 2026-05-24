@@ -269,12 +269,12 @@ describe('POST /api/refund — method: "credit"', () => {
     })
   })
 
-  test('batch.update sets paymentStatus to "credited" on the booking', async () => {
+  test('batch.update cancels and credits the booking', async () => {
     await POST(makeReq({ ...VALID_BASE, method: 'credit', amountCents: 5000 }))
 
     expect(mockBatchUpdate).toHaveBeenCalledOnce()
     const [, updateData] = mockBatchUpdate.mock.calls[0]
-    expect(updateData).toEqual({ paymentStatus: 'credited' })
+    expect(updateData).toEqual({ status: 'cancelled', paymentStatus: 'credited' })
   })
 
   test('falls back to DEFAULT_CANCELLATION_POLICY.creditValidityDays when business has none', async () => {
