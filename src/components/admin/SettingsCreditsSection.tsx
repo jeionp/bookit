@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase/client";
 import { Credit } from "@/lib/types";
 import { computeBalance } from "@/lib/firebase/credits";
 import { SectionHeader } from "./SettingsShared";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import type { User } from "firebase/auth";
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function SettingsCreditsSection({ businessSlug, user, open, onToggle }: Props) {
+  const authedFetch = useAuthedFetch();
   const [businessCredits, setBusinessCredits] = useState<Credit[]>([]);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [voidingId, setVoidingId] = useState<string | null>(null);
@@ -39,10 +41,8 @@ export default function SettingsCreditsSection({ businessSlug, user, open, onTog
     if (!user) return;
     setVoidingId(creditId);
     try {
-      const idToken = await user.getIdToken();
-      await fetch("/api/admin/void-credit", {
+      await authedFetch("/api/admin/void-credit", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ creditId }),
       });
       setBusinessCredits((prev) =>

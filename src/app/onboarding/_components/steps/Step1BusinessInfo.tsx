@@ -5,7 +5,7 @@ import { CheckCircle, XCircle, Loader } from "lucide-react";
 import { slugify, isValidSlug } from "@/lib/slugify";
 import { WizardDraft } from "../OnboardingWizard";
 
-const BUSINESS_TYPES = [
+export const BUSINESS_TYPES = [
   { value: "court", label: "Sports Court", available: true },
   { value: "appointment", label: "Appointment-based", available: false },
   { value: "room", label: "Room / Space", available: false },
@@ -140,7 +140,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext, loading, error
               value={draft.slug}
               onChange={(e) => handleSlugChange(e.target.value)}
               placeholder="your-business"
-              className="flex-1 px-3 py2 text-sm text-gray-900 outline-none bg-transparent"
+              className="flex-1 px-3 py-2 text-sm text-gray-900 outline-none bg-transparent"
             />
             <div className="px-3">
               {slugStatus === "checking" && <Loader size={14} className="text-gray-400 animate-spin" />}

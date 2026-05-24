@@ -62,25 +62,9 @@ export async function createBooking(data: NewBooking): Promise<string> {
   const newDocRef = doc(collection(db, "bookings"));
 
   await runTransaction(db, async (tx) => {
-    // Read all confirmed bookings for this court + date within the transaction
-    const q = query(
-      collection(db, "bookings"),
-      where("businessSlug", "==", data.businessSlug),
-      where("facilityId", "==", data.facilityId),
-      where("date", "==", data.date),
-      where("status", "==", "confirmed")
-    );
-    const snap = await getDocs(q);
-
-    // Collect every hour already booked
-    const takenHours = new Set<number>();
-    snap.docs.forEach((d) => {
-      (d.data().hours as number[]).forEach((h) => takenHours.add(h));
-    });
-
-    // Abort if any requested hour is already taken
-    const conflict = data.hours.some((h) => takenHours.has(h));
-    if (conflict) throw new SlotUnavailableError();
+    const existing = await getBookingsForDate(data.businessSlug, data.facilityId, data.date);
+    const takenHours = new Set<number>(existing.flatMap((b) => b.hours));
+    if (data.hours.some((h) => takenHours.has(h))) throw new SlotUnavailableError();
 
     // No conflict — write the new booking
     tx.set(newDocRef, {
@@ -175,24 +159,11 @@ export async function rescheduleBooking(
   const bookingRef = doc(db, "bookings", bookingId);
 
   await runTransaction(db, async (tx) => {
-    const q = query(
-      collection(db, "bookings"),
-      where("businessSlug", "==", businessSlug),
-      where("facilityId", "==", newFacilityId),
-      where("date", "==", newDate),
-      where("status", "==", "confirmed")
+    const existing = await getBookingsForDate(businessSlug, newFacilityId, newDate);
+    // Exclude the booking being rescheduled — same court/date means its own hours aren't a conflict.
+    const takenHours = new Set<number>(
+      existing.filter((b) => b.id !== bookingId).flatMap((b) => b.hours)
     );
-    const snap = await getDocs(q);
-
-    const takenHours = new Set<number>();
-    snap.docs
-      // Exclude the booking being rescheduled — it may appear in the result if
-      // the new slot is on the same court/date, and its hours aren't actually a conflict.
-      .filter((d) => d.id !== bookingId)
-      .forEach((d) => {
-        (d.data().hours as number[]).forEach((h) => takenHours.add(h));
-      });
-
     if (newHours.some((h) => takenHours.has(h))) throw new SlotUnavailableError();
 
     tx.update(bookingRef, {
@@ -299,20 +270,8 @@ export async function createWalkInBooking(data: WalkInBookingData): Promise<stri
   const newDocRef = doc(collection(db, "bookings"));
 
   await runTransaction(db, async (tx) => {
-    const q = query(
-      collection(db, "bookings"),
-      where("businessSlug", "==", data.businessSlug),
-      where("facilityId", "==", data.facilityId),
-      where("date", "==", data.date),
-      where("status", "==", "confirmed")
-    );
-    const snap = await getDocs(q);
-
-    const takenHours = new Set<number>();
-    snap.docs.forEach((d) => {
-      (d.data().hours as number[]).forEach((h) => takenHours.add(h));
-    });
-
+    const existing = await getBookingsForDate(data.businessSlug, data.facilityId, data.date);
+    const takenHours = new Set<number>(existing.flatMap((b) => b.hours));
     if (data.hours.some((h) => takenHours.has(h))) throw new SlotUnavailableError();
 
     tx.set(newDocRef, {

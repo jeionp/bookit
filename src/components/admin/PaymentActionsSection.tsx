@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { Booking, BookingStatus, PaymentStatusV2 } from "@/lib/firebase/bookings";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import type { User } from "firebase/auth";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function PaymentActionsSection({ booking, user, localPaymentStatus, onStatusChange }: Props) {
+  const authedFetch = useAuthedFetch();
   const [paymentActionLoading, setPaymentActionLoading] = useState(false);
   const [paymentActionError, setPaymentActionError] = useState<string | null>(null);
   const [simulateLoading, setSimulateLoading] = useState(false);
@@ -23,10 +25,8 @@ export default function PaymentActionsSection({ booking, user, localPaymentStatu
     setPaymentActionLoading(true);
     setPaymentActionError(null);
     try {
-      const idToken = await user.getIdToken();
-      const res = await fetch(`/api/bookings/${booking.id}/payment-status`, {
+      const res = await authedFetch(`/api/bookings/${booking.id}/payment-status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({ action }),
       });
       if (!res.ok) {

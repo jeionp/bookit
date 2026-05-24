@@ -8,15 +8,7 @@
  */
 
 import { describe, test, expect } from 'vitest'
-
-// ─── Mirror the BUSINESS_TYPES constant from the component ────────────────────
-// Keep this in sync if the component changes.
-
-const BUSINESS_TYPES = [
-  { value: 'court', label: 'Sports Court', available: true },
-  { value: 'appointment', label: 'Appointment-based', available: false },
-  { value: 'room', label: 'Room / Space', available: false },
-] as const
+import { BUSINESS_TYPES } from './Step1BusinessInfo'
 
 // ─── canProceed logic ─────────────────────────────────────────────────────────
 // Mirrors the canProceed calculation in Step1BusinessInfo.
