@@ -132,7 +132,7 @@ function RevenueSection({ business }: { business: Business }) {
         setLoading(false);
       }
     })();
-  }, [user, business.slug, from, to, refreshKey]);
+  }, [user, business.slug, from, to, refreshKey, authedFetch]);
 
   const rows = data
     ? Object.entries(data.totals).filter(([, v]) => v.count > 0)
@@ -261,7 +261,7 @@ function PaymentAuditSection({ business }: { business: Business }) {
         setLoading(false);
       }
     })();
-  }, [user, business.slug, statusFilter]);
+  }, [user, business.slug, statusFilter, authedFetch]);
 
   function formatHours(hours: number[]): string {
     if (!hours.length) return "—";
@@ -390,7 +390,7 @@ function CreditLedgerSection({ business }: { business: Business }) {
         setLoading(false);
       }
     })();
-  }, [user, business.slug]);
+  }, [user, business.slug, authedFetch]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5">

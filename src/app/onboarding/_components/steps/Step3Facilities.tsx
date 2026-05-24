@@ -6,7 +6,7 @@ import { v4 as uuid } from "uuid";
 import ImageUpload from "@/components/shared/ImageUpload";
 import { Facility } from "@/lib/types";
 import { WizardDraft } from "../OnboardingWizard";
-import { DAYS, defaultOperatingHours } from "@/lib/slots";
+import { defaultOperatingHours } from "@/lib/slots";
 
 const COMMON_AMENITIES = [
   "Parking", "Restrooms", "Showers", "Locker rooms",
