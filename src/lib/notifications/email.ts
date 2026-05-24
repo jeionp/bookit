@@ -813,6 +813,13 @@ export async function sendPaymentRejected(data: PaymentRejectedData): Promise<vo
   }
 }
 
+export function sendConfirmationEmails(data: BookingConfirmationData, logContext: string): void {
+  Promise.all([
+    sendBookingConfirmation(data),
+    sendAdminBookingNotification(data),
+  ]).catch((err) => console.error(`[${logContext}] confirmation email error:`, err));
+}
+
 export async function sendBookingConfirmation(data: BookingConfirmationData): Promise<void> {
   const client = getResend();
   if (!client) {

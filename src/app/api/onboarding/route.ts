@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser } from "@/lib/api/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { isValidSlug } from "@/lib/slugify";
 
@@ -46,19 +47,9 @@ function validateFacilities(facilities: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const body = await req.json();
   const {

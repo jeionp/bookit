@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser } from "@/lib/api/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const idToken = authHeader.replace("Bearer ", "");
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const adminDoc = await adminDb.collection("admins").doc(uid).get();
   const slugs: string[] = adminDoc.data()?.slugs ?? [];

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Business } from "@/lib/types";
 import { Booking, getBookingsInRange } from "@/lib/firebase/bookings";
+import { formatHour } from "@/lib/slots";
 
 type Period = "today" | "week" | "month" | "ytd";
 
@@ -32,13 +33,6 @@ function getRangeDates(period: Period): { start: string; end: string } {
     return { start: toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)), end };
   }
   return { start: toDateStr(new Date(today.getFullYear(), 0, 1)), end };
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
 }
 
 function computeStats(bookings: Booking[], business: Business) {

@@ -5,23 +5,7 @@ import { CalendarDays, Clock } from "lucide-react";
 import { Booking, getUserBookings } from "@/lib/firebase/bookings";
 import { useAuth } from "@/context/AuthContext";
 import CancelBookingModal from "@/components/booking/CancelBookingModal";
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
-}
-
-function formatDate(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { formatHour, formatDate } from "@/lib/slots";
 
 function isBookingPast(booking: Booking): boolean {
   const now = new Date();

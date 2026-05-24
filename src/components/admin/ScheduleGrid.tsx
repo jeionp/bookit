@@ -2,24 +2,11 @@
 
 import { Business } from "@/lib/types";
 import { Booking } from "@/lib/firebase/bookings";
+import { parseHour, formatHour } from "@/lib/slots";
 
 const SLOT_H = 64;
 const COURT_W = 140;
 const TIME_W = 60;
-
-function parseHour(timeStr: string): number {
-  const [time, period] = timeStr.split(" ");
-  const h = parseInt(time.split(":")[0], 10);
-  if (period === "AM") return h === 12 ? 0 : h;
-  return h === 12 ? 12 : h + 12;
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
-}
 
 interface Props {
   business: Business;

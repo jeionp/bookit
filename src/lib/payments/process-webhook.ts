@@ -1,9 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin-app";
-import {
-  sendBookingConfirmation,
-  sendAdminBookingNotification,
-} from "@/lib/notifications/email";
+import { sendConfirmationEmails } from "@/lib/notifications/email";
 import { deductSaasCredit } from "./ledger";
 import type { WebhookEvent } from "./gateway";
 
@@ -68,10 +65,7 @@ export async function processWebhookEvent(event: WebhookEvent): Promise<WebhookR
       currency: data.currency as string,
       ...(data.creditApplied != null && { creditApplied: data.creditApplied as number }),
     };
-    Promise.all([
-      sendBookingConfirmation(notificationData),
-      sendAdminBookingNotification(notificationData),
-    ]).catch((err) => console.error("[process-webhook] confirmation email error:", err));
+    sendConfirmationEmails(notificationData, "process-webhook");
 
     return { ok: true };
   }

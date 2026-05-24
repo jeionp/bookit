@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireAdminOf } from "@/lib/api/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,27 +10,8 @@ export async function PATCH(
 ) {
   const { slug } = await params;
 
-  // Auth check
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Admin slug check
-  const adminDoc = await adminDb.collection("admins").doc(uid).get();
-  const slugs: string[] = adminDoc.exists ? (adminDoc.data()?.slugs ?? []) : [];
-  if (!slugs.includes(slug)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const uidOrRes = await requireAdminOf(req, slug);
+  if (uidOrRes instanceof NextResponse) return uidOrRes;
 
   // Only allow editable business fields. Excludes slug (immutable identifier),
   // type (structural — changing would break routing), and rating/reviewCount

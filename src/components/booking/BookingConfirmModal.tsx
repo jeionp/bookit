@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuth } from "@/context/AuthContext";
 import { getCreditsByBusiness, computeBalance } from "@/lib/firebase/credits";
 import { storage } from "@/lib/firebase/client";
+import { formatHour } from "@/lib/slots";
 
 interface BookingSelection {
   facilityId: string;
@@ -32,13 +33,6 @@ interface BookingConfirmModalProps {
   acceptsCash?: boolean;
   acceptsGateway?: boolean;
   staticQrUrl?: string | null;
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
 }
 
 type CheckoutState = "confirmed" | "PAY_AT_VENUE" | "P2P_AI" | "P2P_upload" | "P2P_submitted" | "GATEWAY_SPLIT" | null;

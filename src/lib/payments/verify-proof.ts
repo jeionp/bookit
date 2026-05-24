@@ -1,11 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin-app";
-import {
-  sendBookingConfirmation,
-  sendAdminBookingNotification,
-  sendPaymentRejected,
-} from "@/lib/notifications/email";
+import { sendConfirmationEmails, sendPaymentRejected } from "@/lib/notifications/email";
 import { deductSaasCredit } from "./ledger";
 
 const ALLOWED_PROOF_HOSTNAMES = new Set([
@@ -123,10 +119,7 @@ export async function verifyPaymentProof(bookingId: string): Promise<void> {
       ...(booking.creditApplied != null && { creditApplied: booking.creditApplied as number }),
     };
 
-    Promise.all([
-      sendBookingConfirmation(notificationData),
-      sendAdminBookingNotification(notificationData),
-    ]).catch((err) => console.error("[verify-proof] confirmation email error:", err));
+    sendConfirmationEmails(notificationData, "verify-proof");
   } else {
     await bookingRef.update({
       payment_status_v2: "rejected",

@@ -9,20 +9,7 @@ import {
   lookupCustomerByEmail,
   SlotUnavailableError,
 } from "@/lib/firebase/bookings";
-
-function parseHour(timeStr: string): number {
-  const [time, period] = timeStr.split(" ");
-  const h = parseInt(time.split(":")[0], 10);
-  if (period === "AM") return h === 12 ? 0 : h;
-  return h === 12 ? 12 : h + 12;
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
-}
+import { parseHour, formatHour } from "@/lib/slots";
 
 function getOperatingHours(business: Business, dateStr: string): number[] {
   if (!dateStr) return [];

@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase/admin-app";
+import { adminDb } from "@/lib/firebase/admin-app";
+import { requireUser, isAdminOf } from "@/lib/api/auth";
+import { isYmdDate } from "@/lib/api/validation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!idToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  let uid: string;
-  try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
-    uid = decoded.uid;
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const tokenOrRes = await requireUser(req);
+  if (tokenOrRes instanceof NextResponse) return tokenOrRes;
+  const uid = tokenOrRes.uid;
 
   const { searchParams } = new URL(req.url);
   const slug = searchParams.get("slug");
@@ -25,18 +19,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "slug, from, and to are required" }, { status: 400 });
   }
 
-  // Validate date format
-  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRe.test(from) || !dateRe.test(to)) {
+  if (!isYmdDate(from) || !isYmdDate(to)) {
     return NextResponse.json({ error: "from and to must be YYYY-MM-DD" }, { status: 400 });
   }
   if (from > to) {
     return NextResponse.json({ error: "from must not be after to" }, { status: 400 });
   }
 
-  const adminDoc = await adminDb.collection("admins").doc(uid).get();
-  const slugs: string[] = adminDoc.exists ? (adminDoc.data()?.slugs ?? []) : [];
-  if (!slugs.includes(slug)) {
+  if (!(await isAdminOf(uid, slug))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
