@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject, MutableRefObject } from "react";
+import { RefObject } from "react";
 import { Facility } from "@/lib/types";
 import { formatHour, groupByPeriod, SlotState } from "@/lib/slots";
 import { SlotGridSkeleton } from "./SlotGridSkeleton";
@@ -13,8 +13,7 @@ interface SlotGridProps {
   emptyMessage?: string;
   slotsRef: RefObject<HTMLDivElement | null>;
   slotState: (hour: number) => SlotState;
-  onSlotMouseDown: (hour: number) => void;
-  lastTouchTime: MutableRefObject<number>;
+  onSlotClick: (hour: number) => void;
 }
 
 export default function SlotGrid({
@@ -25,11 +24,10 @@ export default function SlotGrid({
   emptyMessage = "Closed on this day",
   slotsRef,
   slotState,
-  onSlotMouseDown,
-  lastTouchTime,
+  onSlotClick,
 }: SlotGridProps) {
   return (
-    <div ref={slotsRef} className="space-y-5 select-none" data-testid={loadingSlots ? "slot-grid-loading" : "slot-grid-ready"}>
+    <div ref={slotsRef} className="space-y-5" data-testid={loadingSlots ? "slot-grid-loading" : "slot-grid-ready"}>
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-800">{facility.name}</span>
@@ -77,9 +75,9 @@ export default function SlotGrid({
                 if (state === "active") {
                   cls += "text-white border-transparent cursor-pointer";
                   style = { backgroundColor: accentColor, borderColor: accentColor };
-                } else if (state === "preview") {
-                  cls += "text-white border-transparent cursor-pointer";
-                  style = { backgroundColor: accentColor, opacity: 0.6 };
+                } else if (state === "pending-start") {
+                  cls += "text-white border-transparent cursor-pointer animate-pulse";
+                  style = { backgroundColor: accentColor };
                 } else if (state === "available") {
                   cls += "border-transparent cursor-pointer hover:brightness-95";
                   style = { backgroundColor: `${accentColor}20`, color: accentColor };
@@ -96,18 +94,9 @@ export default function SlotGrid({
                     key={hour}
                     data-slot-hour={hour}
                     disabled={unavailable}
-                    onMouseDown={() => {
-                      if (Date.now() - lastTouchTime.current < 500) return;
-                      onSlotMouseDown(hour);
-                    }}
-                    onTouchStart={(e) => {
-                      lastTouchTime.current = Date.now();
-                      e.preventDefault();
-                      onSlotMouseDown(hour);
-                    }}
+                    onClick={() => onSlotClick(hour)}
                     className={cls}
                     style={style}
-                    draggable={false}
                   >
                     {state === "booked" ? "Booked" : state === "pending" ? "Pending" : formatHour(hour)}
                   </button>

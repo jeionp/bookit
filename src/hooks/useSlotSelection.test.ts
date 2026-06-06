@@ -4,10 +4,10 @@
  * Because the hook uses React state and DOM events, we test the pure
  * functions extracted from it rather than rendering the full hook:
  *
- *   slotState(hour) — returns "booked" | "pending" | "available" (preview/active
- *                     depend on drag/selection state we don't need to exercise here)
+ *   slotState(hour) — returns "booked" | "pending" | "pending-start" |
+ *                     "active" | "available" based on current state
  *   blockedHours    — combined bookedHours + pendingHours (used by getValidRange)
- *   handleSlotMouseDown guard — skips both booked and pending hours
+ *   handleSlotClick guard — skips both booked and pending hours
  *
  * The underlying getValidRange function is already tested in slots.ts.
  * Here we focus on the slotState logic and pending-hours integration.
@@ -16,16 +16,19 @@
 import { describe, test, expect } from 'vitest'
 
 // ─── Mirror slotState logic from the hook ─────────────────────────────────────
-// The hook's slotState function checks bookedHours, pendingHours, drag preview,
-// and active selection — in that exact priority order.
+// Priority: booked → pending → pending-start → active → available
 
 function slotState(
   hour: number,
   bookedHours: number[],
   pendingHours: number[],
-): 'booked' | 'pending' | 'available' {
+  pendingStart: number | null = null,
+  activeHours: number[] = [],
+): 'booked' | 'pending' | 'pending-start' | 'active' | 'available' {
   if (bookedHours.includes(hour)) return 'booked'
   if (pendingHours.includes(hour)) return 'pending'
+  if (pendingStart === hour) return 'pending-start'
+  if (activeHours.includes(hour)) return 'active'
   return 'available'
 }
 
@@ -35,9 +38,9 @@ function makeBlockedHours(bookedHours: number[], pendingHours: number[]): number
   return [...bookedHours, ...pendingHours]
 }
 
-// ─── Mirror handleSlotMouseDown guard ─────────────────────────────────────────
+// ─── Mirror handleSlotClick guard ─────────────────────────────────────────────
 
-function canStartDrag(hour: number, bookedHours: number[], pendingHours: number[]): boolean {
+function canClickSlot(hour: number, bookedHours: number[], pendingHours: number[]): boolean {
   return !bookedHours.includes(hour) && !pendingHours.includes(hour)
 }
 
@@ -71,14 +74,46 @@ describe('useSlotSelection — slotState for pending hours', () => {
   })
 })
 
+// ─── slotState — pending-start ────────────────────────────────────────────────
+
+describe('useSlotSelection — slotState for pending-start (first tap awaiting second)', () => {
+  test('returns "pending-start" for the hour that was first-tapped', () => {
+    expect(slotState(10, [], [], 10)).toBe('pending-start')
+  })
+
+  test('returns "available" for other hours when pendingStart is set', () => {
+    expect(slotState(11, [], [], 10)).toBe('available')
+  })
+
+  test('booked beats pending-start when hour is in both', () => {
+    expect(slotState(10, [10], [], 10)).toBe('booked')
+  })
+
+  test('pending beats pending-start when hour is in pendingHours', () => {
+    expect(slotState(10, [], [10], 10)).toBe('pending')
+  })
+})
+
+// ─── slotState — active selection ────────────────────────────────────────────
+
+describe('useSlotSelection — slotState for active selection', () => {
+  test('returns "active" for hours in the committed selection', () => {
+    expect(slotState(9, [], [], null, [8, 9, 10])).toBe('active')
+  })
+
+  test('returns "available" for hours not in the active selection', () => {
+    expect(slotState(11, [], [], null, [8, 9, 10])).toBe('available')
+  })
+})
+
 // ─── slotState — available hours ─────────────────────────────────────────────
 
 describe('useSlotSelection — slotState for available hours', () => {
-  test('returns "available" for an hour not in either array', () => {
+  test('returns "available" for an hour not in any array', () => {
     expect(slotState(10, [8, 9], [11, 12])).toBe('available')
   })
 
-  test('returns "available" when both arrays are empty (default)', () => {
+  test('returns "available" when all arrays are empty (default)', () => {
     expect(slotState(7, [], [])).toBe('available')
   })
 })
@@ -87,12 +122,10 @@ describe('useSlotSelection — slotState for available hours', () => {
 
 describe('useSlotSelection — slotState priority (booked beats pending)', () => {
   test('when hour is in both arrays, "booked" wins over "pending"', () => {
-    // An hour that somehow appears in both lists (defensive test)
     expect(slotState(10, [10], [10])).toBe('booked')
   })
 
   test('bookedHours checked before pendingHours (order matters)', () => {
-    // booked=[9], pending=[9,10] — hour 9 → booked; hour 10 → pending
     expect(slotState(9,  [9], [9, 10])).toBe('booked')
     expect(slotState(10, [9], [9, 10])).toBe('pending')
   })
@@ -102,8 +135,7 @@ describe('useSlotSelection — slotState priority (booked beats pending)', () =>
 
 describe('useSlotSelection — default pendingHours = [] (no regression)', () => {
   test('available hour stays available when no pendingHours supplied', () => {
-    // Simulates callers that do not pass pendingHours at all (default = [])
-    expect(slotState(8, [9, 10], /* pendingHours defaults to */ [])).toBe('available')
+    expect(slotState(8, [9, 10], [])).toBe('available')
   })
 
   test('booked hour still marked booked even without pendingHours', () => {
@@ -130,34 +162,32 @@ describe('useSlotSelection — blockedHours combines bookedHours and pendingHour
     expect(makeBlockedHours([], [])).toEqual([])
   })
 
-  test('pending hours extend the blocked set (drag stops at pending slots)', () => {
+  test('pending hours extend the blocked set (range stops at pending slots)', () => {
     const blocked = makeBlockedHours([8], [10])
-    // A drag from 7 to 11 should stop at 10 (first blocked)
-    // We only verify that 10 is in blockedHours
     expect(blocked).toContain(10)
   })
 })
 
-// ─── handleSlotMouseDown guard ────────────────────────────────────────────────
+// ─── handleSlotClick guard ────────────────────────────────────────────────────
 
-describe('useSlotSelection — handleSlotMouseDown guards against pending hours', () => {
-  test('returns true (drag allowed) for an available hour', () => {
-    expect(canStartDrag(7, [8, 9], [10, 11])).toBe(true)
+describe('useSlotSelection — handleSlotClick guards against booked and pending hours', () => {
+  test('returns true (click allowed) for an available hour', () => {
+    expect(canClickSlot(7, [8, 9], [10, 11])).toBe(true)
   })
 
-  test('returns false (drag blocked) for a booked hour', () => {
-    expect(canStartDrag(8, [8, 9], [])).toBe(false)
+  test('returns false (click blocked) for a booked hour', () => {
+    expect(canClickSlot(8, [8, 9], [])).toBe(false)
   })
 
-  test('returns false (drag blocked) for a pending hour', () => {
-    expect(canStartDrag(10, [], [10, 11])).toBe(false)
+  test('returns false (click blocked) for a pending hour', () => {
+    expect(canClickSlot(10, [], [10, 11])).toBe(false)
   })
 
   test('returns false when hour appears in both booked and pending', () => {
-    expect(canStartDrag(9, [9], [9])).toBe(false)
+    expect(canClickSlot(9, [9], [9])).toBe(false)
   })
 
   test('returns true when both arrays are empty (open slot)', () => {
-    expect(canStartDrag(14, [], [])).toBe(true)
+    expect(canClickSlot(14, [], [])).toBe(true)
   })
 })
