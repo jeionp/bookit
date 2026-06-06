@@ -60,8 +60,19 @@ jobs:
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-bookit"
           NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "demo-bookit.appspot.com"
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install Playwright system deps
+        run: npx playwright install-deps chromium
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
 
       - name: Run Playwright E2E tests
         run: npm run test:e2e
