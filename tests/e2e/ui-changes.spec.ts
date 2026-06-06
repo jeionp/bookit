@@ -657,16 +657,10 @@ test.describe('HomeTab — desktop court grid (≥1280px)', () => {
 
   test('scroll buttons (ChevronLeft/Right) are NOT visible at desktop width', async ({ page }) => {
     await page.goto(BUSINESS)
-    // The scroll buttons wrapper has xl:hidden class
-    const scrollButtonWrapper = page.locator('.xl\\:hidden').filter({
-      has: page.locator('button').first(),
-    }).first()
-    // The wrapper carrying the chevron buttons is in the DOM but hidden at xl
-    // Verify neither chevron button is visible
-    const leftBtn = page.locator('button').filter({ has: page.locator('svg.lucide-chevron-left') })
-    const rightBtn = page.locator('button').filter({ has: page.locator('svg.lucide-chevron-right') })
-    await expect(leftBtn).not.toBeVisible()
-    await expect(rightBtn).not.toBeVisible()
+    // The carousel scroll button wrapper carries xl:hidden — target it directly
+    // to avoid matching the date-picker chevron buttons elsewhere on the page
+    const scrollBtnWrapper = page.locator('div.flex.gap-1.xl\\:hidden').first()
+    await expect(scrollBtnWrapper).not.toBeVisible()
   })
 
   test('gradient fade masks are NOT visible at desktop width', async ({ page }) => {
