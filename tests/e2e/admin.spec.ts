@@ -1348,8 +1348,8 @@ test.describe('Admin settings tab', () => {
 
     // Switch to Court 2 (uses business hours) — must show available slots
     await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 2' })
-    await page.getByText('Loading availability…').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
-    await expect(page.getByText('Loading availability…')).not.toBeVisible({ timeout: 10_000 })
+    await page.getByTestId('slot-grid-loading').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
+    await expect(page.getByTestId('slot-grid-ready')).toBeVisible({ timeout: 10_000 })
 
     await expect(page.getByText('Closed on this day')).not.toBeAttached()
     await expect(page.getByRole('button', { name: '6 AM' })).toBeVisible()

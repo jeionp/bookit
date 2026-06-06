@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 // In emulator/test environments the vars are absent, so rate limiting is skipped.
 let ratelimit: Ratelimit | null = null;
 function getRatelimit(): Ratelimit | null {
+  if (process.env.FIRESTORE_EMULATOR_HOST) return null;
   if (ratelimit) return ratelimit;
   const url   = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
