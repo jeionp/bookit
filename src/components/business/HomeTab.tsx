@@ -89,14 +89,17 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
 
   function selectFacility(id: string) {
     setSelectedFacilityId(id);
-    availabilityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Only scroll on mobile — desktop shows courts and availability side-by-side
+    if (window.innerWidth < 1280) {
+      availabilityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   return (
-    <div className="space-y-8 pb-6">
+    <div className="pb-6">
 
-      {/* Description — mobile only (desktop gets sidebar) */}
-      <div className="xl:hidden">
+      {/* Description — mobile only, truncated (desktop gets full text in sidebar) */}
+      <div className="xl:hidden mb-8">
         <p className={`text-sm text-gray-600 leading-relaxed ${!descExpanded ? "line-clamp-2" : ""}`}>
           {business.description}
         </p>
@@ -111,107 +114,121 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
         )}
       </div>
 
-      {/* Courts / facilities */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-900">{facilityLabel}</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 font-medium">
-              {business.facilities.length} available
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={() => scroll("left")}
-                disabled={!canScrollLeft}
-                className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-30 disabled:cursor-default"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                onClick={() => scroll("right")}
-                disabled={!canScrollRight}
-                className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-30 disabled:cursor-default"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="relative">
-          <div ref={carouselRef} className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-            {business.facilities.map((facility) => {
-              const active = selectedFacilityId === facility.id;
-              return (
-                <div
-                  key={facility.id}
-                  onClick={() => selectFacility(facility.id)}
-                  className="shrink-0 w-52 rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer flex flex-col"
-                  style={{ borderColor: active ? business.accentColor : "#f3f4f6" }}
-                >
-                  <div className="relative h-32 bg-gray-100">
-                    <Image
-                      src={facility.image || "/placeholder-court.svg"}
-                      alt={facility.name}
-                      fill
-                      className="object-cover"
-                      sizes="208px"
-                    />
-                    {(() => {
-                      const badge = occupancyBadge(facility.id);
-                      return badge ? (
-                        <span
-                          className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                          style={{ backgroundColor: badge.bg, color: badge.text }}
-                        >
-                          {badge.label}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                  <div className="p-3 flex flex-col flex-1">
-                    <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
-                    <span className="text-xs font-semibold mt-0.5" style={{ color: business.accentColor }}>
-                      {facility.primePricePerHour ? "from " : ""}
-                      ₱{facility.pricePerHour.toLocaleString()}
-                      <span className="font-normal text-gray-400">/hr</span>
-                    </span>
-                    <div className="mt-auto min-h-3" />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); selectFacility(facility.id); }}
-                      className="w-full py-2 rounded-xl text-xs font-bold transition-colors"
-                      style={
-                        active
-                          ? { backgroundColor: business.accentColor, color: "white" }
-                          : { backgroundColor: `${business.accentColor}15`, color: business.accentColor }
-                      }
-                    >
-                      {active ? "Selected ✓" : "Check availability →"}
-                    </button>
-                  </div>
+      {/* Desktop: 2-col split [Courts 280px | Availability 1fr]. Mobile: stacked. */}
+      <div className="space-y-8 xl:space-y-0 xl:grid xl:grid-cols-[280px_1fr] xl:gap-8 xl:items-start">
+
+        {/* Courts — sticky on desktop */}
+        <div className="xl:sticky xl:top-[72px] xl:self-start">
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">{facilityLabel}</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 font-medium">
+                  {business.facilities.length} available
+                </span>
+                {/* Scroll buttons — mobile carousel only */}
+                <div className="flex gap-1 xl:hidden">
+                  <button
+                    onClick={() => scroll("left")}
+                    disabled={!canScrollLeft}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-30 disabled:cursor-default"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    onClick={() => scroll("right")}
+                    disabled={!canScrollRight}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-30 disabled:cursor-default"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
-              );
-            })}
-            <div className="shrink-0 w-2" />
-          </div>
-          {canScrollLeft && (
-            <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white to-transparent" />
-          )}
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
+              </div>
+            </div>
+
+            <div className="relative">
+              {/* Mobile: horizontal carousel. Desktop: 1-column vertical list. */}
+              <div
+                ref={carouselRef}
+                className="flex gap-3 overflow-x-auto scrollbar-hide pb-1
+                           xl:grid xl:grid-cols-1 xl:overflow-visible xl:gap-3 xl:pb-0"
+              >
+                {business.facilities.map((facility) => {
+                  const active = selectedFacilityId === facility.id;
+                  return (
+                    <div
+                      key={facility.id}
+                      onClick={() => selectFacility(facility.id)}
+                      className="shrink-0 w-52 xl:w-auto rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer flex flex-col"
+                      style={{ borderColor: active ? business.accentColor : "#f3f4f6" }}
+                    >
+                      <div className="relative h-32 bg-gray-100">
+                        <Image
+                          src={facility.image || "/placeholder-court.svg"}
+                          alt={facility.name}
+                          fill
+                          className="object-cover"
+                          sizes="(min-width: 1280px) 280px, 208px"
+                        />
+                        {(() => {
+                          const badge = occupancyBadge(facility.id);
+                          return badge ? (
+                            <span
+                              className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                              style={{ backgroundColor: badge.bg, color: badge.text }}
+                            >
+                              {badge.label}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+                      <div className="p-3 flex flex-col flex-1">
+                        <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
+                        <span className="text-xs font-semibold mt-0.5" style={{ color: business.accentColor }}>
+                          {facility.primePricePerHour ? "from " : ""}
+                          ₱{facility.pricePerHour.toLocaleString()}
+                          <span className="font-normal text-gray-400">/hr</span>
+                        </span>
+                        <div className="mt-auto min-h-3" />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); selectFacility(facility.id); }}
+                          className="w-full py-2 rounded-xl text-xs font-bold transition-colors"
+                          style={
+                            active
+                              ? { backgroundColor: business.accentColor, color: "white" }
+                              : { backgroundColor: `${business.accentColor}15`, color: business.accentColor }
+                          }
+                        >
+                          {active ? "Selected ✓" : "Check availability →"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Trailing spacer — mobile only so last card isn't flush against edge */}
+                <div className="shrink-0 w-2 xl:hidden" />
+              </div>
+
+              {/* Gradient scroll indicators — mobile only */}
+              {canScrollLeft && (
+                <div className="xl:hidden pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white to-transparent" />
+              )}
+              <div className="xl:hidden pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
+            </div>
+          </section>
         </div>
-      </section>
 
-      <div className="border-t border-gray-100" />
+        {/* Availability — sticky on desktop, scrolls into view on mobile */}
+        <div ref={availabilityRef} className="scroll-mt-20 xl:sticky xl:top-[72px] xl:self-start">
+          <AvailabilitySection
+            business={business}
+            onBook={onBook}
+            selectedFacilityId={selectedFacilityId}
+            onFacilityChange={setSelectedFacilityId}
+          />
+        </div>
 
-      {/* Availability */}
-      <div ref={availabilityRef} className="scroll-mt-20">
-        <AvailabilitySection
-          business={business}
-          onBook={onBook}
-          selectedFacilityId={selectedFacilityId}
-          onFacilityChange={setSelectedFacilityId}
-        />
       </div>
-
     </div>
   );
 }
