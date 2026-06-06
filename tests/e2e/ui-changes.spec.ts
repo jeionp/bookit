@@ -689,21 +689,28 @@ test.describe('HomeTab — desktop court grid (≥1280px)', () => {
     const availabilitySection = page.getByRole('heading', { name: 'Check Availability' })
     await expect(availabilitySection).toBeVisible({ timeout: 8_000 })
 
-    // Record scroll position before clicking
-    const scrollBefore = await page.evaluate(() => window.scrollY)
-
-    // Click the second court card's button (or first if only one exists)
+    // Pre-scroll the court button into view so Playwright's own click() auto-scroll
+    // doesn't contaminate the measurement. Only selectFacility's scrollIntoView should
+    // matter from here on, and at ≥1280px it must be suppressed.
     const courtButtons = page.locator('button', { hasText: /check availability/i })
     const count = await courtButtons.count()
+    if (count > 0) {
+      await courtButtons.first().scrollIntoViewIfNeeded()
+      await page.waitForTimeout(300) // let scroll settle
+    }
+
+    // Record scroll position AFTER pre-scroll, BEFORE the selectFacility click
+    const scrollBefore = await page.evaluate(() => window.scrollY)
+
     if (count > 0) {
       await courtButtons.first().click()
     }
 
-    // Small delay to allow any scroll animation to start
-    await page.waitForTimeout(300)
+    // Wait long enough for any smooth-scroll animation to complete
+    await page.waitForTimeout(600)
     const scrollAfter = await page.evaluate(() => window.scrollY)
 
-    // Scroll should not have moved significantly downward
+    // selectFacility must NOT have scrolled to the availability section at desktop
     expect(scrollAfter - scrollBefore).toBeLessThan(50)
 
     // Availability heading must still be visible (not scrolled out of view)
