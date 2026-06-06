@@ -732,9 +732,11 @@ test.describe('HomeTab — mobile carousel (<1280px)', () => {
 
   test('scroll buttons are present in the DOM on mobile', async ({ page }) => {
     await page.goto(BUSINESS)
-    // Buttons exist (may be disabled when at start of list) but must be in the DOM
-    const leftBtn = page.locator('button').filter({ has: page.locator('svg.lucide-chevron-left') })
-    const rightBtn = page.locator('button').filter({ has: page.locator('svg.lucide-chevron-right') })
+    // Buttons exist (may be disabled when at start of list) but must be in the DOM.
+    // Scope to w-7 h-7 (the scroll button size) to avoid matching the date-selector
+    // button which also permanently contains a ChevronRight as a toggle indicator.
+    const leftBtn = page.locator('button.w-7.h-7').filter({ has: page.locator('svg.lucide-chevron-left') })
+    const rightBtn = page.locator('button.w-7.h-7').filter({ has: page.locator('svg.lucide-chevron-right') })
     await expect(leftBtn).toBeAttached()
     await expect(rightBtn).toBeAttached()
   })
