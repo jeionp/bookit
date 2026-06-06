@@ -641,6 +641,114 @@ test.describe('Account page — sign-out button in header', () => {
   })
 })
 
+// ─── 10. HomeTab — desktop court grid (Change 2) ─────────────────────────────
+
+test.describe('HomeTab — desktop court grid (≥1280px)', () => {
+  test.use({ viewport: { width: 1280, height: 900 } })
+
+  test('court cards are visible at desktop width', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // Court cards have "Check availability →" or "Selected ✓" buttons
+    const courtCards = page.locator('.rounded-2xl').filter({
+      has: page.locator('button', { hasText: /check availability|selected/i }),
+    })
+    await expect(courtCards.first()).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('scroll buttons (ChevronLeft/Right) are NOT visible at desktop width', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // The carousel scroll button wrapper carries xl:hidden — target it directly
+    // to avoid matching the date-picker chevron buttons elsewhere on the page
+    const scrollBtnWrapper = page.locator('div.flex.gap-1.xl\\:hidden').first()
+    await expect(scrollBtnWrapper).not.toBeVisible()
+  })
+
+  test('gradient fade masks are NOT visible at desktop width', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // Gradient masks have xl:hidden class and use bg-gradient-to-r / bg-gradient-to-l
+    const gradients = page.locator('.xl\\:hidden.pointer-events-none.absolute')
+    // They are in the DOM (or not rendered) but must not be visible
+    const count = await gradients.count()
+    for (let i = 0; i < count; i++) {
+      await expect(gradients.nth(i)).not.toBeVisible()
+    }
+  })
+
+  test('court cards are stacked vertically (grid, not horizontal scroll) at desktop', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // At xl+, the carousel container switches to xl:grid xl:grid-cols-1
+    // Verify by checking that the carousel container has the xl:grid class in its class string
+    const carouselContainer = page.locator('.xl\\:grid.xl\\:grid-cols-1')
+    await expect(carouselContainer).toBeAttached()
+  })
+
+  test('selecting a court at desktop does NOT scroll page (availability stays visible)', async ({ page }) => {
+    await page.goto(BUSINESS)
+
+    // Wait for the availability section to be visible
+    const availabilitySection = page.getByRole('heading', { name: 'Check Availability' })
+    await expect(availabilitySection).toBeVisible({ timeout: 8_000 })
+
+    // Pre-scroll the court button into view so Playwright's own click() auto-scroll
+    // doesn't contaminate the measurement. Only selectFacility's scrollIntoView should
+    // matter from here on, and at ≥1280px it must be suppressed.
+    const courtButtons = page.locator('button', { hasText: /check availability/i })
+    const count = await courtButtons.count()
+    if (count > 0) {
+      await courtButtons.first().scrollIntoViewIfNeeded()
+      await page.waitForTimeout(300) // let scroll settle
+    }
+
+    // Record scroll position AFTER pre-scroll, BEFORE the selectFacility click
+    const scrollBefore = await page.evaluate(() => window.scrollY)
+
+    if (count > 0) {
+      await courtButtons.first().click()
+    }
+
+    // Wait long enough for any smooth-scroll animation to complete
+    await page.waitForTimeout(600)
+    const scrollAfter = await page.evaluate(() => window.scrollY)
+
+    // selectFacility must NOT have scrolled to the availability section at desktop
+    expect(scrollAfter - scrollBefore).toBeLessThan(50)
+
+    // Availability heading must still be visible (not scrolled out of view)
+    await expect(availabilitySection).toBeVisible()
+  })
+})
+
+// ─── 11. HomeTab — mobile carousel unchanged (<1280px) ───────────────────────
+
+test.describe('HomeTab — mobile carousel (<1280px)', () => {
+  test.use({ viewport: { width: 375, height: 812 } })
+
+  test('court cards are in a horizontal flex scroll container on mobile', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // The carousel container is a flex overflow-x-auto container on mobile
+    const carouselContainer = page.locator('.overflow-x-auto.scrollbar-hide')
+    await expect(carouselContainer).toBeAttached()
+  })
+
+  test('scroll buttons are present in the DOM on mobile', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // Buttons exist (may be disabled when at start of list) but must be in the DOM.
+    // Scope to w-7 h-7 (the scroll button size) to avoid matching the date-selector
+    // button which also permanently contains a ChevronRight as a toggle indicator.
+    const leftBtn = page.locator('button.w-7.h-7').filter({ has: page.locator('svg.lucide-chevron-left') })
+    const rightBtn = page.locator('button.w-7.h-7').filter({ has: page.locator('svg.lucide-chevron-right') })
+    await expect(leftBtn).toBeAttached()
+    await expect(rightBtn).toBeAttached()
+  })
+
+  test('court cards have fixed width (shrink-0 w-52) on mobile', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // Each facility card wrapper is shrink-0 w-52 on mobile
+    const cards = page.locator('.shrink-0.w-52')
+    await expect(cards.first()).toBeAttached()
+  })
+})
+
 // ─── 9. Sidebar — About section always visible ────────────────────────────────
 
 test.describe('Sidebar — About section always visible', () => {
