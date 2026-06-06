@@ -45,7 +45,7 @@ jobs:
           CI: "true"
 
       - name: Wait for emulators to be ready
-        run: npx wait-on http://localhost:4000 --timeout 60000
+        run: npx wait-on http://localhost:4000 tcp:localhost:4400 --timeout 60000
 
       - name: Seed businesses into emulator
         run: npm run seed:businesses:emulator
