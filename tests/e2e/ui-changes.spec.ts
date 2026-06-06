@@ -746,51 +746,6 @@ test.describe('HomeTab — mobile carousel (<1280px)', () => {
   })
 })
 
-// ─── 12. HomeTab — description visibility ────────────────────────────────────
-
-test.describe('HomeTab — description visibility', () => {
-  test('description block is NOT visible at desktop width (≥1280px)', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto(BUSINESS)
-
-    // The description container has xl:hidden — it must not be visible at desktop
-    const descriptionBlock = page.locator('.xl\\:hidden').filter({
-      has: page.locator('p', { hasText: /pickleball|paddleup/i }),
-    }).first()
-    await expect(descriptionBlock).not.toBeVisible()
-  })
-
-  test('description block IS visible at mobile width (<1280px)', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto(BUSINESS)
-
-    // The xl:hidden description block must be visible on mobile
-    // The description paragraph is inside the xl:hidden div
-    const descParagraph = page.locator('.xl\\:hidden p').filter({
-      hasText: /pickleball|paddleup/i,
-    }).first()
-    await expect(descParagraph).toBeVisible({ timeout: 8_000 })
-  })
-
-  test('"Read more" button exists on mobile when description is truncated', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto(BUSINESS)
-
-    // The "Read more" button is rendered by default when descExpanded=false
-    const readMoreBtn = page.getByRole('button', { name: /read more/i })
-    await expect(readMoreBtn).toBeVisible({ timeout: 8_000 })
-  })
-
-  test('"Read more" button is NOT present at desktop width', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto(BUSINESS)
-
-    // At desktop the description block is hidden, so "Read more" should not be visible
-    const readMoreBtn = page.getByRole('button', { name: /read more/i })
-    await expect(readMoreBtn).not.toBeVisible()
-  })
-})
-
 // ─── 9. Sidebar — About section always visible ────────────────────────────────
 
 test.describe('Sidebar — About section always visible', () => {
