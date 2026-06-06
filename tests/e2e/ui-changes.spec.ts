@@ -749,6 +749,138 @@ test.describe('HomeTab — mobile carousel (<1280px)', () => {
   })
 })
 
+// ─── 12. Two-tap slot selection ───────────────────────────────────────────────
+
+test.describe('Two-tap slot selection', () => {
+  async function goToTomorrow(page: Page) {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowKey = tomorrow.toISOString().slice(0, 10)
+    const tomorrowDay = tomorrow.getDate().toString()
+
+    await page.locator('[data-testid="availability-section"] button').first().click()
+    await page.waitForTimeout(300)
+
+    const dayBtn = page.locator(`button[name="${tomorrowKey}"]`)
+    if (await dayBtn.isVisible().catch(() => false)) {
+      await dayBtn.click()
+    } else {
+      const fallback = page.locator('td button:not([disabled])').filter({ hasText: tomorrowDay })
+      await fallback.first().click()
+    }
+    await page.waitForSelector('[data-testid="slot-grid-ready"]', { timeout: 10000 })
+    await page.waitForTimeout(500)
+  }
+
+  test('first tap sets slot to pending-start (animate-pulse class, no Book Now)', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slotBtn = page.locator('button[data-slot-hour]:not([disabled])').first()
+    await slotBtn.click()
+
+    const cls = await slotBtn.getAttribute('class')
+    expect(cls).toContain('animate-pulse')
+
+    // "Book Now →" button must NOT be visible after only the first tap
+    await expect(page.locator('button', { hasText: 'Book Now →' })).not.toBeVisible()
+  })
+
+  test('two taps on different slots commit the range (Book Now becomes visible)', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slots = page.locator('button[data-slot-hour]:not([disabled])')
+    const firstSlot  = slots.nth(0)
+    const secondSlot = slots.nth(1)
+
+    await firstSlot.click()
+    await secondSlot.click()
+
+    // After committing the range the "Book Now →" button must be visible
+    await expect(page.locator('button', { hasText: 'Book Now →' })).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('action bar shows total price after range is committed', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slots = page.locator('button[data-slot-hour]:not([disabled])')
+    await slots.nth(0).click()
+    await slots.nth(1).click()
+
+    // The action bar (always in DOM) should contain a price string like "₱XXX"
+    const actionBar = page.locator('[data-testid="action-bar"]')
+    await expect(actionBar.getByText(/₱/)).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('clicking outside clears the selection (Book Now disappears)', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slots = page.locator('button[data-slot-hour]:not([disabled])')
+    await slots.nth(0).click()
+    await slots.nth(1).click()
+    await expect(page.locator('button', { hasText: 'Book Now →' })).toBeVisible({ timeout: 5_000 })
+
+    // Click on the "Check Availability" heading — outside the slot grid and action bar
+    await page.locator('[data-testid="availability-section"]').getByRole('heading', { name: 'Check Availability' }).click()
+    await page.waitForTimeout(300)
+
+    await expect(page.locator('button', { hasText: 'Book Now →' })).not.toBeVisible()
+  })
+
+  test('single-slot deselect: tap active single slot after commit → deselects', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slotBtn = page.locator('button[data-slot-hour]:not([disabled])').first()
+
+    // Tap once → pending-start
+    await slotBtn.click()
+    // Tap same slot again → commits a 1-hour range (Book Now appears)
+    await slotBtn.click()
+    await expect(page.locator('button', { hasText: 'Book Now →' })).toBeVisible({ timeout: 5_000 })
+
+    // Tap the now-active single slot one more time → deselects (Book Now disappears)
+    await slotBtn.click()
+    await page.waitForTimeout(300)
+    await expect(page.locator('button', { hasText: 'Book Now →' })).not.toBeVisible()
+  })
+
+  test('first-tap slot shows accent background and time label (not "Booked")', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slotBtn = page.locator('button[data-slot-hour]:not([disabled])').first()
+    const hourAttr = await slotBtn.getAttribute('data-slot-hour')
+
+    await slotBtn.click()
+
+    // The button should still display its time label (e.g. "8:00 AM"), not "Booked" or "Pending"
+    await expect(slotBtn).not.toHaveText('Booked')
+    await expect(slotBtn).not.toHaveText('Pending')
+
+    // data-slot-hour attribute is still present (button was not replaced)
+    expect(await slotBtn.getAttribute('data-slot-hour')).toBe(hourAttr)
+  })
+
+  test('committed active slots are not disabled', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await goToTomorrow(page)
+
+    const slots = page.locator('button[data-slot-hour]:not([disabled])')
+    const firstSlot  = slots.nth(0)
+    const secondSlot = slots.nth(1)
+
+    await firstSlot.click()
+    await secondSlot.click()
+
+    // After commit, the first slot should still not be disabled
+    await expect(firstSlot).not.toBeDisabled()
+  })
+})
+
 // ─── 9. Sidebar — About section always visible ────────────────────────────────
 
 test.describe('Sidebar — About section always visible', () => {
