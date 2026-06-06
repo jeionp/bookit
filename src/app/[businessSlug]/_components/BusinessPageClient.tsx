@@ -131,28 +131,44 @@ export default function BusinessPageClient({ business }: { business: Business })
 
       {/* Mobile info strip */}
       <div className="xl:hidden bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center gap-3 flex-wrap">
-          {(() => {
-            const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-            const todayHours = business.operatingHours.find((h) => h.day === today);
-            return todayHours && !todayHours.closed ? (
-              <span
-                className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
-                style={{ backgroundColor: `${business.accentColor}15`, color: business.accentColor }}
-              >
-                <Clock size={11} />
-                Open · closes {todayHours.close}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 shrink-0">
-                Closed today
-              </span>
-            );
-          })()}
-          <span className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
-            <MapPin size={11} className="text-gray-400 shrink-0" />
-            <span className="truncate">{business.address}</span>
-          </span>
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
+            {(() => {
+              const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+              const todayHours = business.operatingHours.find((h) => h.day === today);
+              return todayHours && !todayHours.closed ? (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
+                  style={{ backgroundColor: `${business.accentColor}15`, color: business.accentColor }}
+                >
+                  <Clock size={11} />
+                  Open · closes {todayHours.close}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 shrink-0">
+                  Closed today
+                </span>
+              );
+            })()}
+            <span className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
+              <MapPin size={11} className="text-gray-400 shrink-0" />
+              <span className="truncate">{business.address}</span>
+            </span>
+          </div>
+          <button
+            className="shrink-0 px-4 py-2 rounded-full text-xs font-bold text-white"
+            style={{ backgroundColor: business.accentColor }}
+            onClick={() => {
+              setActiveTab("Home");
+              setTimeout(() => {
+                document
+                  .querySelector('[data-testid="availability-section"]')
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 50);
+            }}
+          >
+            Book a slot →
+          </button>
         </div>
       </div>
 

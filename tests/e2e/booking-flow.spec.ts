@@ -16,9 +16,10 @@ const PRIME_RATE   = 600
 // ─── Page helpers ─────────────────────────────────────────────────────────────
 
 async function waitForSlots(page: Page) {
-  // Loading may already be done by the time we check — swallow the timeout if so
-  await page.getByText('Loading availability…').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
-  await expect(page.getByText('Loading availability…')).not.toBeVisible({ timeout: 10_000 })
+  // First try to catch the loading state (up to 2 s) so that if slot-grid-ready is
+  // already visible from a previous date's load, we don't return early with stale data.
+  await page.getByTestId('slot-grid-loading').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
+  await expect(page.getByTestId('slot-grid-ready')).toBeVisible({ timeout: 10_000 })
 }
 
 async function signIn(page: Page, email = TEST_EMAIL, password = TEST_PASSWORD) {

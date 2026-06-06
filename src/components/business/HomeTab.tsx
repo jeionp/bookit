@@ -16,6 +16,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
   const [selectedFacilityId, setSelectedFacilityId] = useState(
     business.facilities[0]?.id ?? ""
   );
+  const [descExpanded, setDescExpanded] = useState(false);
   const availabilityRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -95,9 +96,20 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
     <div className="space-y-8 pb-6">
 
       {/* Description — mobile only (desktop gets sidebar) */}
-      <p className="xl:hidden text-sm text-gray-600 leading-relaxed">
-        {business.description}
-      </p>
+      <div className="xl:hidden">
+        <p className={`text-sm text-gray-600 leading-relaxed ${!descExpanded ? "line-clamp-2" : ""}`}>
+          {business.description}
+        </p>
+        {!descExpanded && (
+          <button
+            className="text-xs font-semibold mt-1"
+            style={{ color: business.accentColor }}
+            onClick={() => setDescExpanded(true)}
+          >
+            Read more
+          </button>
+        )}
+      </div>
 
       {/* Courts / facilities */}
       <section>

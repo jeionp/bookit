@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 let ratelimit: Ratelimit | null = null;
 function getRatelimit(): Ratelimit | null {
+  if (process.env.FIRESTORE_EMULATOR_HOST) return null;
   if (ratelimit) return ratelimit;
   const url   = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -23,6 +24,65 @@ function getRatelimit(): Ratelimit | null {
   });
   return ratelimit;
 }
+
+// ─── Emulator fast-path ───────────────────────────────────────────────────────
+// In emulator mode the Admin SDK's gRPC connection degrades after many sequential
+// test runs and silently returns empty results. Querying the emulator's REST API
+// directly (stateless HTTP) avoids this entirely. Bearer "owner" is the emulator's
+// admin bypass token — Firestore security rules are not applied.
+type FirestoreField = { integerValue?: string; arrayValue?: { values?: { integerValue?: string }[] } };
+type FirestoreRunQueryResult = { document?: { name: string; fields: Record<string, FirestoreField> } };
+
+async function queryEmulatorBookings(
+  status: string,
+  businessSlug: string,
+  facilityId: string,
+  date: string,
+  excludeBookingId: string | null,
+): Promise<number[]> {
+  const host = `http://${process.env.FIRESTORE_EMULATOR_HOST}`;
+  const project = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const url = `${host}/v1/projects/${project}/databases/(default)/documents:runQuery`;
+
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: "bookings" }],
+      where: {
+        compositeFilter: {
+          op: "AND",
+          filters: [
+            { fieldFilter: { field: { fieldPath: "businessSlug" }, op: "EQUAL", value: { stringValue: businessSlug } } },
+            { fieldFilter: { field: { fieldPath: "facilityId" }, op: "EQUAL", value: { stringValue: facilityId } } },
+            { fieldFilter: { field: { fieldPath: "date" }, op: "EQUAL", value: { stringValue: date } } },
+            { fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: status } } },
+          ],
+        },
+      },
+    },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer owner" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return [];
+
+  const results = (await res.json()) as FirestoreRunQueryResult[];
+  const hours: number[] = [];
+  for (const result of results) {
+    if (!result.document) continue;
+    const docId = result.document.name.split("/").pop()!;
+    if (excludeBookingId && docId === excludeBookingId) continue;
+    const field = result.document.fields.hours;
+    for (const v of field?.arrayValue?.values ?? []) {
+      if (v.integerValue !== undefined) hours.push(parseInt(v.integerValue, 10));
+    }
+  }
+  return hours;
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const rl = getRatelimit();
@@ -53,6 +113,14 @@ export async function GET(req: NextRequest) {
   }
   if (!isYmdDate(date)) {
     return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+  }
+
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    const [bookedHours, pendingHours] = await Promise.all([
+      queryEmulatorBookings("confirmed", businessSlug, facilityId, date, excludeBookingId),
+      queryEmulatorBookings("slot_held", businessSlug, facilityId, date, excludeBookingId),
+    ]);
+    return NextResponse.json({ bookedHours, pendingHours });
   }
 
   const [confirmedSnap, pendingSnap] = await Promise.all([

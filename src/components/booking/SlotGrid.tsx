@@ -3,6 +3,7 @@
 import { RefObject, MutableRefObject } from "react";
 import { Facility } from "@/lib/types";
 import { formatHour, groupByPeriod, SlotState } from "@/lib/slots";
+import { SlotGridSkeleton } from "./SlotGridSkeleton";
 
 interface SlotGridProps {
   slots: number[];
@@ -28,7 +29,7 @@ export default function SlotGrid({
   lastTouchTime,
 }: SlotGridProps) {
   return (
-    <div ref={slotsRef} className="space-y-5 select-none">
+    <div ref={slotsRef} className="space-y-5 select-none" data-testid={loadingSlots ? "slot-grid-loading" : "slot-grid-ready"}>
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-800">{facility.name}</span>
@@ -46,13 +47,7 @@ export default function SlotGrid({
       {slots.length === 0 ? (
         <p className="py-6 text-center text-sm text-gray-400">{emptyMessage}</p>
       ) : loadingSlots ? (
-        <div className="py-8 flex items-center justify-center gap-2 text-sm text-gray-400">
-          <span
-            className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: `${accentColor}40`, borderTopColor: "transparent" }}
-          />
-          Loading availability…
-        </div>
+        <SlotGridSkeleton />
       ) : (
         groupByPeriod(slots).map(({ key, label, icon: Icon, slots: periodSlots }) => (
           <div key={key}>
