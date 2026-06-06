@@ -88,8 +88,10 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
 
   function selectFacility(id: string) {
     setSelectedFacilityId(id);
-    // Only scroll on mobile — desktop shows courts and availability side-by-side
-    if (window.innerWidth < 1280) {
+    // Only scroll on mobile — desktop shows courts and availability side-by-side.
+    // Use matchMedia so the check matches Tailwind's xl: breakpoint exactly,
+    // avoiding the off-by-scrollbar-width issue with window.innerWidth.
+    if (!window.matchMedia('(min-width: 1280px)').matches) {
       availabilityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
