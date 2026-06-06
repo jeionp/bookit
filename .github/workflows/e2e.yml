@@ -12,6 +12,9 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-jammy
+      options: --user root
     timeout-minutes: 30
 
     steps:
@@ -24,6 +27,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
       - name: Setup Java (required by Firebase emulator)
         uses: actions/setup-java@v4
@@ -53,20 +58,6 @@ jobs:
           CI: "true"
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-bookit"
           NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "demo-bookit.appspot.com"
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-
-      - name: Install Playwright system deps
-        run: npx playwright install-deps chromium
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
 
       - name: Run Playwright E2E tests
         run: npm run test:e2e
