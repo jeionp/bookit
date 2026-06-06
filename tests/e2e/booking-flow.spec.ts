@@ -37,32 +37,17 @@ async function signIn(page: Page, email = TEST_EMAIL, password = TEST_PASSWORD) 
 async function selectSlot(page: Page, label: string) {
   const slot = page.getByRole('button', { name: label }).first()
   await slot.waitFor({ state: 'visible' })
-  await slot.click()
+  await slot.click()  // first tap: pending-start
+  await slot.click()  // second tap: commit single-hour selection
 }
 
-async function dragSlots(page: Page, fromLabel: string, toLabel: string) {
+// Two-tap range selection: first click sets start, second click commits range.
+async function selectRange(page: Page, fromLabel: string, toLabel: string) {
   const from = page.getByRole('button', { name: fromLabel }).first()
   const to   = page.getByRole('button', { name: toLabel }).first()
-
-  // Scroll `to` into view last so it sits at the bottom of the viewport.
-  // Since `from` is above `to` and close by, scrolling `to` to the nearest
-  // edge keeps `from` within the viewport too. Both must be in the viewport
-  // so that document.elementFromPoint() finds them during the drag —
-  // coordinates outside the viewport return null and currentHour never updates.
-  await from.scrollIntoViewIfNeeded()
-  await to.scrollIntoViewIfNeeded()
-
-  const boxFrom = await from.boundingBox()
-  const boxTo   = await to.boundingBox()
-  if (!boxFrom || !boxTo) throw new Error('Could not get bounding box for drag slots')
-
-  const cx = (b: { x: number; width: number }) => b.x + b.width / 2
-  const cy = (b: { y: number; height: number }) => b.y + b.height / 2
-
-  await page.mouse.move(cx(boxFrom), cy(boxFrom))
-  await page.mouse.down()
-  await page.mouse.move(cx(boxTo), cy(boxTo), { steps: 12 })
-  await page.mouse.up()
+  await from.waitFor({ state: 'visible' })
+  await from.click()  // first tap: pending-start
+  await to.click()    // second tap: commit range
 }
 
 // Navigate to tomorrow so that all time slots are visible regardless of wall-clock time.
@@ -265,11 +250,11 @@ test.describe('Slot selection', () => {
     await expect(page.getByRole('button', { name: /book now/i })).not.toBeVisible()
   })
 
-  test('dragging across three slots selects all and totals correctly', async ({ page }) => {
+  test('selecting a range of three slots totals correctly', async ({ page }) => {
     await page.goto(BUSINESS)
     await selectTomorrow(page)
     await waitForSlots(page)
-    await dragSlots(page, '8 AM', '10 AM')
+    await selectRange(page, '8 AM', '10 AM')
 
     // 3 × ₱500 = ₱1,500
     const bar3 = page.getByTestId('action-bar')
@@ -278,8 +263,8 @@ test.describe('Slot selection', () => {
     await expect(bar3.getByText('₱1,500')).toBeVisible()
   })
 
-  test('drag stops at a booked slot and only selects hours up to it', async ({ page }) => {
-    // Hour 9 is booked — dragging 8 AM → 10 AM should only capture 8 AM
+  test('range selection stops at a booked slot and only selects hours up to it', async ({ page }) => {
+    // Hour 9 is booked — tapping 8 AM then 10 AM should only capture 8 AM
     await seedBooking({
       facilityId:   COURT_1,
       facilityName: COURT_1_NAME,
@@ -290,7 +275,7 @@ test.describe('Slot selection', () => {
     await page.goto(BUSINESS)
     await selectTomorrow(page)
     await waitForSlots(page)
-    await dragSlots(page, '8 AM', '10 AM')
+    await selectRange(page, '8 AM', '10 AM')
 
     await expect(page.getByText('8 AM – 9 AM')).toBeVisible()
     await expect(page.getByText('1 hr')).toBeVisible()
@@ -538,8 +523,8 @@ test.describe('Booking confirmation', () => {
     await waitForSlots(page)
     await signIn(page)
 
-    // Drag 4 PM (standard) → 5 PM (prime): 1 standard + 1 prime-time hour
-    await dragSlots(page, '4 PM', '5 PM')
+    // Tap 4 PM (standard) then 5 PM (prime): 1 standard + 1 prime-time hour
+    await selectRange(page, '4 PM', '5 PM')
     await page.getByRole('button', { name: /book now/i }).click()
 
     // Both rate tiers should appear in the breakdown

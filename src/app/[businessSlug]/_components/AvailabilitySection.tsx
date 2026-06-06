@@ -126,7 +126,7 @@ export default function AvailabilitySection({
     };
   }, [calendarOpen]);
 
-  const { activeSelection, slotsRef, lastTouchTime, handleSlotMouseDown, slotState } =
+  const { activeSelection, slotsRef, handleSlotClick, slotState } =
     useSlotSelection(facility, bookedHours, pendingHours);
 
   function selectDate(date: Date | undefined) {
@@ -140,7 +140,7 @@ export default function AvailabilitySection({
       <div>
         <h2 className="text-xl font-bold text-gray-900">Check Availability</h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          Tap a slot or drag across slots to select a time range
+          Tap a start time, then tap an end time to select a range
         </p>
       </div>
 
@@ -242,8 +242,7 @@ export default function AvailabilitySection({
         }
         slotsRef={slotsRef}
         slotState={slotState}
-        onSlotMouseDown={handleSlotMouseDown}
-        lastTouchTime={lastTouchTime}
+        onSlotClick={handleSlotClick}
       />
 
       <BookingActionBar

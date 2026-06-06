@@ -2,148 +2,87 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { Facility } from "@/lib/types";
-import { Selection, DragState, SlotState, getValidRange } from "@/lib/slots";
+import { Selection, SlotState, getValidRange } from "@/lib/slots";
 
 export function useSlotSelection(facility: Facility, bookedHours: number[], pendingHours: number[] = []) {
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [drag, setDrag] = useState<DragState | null>(null);
+  const [pendingStart, setPendingStart] = useState<number | null>(null);
   const slotsRef = useRef<HTMLDivElement>(null);
-  const prevSelectionRef = useRef<Selection | null>(null);
-  const dragRef = useRef<DragState | null>(null);
-  const lastTouchTime = useRef(0);
 
-  // Mirror props into refs so always-on effects read fresh values without
-  // needing to be re-registered whenever bookedHours or selection changes.
+  // Mirror props + state into refs so always-on effects read fresh values.
   const bookedHoursRef = useRef(bookedHours);
   const pendingHoursRef = useRef(pendingHours);
   const selectionRef = useRef<Selection | null>(null);
+  const pendingStartRef = useRef<number | null>(null);
   useLayoutEffect(() => {
     bookedHoursRef.current = bookedHours;
     pendingHoursRef.current = pendingHours;
     selectionRef.current = selection;
+    pendingStartRef.current = pendingStart;
   });
 
   const activeSelection = selection?.facilityId === facility.id ? selection : null;
   const blockedHours = [...bookedHours, ...pendingHours];
-  const previewHours = drag
-    ? getValidRange(drag.startHour, drag.currentHour, blockedHours)
-    : [];
 
-  // Registered once — clears selection when clicking outside slot grid / action bar.
+  // Clear selection + pendingStart when tapping outside the slot grid / action bar.
   useEffect(() => {
     function handleOutside(e: PointerEvent) {
-      if (dragRef.current) return;
       const target = e.target as Node;
       const inSlots = slotsRef.current?.contains(target);
       const inActionBar = (document.querySelector("[data-testid='action-bar']") as HTMLElement | null)?.contains(target);
-      if (!inSlots && !inActionBar) setSelection(null);
+      if (!inSlots && !inActionBar) {
+        setSelection(null);
+        setPendingStart(null);
+        pendingStartRef.current = null;
+      }
     }
     document.addEventListener("pointerdown", handleOutside);
     return () => document.removeEventListener("pointerdown", handleOutside);
   }, []);
 
-  // Registered once — tracks drag position via mousemove / touchmove.
-  // Guards on dragRef.current so it's a no-op when not dragging.
-  // Empty deps avoids the re-registration timing gap that breaks Playwright tests:
-  // with [drag] deps, the listener wasn't registered yet when Playwright fired
-  // mousemove immediately after mousedown, keeping currentHour stuck at the start slot.
-  useEffect(() => {
-    function updateHourAt(clientX: number, clientY: number) {
-      if (!dragRef.current) return;
-      const el = document.elementFromPoint(clientX, clientY);
-      const btn = el?.closest("[data-slot-hour]");
-      if (!btn) return;
-      const hour = parseInt(btn.getAttribute("data-slot-hour") ?? "", 10);
-      if (!isNaN(hour)) {
-        dragRef.current = { ...dragRef.current, currentHour: hour };
-        setDrag((d) => (d ? { ...d, currentHour: hour } : null));
-      }
-    }
-    function handleMouseMove(e: MouseEvent) { updateHourAt(e.clientX, e.clientY); }
-    function handleTouchMove(e: TouchEvent) {
-      if (!dragRef.current) return;
-      e.preventDefault();
-      updateHourAt(e.touches[0].clientX, e.touches[0].clientY);
-    }
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("touchmove", handleTouchMove);
-    };
-  }, []);
+  function handleSlotClick(hour: number) {
+    if (blockedHours.includes(hour)) return;
 
-  // Registered once — finalizes selection on mouseup / touchend.
-  // Reads bookedHours and selection from refs for fresh values without re-registration.
-  useEffect(() => {
-    function finalizeSelection() {
-      const currentDrag = dragRef.current;
-      if (!currentDrag) return;
-      const hours = getValidRange(currentDrag.startHour, currentDrag.currentHour, bookedHoursRef.current);
-      dragRef.current = null;
-      setDrag(null);
-
-      if (hours.length === 0) return;
-
-      const prev = prevSelectionRef.current;
-      if (
-        hours.length === 1 &&
-        prev?.facilityId === currentDrag.facilityId &&
-        prev.hours.length === 1 &&
-        prev.hours[0] === hours[0]
-      ) {
+    if (pendingStartRef.current === null) {
+      // First tap: if tapping the only currently-selected slot, deselect it.
+      if (selectionRef.current?.hours.length === 1 && selectionRef.current.hours[0] === hour) {
         setSelection(null);
         return;
       }
-
-      const { pricePerHour, primePricePerHour, primeTimeStart } = currentDrag;
+      // Otherwise start a new pending range.
+      setSelection(null);
+      setPendingStart(hour);
+      pendingStartRef.current = hour;
+    } else {
+      // Second tap: commit the range.
+      const start = pendingStartRef.current;
+      const hours = getValidRange(start, hour, [...bookedHoursRef.current, ...pendingHoursRef.current]);
+      setPendingStart(null);
+      pendingStartRef.current = null;
+      if (hours.length === 0) return;
       const totalPrice = hours.reduce((sum, h) => {
-        const isPrime = primePricePerHour && primeTimeStart && h >= primeTimeStart;
-        return sum + (isPrime ? primePricePerHour : pricePerHour);
+        const isPrime = facility.primePricePerHour && facility.primeTimeStart && h >= facility.primeTimeStart;
+        return sum + (isPrime ? facility.primePricePerHour! : facility.pricePerHour);
       }, 0);
       setSelection({
-        facilityId: currentDrag.facilityId,
-        facilityName: currentDrag.facilityName,
+        facilityId: facility.id,
+        facilityName: facility.name,
         hours,
-        pricePerHour,
-        primePricePerHour,
-        primeTimeStart,
+        pricePerHour: facility.pricePerHour,
+        primePricePerHour: facility.primePricePerHour,
+        primeTimeStart: facility.primeTimeStart,
         totalPrice,
       });
     }
-
-    window.addEventListener("mouseup", finalizeSelection);
-    window.addEventListener("touchend", finalizeSelection);
-    return () => {
-      window.removeEventListener("mouseup", finalizeSelection);
-      window.removeEventListener("touchend", finalizeSelection);
-    };
-  }, []);
-
-  function handleSlotMouseDown(hour: number) {
-    if (bookedHoursRef.current.includes(hour) || pendingHoursRef.current.includes(hour)) return;
-    prevSelectionRef.current = selectionRef.current;
-    setSelection(null);
-    const newDrag: DragState = {
-      facilityId: facility.id,
-      facilityName: facility.name,
-      startHour: hour,
-      currentHour: hour,
-      pricePerHour: facility.pricePerHour,
-      primePricePerHour: facility.primePricePerHour,
-      primeTimeStart: facility.primeTimeStart,
-    };
-    dragRef.current = newDrag;
-    setDrag(newDrag);
   }
 
   function slotState(hour: number): SlotState {
     if (bookedHours.includes(hour)) return "booked";
     if (pendingHours.includes(hour)) return "pending";
-    if (drag?.facilityId === facility.id && previewHours.includes(hour)) return "preview";
-    if (!drag && activeSelection?.hours.includes(hour)) return "active";
+    if (pendingStart === hour) return "pending-start";
+    if (activeSelection?.hours.includes(hour)) return "active";
     return "available";
   }
 
-  return { activeSelection, drag, slotsRef, lastTouchTime, handleSlotMouseDown, slotState };
+  return { activeSelection, pendingStart, slotsRef, handleSlotClick, slotState };
 }

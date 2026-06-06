@@ -6,7 +6,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Development skills
 
-These slash commands encode the repeatable workflows used on this project. Invoke them at any point in a session:
+These slash commands encode the repeatable workflows used on this project. Each command has two layers:
+- **User-level** (`~/.claude/commands/`) — generic workflow, works across any project
+- **Project-level** (`.claude/commands/`) — bookit-specific details that extend the generic version
+
+Invoke either layer by name; Claude reads both and merges the instructions:
 
 | Command | When to use |
 |---|---|
@@ -14,6 +18,8 @@ These slash commands encode the repeatable workflows used on this project. Invok
 | `/security-audit` | Before any major feature ships — parallel audit agents, severity tiers, phased PRs |
 | `/refactor-wave` | When duplication piles up or a file exceeds size targets — centralize, delete dead code, verify |
 | `/write-tests` | After implementing a feature, before pushing — unit → security rules → E2E, with all mock patterns |
+
+Commands chain naturally: `/dev-cycle` tells you to run `/write-tests` at step 3 and `/verifier-web` for UI changes.
 
 ## Pre-PR gate (always applies)
 

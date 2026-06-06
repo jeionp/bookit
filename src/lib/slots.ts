@@ -89,7 +89,7 @@ export function groupByPeriod(slots: number[]) {
   );
 }
 
-export type SlotState = "active" | "preview" | "available" | "booked" | "pending";
+export type SlotState = "active" | "pending-start" | "available" | "booked" | "pending";
 
 export interface Selection {
   facilityId: string;
@@ -101,12 +101,3 @@ export interface Selection {
   totalPrice: number;
 }
 
-export interface DragState {
-  facilityId: string;
-  facilityName: string;
-  startHour: number;
-  currentHour: number;
-  pricePerHour: number;
-  primePricePerHour?: number;
-  primeTimeStart?: number;
-}
