@@ -140,7 +140,7 @@ export default function AvailabilitySection({
       <div>
         <h2 className="text-xl font-bold text-gray-900">Check Availability</h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          Tap a start time, then tap an end time to select a range
+          Tap a slot to select it. Tap another to extend your booking.
         </p>
       </div>
 

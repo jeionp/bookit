@@ -4,30 +4,28 @@
  * Because the hook uses React state and DOM events, we test the pure
  * functions extracted from it rather than rendering the full hook:
  *
- *   slotState(hour) — returns "booked" | "pending" | "pending-start" |
- *                     "active" | "available" based on current state
+ *   slotState(hour) — returns "booked" | "pending" | "active" | "available"
  *   blockedHours    — combined bookedHours + pendingHours (used by getValidRange)
- *   handleSlotClick guard — skips both booked and pending hours
+ *   handleSlotClick guard — skips booked and pending hours
+ *   handleSlotClick behavior — instant-commit, extend, deselect
  *
  * The underlying getValidRange function is already tested in slots.ts.
- * Here we focus on the slotState logic and pending-hours integration.
  */
 
 import { describe, test, expect } from 'vitest'
+import { getValidRange } from '@/lib/slots'
 
 // ─── Mirror slotState logic from the hook ─────────────────────────────────────
-// Priority: booked → pending → pending-start → active → available
+// Priority: booked → pending → active → available
 
 function slotState(
   hour: number,
   bookedHours: number[],
   pendingHours: number[],
-  pendingStart: number | null = null,
   activeHours: number[] = [],
-): 'booked' | 'pending' | 'pending-start' | 'active' | 'available' {
+): 'booked' | 'pending' | 'active' | 'available' {
   if (bookedHours.includes(hour)) return 'booked'
   if (pendingHours.includes(hour)) return 'pending'
-  if (pendingStart === hour) return 'pending-start'
   if (activeHours.includes(hour)) return 'active'
   return 'available'
 }
@@ -42,6 +40,34 @@ function makeBlockedHours(bookedHours: number[], pendingHours: number[]): number
 
 function canClickSlot(hour: number, bookedHours: number[], pendingHours: number[]): boolean {
   return !bookedHours.includes(hour) && !pendingHours.includes(hour)
+}
+
+// ─── Mirror handleSlotClick behavior ──────────────────────────────────────────
+
+interface MockSelection {
+  hours: number[]
+}
+
+function simulateClick(
+  hour: number,
+  current: MockSelection | null,
+  bookedHours: number[],
+  pendingHours: number[],
+): MockSelection | null {
+  const blocked = [...bookedHours, ...pendingHours]
+  if (blocked.includes(hour)) return current // guard: no-op
+
+  if (!current) {
+    return { hours: [hour] }                 // instant-commit single slot
+  }
+
+  if (current.hours.includes(hour)) {
+    return null                              // tap selected slot → deselect
+  }
+
+  const start = current.hours[0]
+  const hours = getValidRange(start, hour, blocked)
+  return { hours: hours.length > 0 ? hours : [hour] }
 }
 
 // ─── slotState — booked hours ─────────────────────────────────────────────────
@@ -74,35 +100,15 @@ describe('useSlotSelection — slotState for pending hours', () => {
   })
 })
 
-// ─── slotState — pending-start ────────────────────────────────────────────────
-
-describe('useSlotSelection — slotState for pending-start (first tap awaiting second)', () => {
-  test('returns "pending-start" for the hour that was first-tapped', () => {
-    expect(slotState(10, [], [], 10)).toBe('pending-start')
-  })
-
-  test('returns "available" for other hours when pendingStart is set', () => {
-    expect(slotState(11, [], [], 10)).toBe('available')
-  })
-
-  test('booked beats pending-start when hour is in both', () => {
-    expect(slotState(10, [10], [], 10)).toBe('booked')
-  })
-
-  test('pending beats pending-start when hour is in pendingHours', () => {
-    expect(slotState(10, [], [10], 10)).toBe('pending')
-  })
-})
-
 // ─── slotState — active selection ────────────────────────────────────────────
 
 describe('useSlotSelection — slotState for active selection', () => {
   test('returns "active" for hours in the committed selection', () => {
-    expect(slotState(9, [], [], null, [8, 9, 10])).toBe('active')
+    expect(slotState(9, [], [], [8, 9, 10])).toBe('active')
   })
 
   test('returns "available" for hours not in the active selection', () => {
-    expect(slotState(11, [], [], null, [8, 9, 10])).toBe('available')
+    expect(slotState(11, [], [], [8, 9, 10])).toBe('available')
   })
 })
 
@@ -189,5 +195,85 @@ describe('useSlotSelection — handleSlotClick guards against booked and pending
 
   test('returns true when both arrays are empty (open slot)', () => {
     expect(canClickSlot(14, [], [])).toBe(true)
+  })
+})
+
+// ─── handleSlotClick — instant-commit (Option A) ─────────────────────────────
+
+describe('useSlotSelection — handleSlotClick instant-commit (no prior selection)', () => {
+  test('first tap with no selection commits a single slot immediately', () => {
+    const result = simulateClick(10, null, [], [])
+    expect(result?.hours).toEqual([10])
+  })
+
+  test('blocked hour is ignored even with no prior selection', () => {
+    const result = simulateClick(9, null, [9], [])
+    expect(result).toBeNull()
+  })
+
+  test('pending hour is ignored even with no prior selection', () => {
+    const result = simulateClick(11, null, [], [11])
+    expect(result).toBeNull()
+  })
+})
+
+// ─── handleSlotClick — tap selected slot deselects ───────────────────────────
+
+describe('useSlotSelection — handleSlotClick tap selected slot deselects', () => {
+  test('tapping the single active slot deselects it', () => {
+    const current = { hours: [10] }
+    const result = simulateClick(10, current, [], [])
+    expect(result).toBeNull()
+  })
+
+  test('tapping any slot in a range deselects the whole range', () => {
+    const current = { hours: [10, 11, 12] }
+    expect(simulateClick(10, current, [], [])).toBeNull()
+    expect(simulateClick(11, current, [], [])).toBeNull()
+    expect(simulateClick(12, current, [], [])).toBeNull()
+  })
+})
+
+// ─── handleSlotClick — extend/shrink range ───────────────────────────────────
+
+describe('useSlotSelection — handleSlotClick extends range from original start', () => {
+  test('tapping a later slot extends the range forward', () => {
+    const current = { hours: [10] }
+    const result = simulateClick(12, current, [], [])
+    expect(result?.hours).toEqual([10, 11, 12])
+  })
+
+  test('tapping an earlier slot extends the range backward (from start)', () => {
+    const current = { hours: [12] }
+    const result = simulateClick(10, current, [], [])
+    expect(result?.hours).toEqual([10, 11, 12])
+  })
+
+  test('range stops at a booked slot in between', () => {
+    const current = { hours: [10] }
+    // 11 is booked — range from 10 to 13 should stop at 10 only
+    const result = simulateClick(13, current, [11], [])
+    expect(result?.hours).toEqual([10])
+  })
+
+  test('range stops at a pending slot in between', () => {
+    const current = { hours: [10] }
+    const result = simulateClick(13, current, [], [12])
+    expect(result?.hours).toEqual([10, 11])
+  })
+
+  test('if getValidRange returns empty (fully blocked), selects just the tapped slot', () => {
+    const current = { hours: [10] }
+    // 10 itself would be the start and target is 12, but 11 blocks; getValidRange returns [10]
+    // tapping a completely fresh slot beyond a block falls back to [hour]
+    // Simulate: start=10, tap=12, booked=[10,11] → getValidRange(10,12,[10,11]) → stops at 10 → [10]
+    // That's not empty, so this edge case needs fully blocked start:
+    // start=10, all between blocked, tap=10 → already in selection → handled above
+    // Actually the "fallback to [hour]" triggers when hours.length === 0, which happens when
+    // start itself is blocked. Since guard already prevents clicking blocked hours, this
+    // scenario is unreachable in practice — but test the fallback path via direct simulation.
+    const result = simulateClick(12, { hours: [10] }, [10, 11], [])
+    // getValidRange(10, 12, [10,11]) → breaks at 10 immediately → [] → fallback [12]
+    expect(result?.hours).toEqual([12])
   })
 })

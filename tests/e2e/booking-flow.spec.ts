@@ -37,17 +37,16 @@ async function signIn(page: Page, email = TEST_EMAIL, password = TEST_PASSWORD) 
 async function selectSlot(page: Page, label: string) {
   const slot = page.getByRole('button', { name: label }).first()
   await slot.waitFor({ state: 'visible' })
-  await slot.click()  // first tap: pending-start
-  await slot.click()  // second tap: commit single-hour selection
+  await slot.click()  // single tap: immediately commits 1-hour selection
 }
 
-// Two-tap range selection: first click sets start, second click commits range.
+// Range selection: first click commits the start slot, second click extends to end.
 async function selectRange(page: Page, fromLabel: string, toLabel: string) {
   const from = page.getByRole('button', { name: fromLabel }).first()
   const to   = page.getByRole('button', { name: toLabel }).first()
   await from.waitFor({ state: 'visible' })
-  await from.click()  // first tap: pending-start
-  await to.click()    // second tap: commit range
+  await from.click()  // first tap: selects start slot immediately
+  await to.click()    // second tap: extends range to end
 }
 
 // Navigate to tomorrow so that all time slots are visible regardless of wall-clock time.
@@ -281,7 +280,7 @@ test.describe('Slot selection', () => {
     await expect(page.getByText('1 hr')).toBeVisible()
   })
 
-  test('clicking a different slot replaces the existing selection', async ({ page }) => {
+  test('clicking a different slot extends the range from the original start', async ({ page }) => {
     await page.goto(BUSINESS)
     await selectTomorrow(page)
     await waitForSlots(page)
@@ -289,9 +288,9 @@ test.describe('Slot selection', () => {
     await selectSlot(page, '8 AM')
     await expect(page.getByTestId('action-bar').getByText('8 AM – 9 AM', { exact: false })).toBeVisible()
 
+    // Tapping 10 AM extends the range from 8 AM to 10 AM (3 hours)
     await selectSlot(page, '10 AM')
-    await expect(page.getByTestId('action-bar').getByText('10 AM – 11 AM', { exact: false })).toBeVisible()
-    await expect(page.getByTestId('action-bar').getByText('8 AM – 9 AM', { exact: false })).not.toBeVisible()
+    await expect(page.getByTestId('action-bar').getByText('8 AM – 11 AM', { exact: false })).toBeVisible()
   })
 
   test('clicking outside the availability section and action bar clears the selection', async ({ page }) => {
