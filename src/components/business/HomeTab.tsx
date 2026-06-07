@@ -204,7 +204,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
         </div>
 
         {/* Availability — sticky on desktop, scrolls into view on mobile */}
-        <div ref={availabilityRef} className="scroll-mt-20 xl:sticky xl:top-[72px] xl:self-start">
+        <div ref={availabilityRef} className="scroll-mt-20 xl:sticky xl:top-[72px] xl:self-start min-w-0">
           <AvailabilitySection
             business={business}
             onBook={onBook}
