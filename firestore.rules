@@ -80,5 +80,12 @@ service cloud.firestore {
       // All writes go through Admin SDK (payment confirmation routes)
       allow write: if false;
     }
+
+    match /businesses/{slug}/reviews/{reviewId} {
+      // Public read — reviews are visible to all visitors
+      allow read: if true;
+      // All writes go through Admin SDK (POST /api/reviews, DELETE /api/reviews/[id])
+      allow write: if false;
+    }
   }
 }

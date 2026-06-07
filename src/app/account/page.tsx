@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Clock, Coins, ChevronRight, ArrowLeft, LogOut } from "lucide-react";
+import { CalendarDays, Clock, Coins, ChevronRight, ArrowLeft, LogOut, Star } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useAuthedFetch } from "@/hooks/useAuthedFetch";
 import AuthModal from "@/components/auth/AuthModal";
 import { Booking, getUserBookings } from "@/lib/firebase/bookings";
 import { getAllCreditsByUser, groupBalancesByBusiness } from "@/lib/firebase/credits";
+import { getReviewedBookingIds } from "@/lib/firebase/reviews";
 import CancelBookingModal from "@/components/booking/CancelBookingModal";
 import { formatHour, formatDate } from "@/lib/slots";
 
@@ -38,6 +40,7 @@ function favBusiness(bookings: Booking[]): string | null {
 
 export default function AccountPage() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const authedFetch = useAuthedFetch();
   const [authOpen, setAuthOpen] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [creditBalances, setCreditBalances] = useState<
@@ -47,6 +50,7 @@ export default function AccountPage() {
   const [fetchError, setFetchError] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [showPast, setShowPast] = useState(false);
+  const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user) return;
@@ -55,13 +59,31 @@ export default function AccountPage() {
       getUserBookings(user.uid),
       getAllCreditsByUser(user.uid),
     ])
-      .then(([bkgs, credits]) => {
+      .then(async ([bkgs, credits]) => {
         setBookings(bkgs);
         setCreditBalances(groupBalancesByBusiness(credits));
+        // Load reviewed booking IDs for all businesses with past confirmed bookings
+        const pastSlugs = [
+          ...new Set(
+            bkgs
+              .filter((b) => b.status === "confirmed" && isBookingPast(b))
+              .map((b) => b.businessSlug),
+          ),
+        ];
+        const idSets = await Promise.all(
+          pastSlugs.map((slug) => getReviewedBookingIds(slug, user.uid)),
+        );
+        const merged = new Set<string>();
+        idSets.forEach((s) => s.forEach((id) => merged.add(id)));
+        setReviewedIds(merged);
       })
       .catch(() => setFetchError(true))
       .finally(() => setDataLoading(false));
   }, [user]);
+
+  function markReviewed(bookingId: string) {
+    setReviewedIds((prev) => new Set([...prev, bookingId]));
+  }
 
   function handleCancelled(bookingId: string, creditIssued: number, currency: string) {
     setBookings((prev) =>
@@ -240,9 +262,16 @@ export default function AccountPage() {
                 <h2 className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
                   Past ({past.length})
                 </h2>
-                <div className="space-y-3 opacity-70">
+                <div className="space-y-3">
                   {pastSlice.map((b) => (
-                    <AccountBookingCard key={b.id} booking={b} variant="past" />
+                    <AccountBookingCard
+                      key={b.id}
+                      booking={b}
+                      variant="past"
+                      isReviewed={reviewedIds.has(b.id)}
+                      onReviewed={() => markReviewed(b.id)}
+                      authedFetch={authedFetch}
+                    />
                   ))}
                 </div>
                 {past.length > 5 && (
@@ -275,16 +304,56 @@ function AccountBookingCard({
   booking,
   variant,
   onCancel,
+  isReviewed,
+  onReviewed,
+  authedFetch,
 }: {
   booking: Booking;
   variant: "upcoming" | "past";
   onCancel?: () => void;
+  isReviewed?: boolean;
+  onReviewed?: () => void;
+  authedFetch?: ReturnType<typeof useAuthedFetch>;
 }) {
   const startHour = booking.hours[0];
   const endHour = booking.hours[booking.hours.length - 1] + 1;
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hovered, setHovered] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  async function handleReviewSubmit() {
+    if (!authedFetch || rating === 0) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await authedFetch("/api/reviews", {
+        method: "POST",
+        body: JSON.stringify({
+          businessSlug: booking.businessSlug,
+          bookingId: booking.id,
+          rating,
+          comment,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSubmitError((data as { error?: string }).error ?? "Something went wrong");
+        return;
+      }
+      onReviewed?.();
+      setReviewOpen(false);
+    } catch {
+      setSubmitError("Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <div className={`bg-white rounded-2xl border border-gray-100 overflow-hidden ${variant === "past" ? "opacity-80" : ""}`}>
       <div
         className="h-1"
         style={{ backgroundColor: variant === "upcoming" ? "#22c55e" : "#d1d5db" }}
@@ -342,6 +411,81 @@ function AccountBookingCard({
           >
             Cancel booking
           </button>
+        )}
+
+        {variant === "past" && (
+          <div className="mt-3">
+            {isReviewed ? (
+              <p className="text-xs text-gray-400 flex items-center gap-1">
+                <Star size={11} className="text-amber-400 fill-amber-400" />
+                Review submitted
+              </p>
+            ) : !reviewOpen ? (
+              <button
+                data-testid="leave-review-btn"
+                onClick={() => setReviewOpen(true)}
+                className="text-xs font-semibold text-gray-400 hover:text-gray-700 transition-colors"
+              >
+                Leave a review →
+              </button>
+            ) : (
+              <div className="space-y-2 pt-1 border-t border-gray-100 mt-2" data-testid="review-form">
+                {/* Star picker */}
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onMouseEnter={() => setHovered(s)}
+                      onMouseLeave={() => setHovered(0)}
+                      onClick={() => setRating(s)}
+                      className="p-0.5"
+                    >
+                      <Star
+                        size={20}
+                        className={
+                          s <= (hovered || rating)
+                            ? "text-amber-400 fill-amber-400"
+                            : "text-gray-200 fill-gray-200"
+                        }
+                      />
+                    </button>
+                  ))}
+                  {rating > 0 && (
+                    <span className="text-xs text-gray-400 ml-1">
+                      {["", "Poor", "Fair", "Good", "Very good", "Excellent"][rating]}
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  maxLength={500}
+                  placeholder="Share your experience (optional)…"
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs text-gray-900 outline-none focus:border-gray-400 transition-colors resize-none"
+                />
+                {submitError && (
+                  <p className="text-xs text-red-500">{submitError}</p>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => void handleReviewSubmit()}
+                    disabled={submitting || rating === 0}
+                    className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                  >
+                    {submitting ? "Submitting…" : "Submit"}
+                  </button>
+                  <button
+                    onClick={() => { setReviewOpen(false); setRating(0); setComment(""); setSubmitError(null); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
