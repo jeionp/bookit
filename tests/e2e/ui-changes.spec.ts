@@ -725,8 +725,9 @@ test.describe('HomeTab — mobile carousel (<1280px)', () => {
 
   test('court cards are in a horizontal flex scroll container on mobile', async ({ page }) => {
     await page.goto(BUSINESS)
-    // The carousel container is a flex overflow-x-auto container on mobile
-    const carouselContainer = page.locator('.overflow-x-auto.scrollbar-hide')
+    // The courts carousel container is a flex overflow-x-auto container on mobile.
+    // Use the testid to avoid ambiguity with the date-strip which shares the same classes.
+    const carouselContainer = page.locator('[data-testid="courts-carousel"]')
     await expect(carouselContainer).toBeAttached()
   })
 
