@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import Image from "next/image";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker, useDayPicker } from "react-day-picker";
 import type { MonthCaptionProps } from "react-day-picker";
@@ -44,12 +45,10 @@ export default function AvailabilitySection({
   business,
   onBook,
   selectedFacilityId,
-  onFacilityChange,
 }: {
   business: Business;
   onBook: (selection: Selection, date: Date) => void;
   selectedFacilityId: string;
-  onFacilityChange: (id: string) => void;
 }) {
   const today = useMemo(() => {
     const d = new Date();
@@ -151,6 +150,25 @@ export default function AvailabilitySection({
 
   return (
     <section data-testid="availability-section" className="space-y-5">
+
+      {/* Selected court hero */}
+      <div data-testid="court-hero" className="relative h-40 rounded-2xl overflow-hidden bg-gray-100">
+        <Image
+          src={facility.image || "/placeholder-court.svg"}
+          alt={facility.name}
+          fill
+          className="object-cover"
+          sizes="(min-width: 1280px) calc(100vw - 340px), 100vw"
+          priority
+        />
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-3">
+          <p className="text-white text-sm font-bold leading-tight">{facility.name}</p>
+          <p className="text-white/80 text-xs">
+            {facility.primePricePerHour ? "from " : ""}₱{facility.pricePerHour.toLocaleString()}/hr
+          </p>
+        </div>
+      </div>
+
       <div>
         <h2 className="text-xl font-bold text-gray-900">Check Availability</h2>
         <p className="text-sm text-gray-500 mt-0.5">
@@ -266,24 +284,6 @@ export default function AvailabilitySection({
             />
           </div>
         )}
-      </div>
-
-      {/* Court selector */}
-      <div className="relative">
-        <select
-          value={selectedFacilityId}
-          onChange={(e) => onFacilityChange(e.target.value)}
-          className="w-full appearance-none px-4 py-2.5 pr-10 rounded-xl border-2 border-gray-100 bg-gray-50 text-sm font-semibold text-gray-900 outline-none transition-colors cursor-pointer focus:border-gray-300"
-        >
-          {business.facilities.map((f) => (
-            <option key={f.id} value={f.id}>{f.name}</option>
-          ))}
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 6l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
       </div>
 
       <SlotGrid
