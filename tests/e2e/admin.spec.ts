@@ -1274,20 +1274,11 @@ async function goToSettingsView(page: Page, adminUid: string) {
 }
 
 async function navigateToTomorrow(page: Page) {
-  const now = new Date()
-  const tomorrow = new Date(now)
-  tomorrow.setDate(now.getDate() + 1)
-
-  // Open the AvailabilitySection date picker (the button currently shows "Today")
-  await page.locator('[data-testid="availability-section"]').getByRole('button').first().click()
-
-  // Advance to next month if tomorrow falls in it
-  if (tomorrow.getMonth() !== now.getMonth()) {
-    await page.getByLabel('Go to next month').click()
-  }
-
-  // Match exactly the day number — regex anchors prevent matching "15" when looking for "5"
-  await page.locator('button').filter({ hasText: new RegExp(`^${tomorrow.getDate()}$`) }).first().click()
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowKey = tomorrow.toISOString().slice(0, 10)
+  // Strip chip for tomorrow is directly visible — no need to open calendar first
+  await page.locator(`button[name="${tomorrowKey}"]`).first().click()
 }
 
 test.describe('Admin settings tab', () => {

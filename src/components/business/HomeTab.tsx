@@ -135,6 +135,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
               {/* Mobile: horizontal carousel. Desktop: 1-column vertical list. */}
               <div
                 ref={carouselRef}
+                data-testid="courts-carousel"
                 className="flex gap-3 overflow-x-auto scrollbar-hide pb-1
                            xl:grid xl:grid-cols-1 xl:overflow-visible xl:gap-3 xl:pb-0"
               >
@@ -204,7 +205,7 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
         </div>
 
         {/* Availability — sticky on desktop, scrolls into view on mobile */}
-        <div ref={availabilityRef} className="scroll-mt-20 xl:sticky xl:top-[72px] xl:self-start">
+        <div ref={availabilityRef} className="scroll-mt-20 xl:sticky xl:top-[72px] xl:self-start min-w-0">
           <AvailabilitySection
             business={business}
             onBook={onBook}

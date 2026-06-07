@@ -51,20 +51,12 @@ async function selectRange(page: Page, fromLabel: string, toLabel: string) {
 
 // Navigate to tomorrow so that all time slots are visible regardless of wall-clock time.
 // AvailabilitySection filters today's slots with (h > currentHour); future dates are unfiltered.
+// The date strip chips use name={dateKey} — tap tomorrow's chip directly.
 async function selectTomorrow(page: Page) {
-  const now = new Date()
-  const tom = new Date(now)
-  tom.setDate(now.getDate() + 1)
-
-  await page.locator('button').filter({ hasText: 'Today' }).click()
-
-  // Advance the calendar view if tomorrow falls in the next month
-  if (tom.getMonth() !== now.getMonth()) {
-    await page.getByLabel('Go to next month').click()
-  }
-
-  // Click the day number — regex anchors prevent matching "8 AM"-style slot buttons
-  await page.locator('button').filter({ hasText: new RegExp(`^${tom.getDate()}$`) }).first().click()
+  const tom = new Date()
+  tom.setDate(tom.getDate() + 1)
+  const tomorrowKey = tom.toISOString().slice(0, 10)
+  await page.locator(`button[name="${tomorrowKey}"]`).first().click()
 }
 
 // ─── Suite setup ─────────────────────────────────────────────────────────────
@@ -339,26 +331,26 @@ test.describe('Court switching', () => {
 // ─── Calendar – 30-day booking window ────────────────────────────────────────
 
 test.describe('Calendar – 30-day booking window', () => {
-  test('clicking the date picker opens the calendar', async ({ page }) => {
+  test('clicking the "More" calendar button opens the calendar', async ({ page }) => {
     await page.goto(BUSINESS)
-    await page.locator('button').filter({ hasText: 'Today' }).click()
+    await page.locator('[data-testid="calendar-btn"]').click()
     const monthName = new Date().toLocaleDateString('en-US', { month: 'long' })
     // Match "April 2026" (calendar header) but not "April 25, 2026" (date button)
     await expect(page.getByText(new RegExp(monthName + ' \\d{4}'))).toBeVisible()
   })
 
-  test("today's date is selectable", async ({ page }) => {
+  test("today's date is selectable in the calendar", async ({ page }) => {
     await page.goto(BUSINESS)
-    await page.locator('button').filter({ hasText: 'Today' }).click()
+    await page.locator('[data-testid="calendar-btn"]').click()
 
     const dayNum = String(new Date().getDate())
     const todayBtn = page.locator('button').filter({ hasText: new RegExp(`^${dayNum}$`) }).first()
     await expect(todayBtn).toBeEnabled()
   })
 
-  test('a date 31 days from now is disabled', async ({ page }) => {
+  test('a date 31 days from now is disabled in the calendar', async ({ page }) => {
     await page.goto(BUSINESS)
-    await page.locator('button').filter({ hasText: 'Today' }).click()
+    await page.locator('[data-testid="calendar-btn"]').click()
 
     const target = new Date()
     target.setDate(target.getDate() + 31)
@@ -375,9 +367,9 @@ test.describe('Calendar – 30-day booking window', () => {
     await expect(disabledBtn).toBeVisible()
   })
 
-  test('yesterday is disabled', async ({ page }) => {
+  test('yesterday is disabled in the calendar', async ({ page }) => {
     await page.goto(BUSINESS)
-    await page.locator('button').filter({ hasText: 'Today' }).click()
+    await page.locator('[data-testid="calendar-btn"]').click()
 
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)

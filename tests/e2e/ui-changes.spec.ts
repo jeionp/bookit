@@ -725,8 +725,9 @@ test.describe('HomeTab — mobile carousel (<1280px)', () => {
 
   test('court cards are in a horizontal flex scroll container on mobile', async ({ page }) => {
     await page.goto(BUSINESS)
-    // The carousel container is a flex overflow-x-auto container on mobile
-    const carouselContainer = page.locator('.overflow-x-auto.scrollbar-hide')
+    // The courts carousel container is a flex overflow-x-auto container on mobile.
+    // Use the testid to avoid ambiguity with the date-strip which shares the same classes.
+    const carouselContainer = page.locator('[data-testid="courts-carousel"]')
     await expect(carouselContainer).toBeAttached()
   })
 
@@ -756,18 +757,8 @@ test.describe('Instant slot selection', () => {
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     const tomorrowKey = tomorrow.toISOString().slice(0, 10)
-    const tomorrowDay = tomorrow.getDate().toString()
-
-    await page.locator('[data-testid="availability-section"] button').first().click()
-    await page.waitForTimeout(300)
-
-    const dayBtn = page.locator(`button[name="${tomorrowKey}"]`)
-    if (await dayBtn.isVisible().catch(() => false)) {
-      await dayBtn.click()
-    } else {
-      const fallback = page.locator('td button:not([disabled])').filter({ hasText: tomorrowDay })
-      await fallback.first().click()
-    }
+    // Strip chip for tomorrow is directly visible — no need to open calendar first
+    await page.locator(`button[name="${tomorrowKey}"]`).first().click()
     await page.waitForSelector('[data-testid="slot-grid-ready"]', { timeout: 10000 })
     await page.waitForTimeout(500)
   }
@@ -868,6 +859,59 @@ test.describe('Instant slot selection', () => {
 
     // Active slots must remain enabled (not disabled) so they can be tapped to deselect
     await expect(firstSlot).not.toBeDisabled()
+  })
+})
+
+// ─── 13. Date strip ───────────────────────────────────────────────────────────
+
+test.describe('Date strip', () => {
+  test('date strip is present in the availability section', async ({ page }) => {
+    await page.goto(BUSINESS)
+    await expect(page.locator('[data-testid="date-strip"]')).toBeAttached()
+  })
+
+  test('strip contains a chip labelled "Today"', async ({ page }) => {
+    await page.goto(BUSINESS)
+    const strip = page.locator('[data-testid="date-strip"]')
+    await expect(strip.locator('button', { hasText: 'Today' })).toBeAttached()
+  })
+
+  test('strip contains at least 7 tappable day chips', async ({ page }) => {
+    await page.goto(BUSINESS)
+    // Chips are buttons with a name attribute (dateKey format YYYY-MM-DD)
+    const chips = page.locator('[data-testid="date-strip"] button[name]')
+    const count = await chips.count()
+    // 14 day chips + 1 calendar button = 15, but some days may be closed (disabled)
+    // At minimum 7 visible chips (1 week) + calendar button
+    expect(count).toBeGreaterThanOrEqual(8)
+  })
+
+  test('tapping tomorrow chip loads that day\'s slots', async ({ page }) => {
+    await page.goto(BUSINESS)
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowKey = tomorrow.toISOString().slice(0, 10)
+
+    await page.locator(`button[name="${tomorrowKey}"]`).first().click()
+    // Slot grid should reload for the new date
+    await page.waitForSelector('[data-testid="slot-grid-ready"]', { timeout: 10000 })
+    await expect(page.locator('[data-testid="slot-grid-ready"]')).toBeAttached()
+  })
+
+  test('calendar "More" button opens the DayPicker dropdown', async ({ page }) => {
+    await page.goto(BUSINESS)
+    const calBtn = page.locator('[data-testid="calendar-btn"]')
+    await calBtn.click()
+    await expect(page.locator('[data-testid="calendar-dropdown"]')).toBeAttached({ timeout: 5000 })
+  })
+
+  test('today chip is present and tappable on initial load', async ({ page }) => {
+    await page.goto(BUSINESS)
+    const today = new Date()
+    const todayKey = today.toISOString().slice(0, 10)
+    const todayChip = page.locator(`button[name="${todayKey}"]`).first()
+    await expect(todayChip).toBeAttached()
+    await expect(todayChip).not.toBeDisabled()
   })
 })
 

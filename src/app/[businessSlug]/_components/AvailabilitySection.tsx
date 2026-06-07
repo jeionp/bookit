@@ -68,6 +68,7 @@ export default function AvailabilitySection({
     business.facilities.find((f) => f.id === selectedFacilityId) ??
     business.facilities[0];
 
+  const accentColor = business.accentColor;
   const dateKey = toDateKey(selectedDate);
   const isToday = dateKey === toDateKey(today);
   const dayName = selectedDate.toLocaleDateString("en-US", { weekday: "long" });
@@ -85,6 +86,19 @@ export default function AvailabilitySection({
     d.setDate(d.getDate() + 30);
     return d;
   }, [today]);
+
+  // 14-day strip
+  const stripDays = useMemo(() => {
+    const days: Date[] = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, [today]);
+
+  const selectedBeyondStrip = selectedDate > stripDays[stripDays.length - 1];
 
   const fetchKey = `${facility.id}:${dateKey}`;
   const loadingSlots = loadedKey !== fetchKey;
@@ -144,42 +158,86 @@ export default function AvailabilitySection({
         </p>
       </div>
 
-      {/* Date selector */}
+      {/* Date strip + calendar overflow */}
       <div className="relative" ref={calendarRef}>
-        <button
-          onClick={() => setCalendarOpen((o) => !o)}
-          className="flex items-center gap-3 w-full px-4 py-3 rounded-2xl border-2 bg-white transition-all hover:shadow-sm"
-          style={{ borderColor: calendarOpen ? business.accentColor : "#e5e7eb" }}
+        <div
+          data-testid="date-strip"
+          className="flex gap-2 overflow-x-auto scrollbar-hide pb-1"
         >
-          <span
-            className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0"
-            style={{ backgroundColor: `${business.accentColor}18` }}
-          >
-            <CalendarDays size={18} style={{ color: business.accentColor }} />
-          </span>
-          <div className="flex-1 text-left">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-              {isToday ? "Today" : dayName}
-            </p>
-            <p className="text-base font-bold text-gray-900 leading-tight">
-              {selectedDate.toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </p>
-          </div>
-          <ChevronRight
-            size={16}
-            className="text-gray-400 transition-transform shrink-0"
-            style={{ transform: calendarOpen ? "rotate(90deg)" : "rotate(0deg)" }}
-          />
-        </button>
+          {stripDays.map((date) => {
+            const key = toDateKey(date);
+            const dn = date.toLocaleDateString("en-US", { weekday: "long" });
+            const abbr = date.toLocaleDateString("en-US", { weekday: "short" });
+            const ops = (facility.operatingHours ?? business.operatingHours).find((h) => h.day === dn);
+            const isClosed = !ops || ops.closed;
+            const isSelected = key === dateKey;
+            const isTodayChip = key === toDateKey(today);
 
+            return (
+              <button
+                key={key}
+                name={key}
+                onClick={() => selectDate(date)}
+                className={`shrink-0 flex flex-col items-center justify-center w-11 h-14 rounded-2xl
+                  transition-all border-2 cursor-pointer
+                  ${isSelected ? "text-white" : "text-gray-700"}
+                  ${isClosed && !isSelected ? "opacity-30" : "hover:brightness-95"}
+                `}
+                style={
+                  isSelected
+                    ? { backgroundColor: accentColor, borderColor: accentColor }
+                    : isTodayChip
+                    ? { borderColor: accentColor, backgroundColor: `${accentColor}12` }
+                    : { borderColor: "transparent", backgroundColor: "#f9fafb" }
+                }
+              >
+                <span className="text-[9px] font-bold uppercase tracking-wide leading-none">
+                  {isTodayChip ? "Today" : abbr}
+                </span>
+                <span className="text-base font-bold leading-none mt-0.5">
+                  {date.getDate()}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Calendar overflow — for dates beyond 14 days */}
+          <button
+            data-testid="calendar-btn"
+            onClick={() => setCalendarOpen((o) => !o)}
+            className={`shrink-0 flex flex-col items-center justify-center w-11 h-14 rounded-2xl
+              border-2 transition-all cursor-pointer
+              ${calendarOpen ? "text-white" : "text-gray-400 hover:bg-gray-50"}
+            `}
+            style={
+              calendarOpen
+                ? { backgroundColor: accentColor, borderColor: accentColor }
+                : { borderColor: "#e5e7eb" }
+            }
+          >
+            <CalendarDays size={15} />
+            <span className="text-[9px] font-bold uppercase tracking-wide mt-1 leading-none">
+              More
+            </span>
+          </button>
+        </div>
+
+        {/* Indicator when selected date is beyond the 14-day strip */}
+        {selectedBeyondStrip && (
+          <p className="text-xs text-gray-500 mt-1.5">
+            Selected:{" "}
+            <span className="font-semibold" style={{ color: accentColor }}>
+              {selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+            </span>
+          </p>
+        )}
+
+        {/* Full calendar dropdown for dates beyond the strip */}
         {calendarOpen && (
           <div
+            data-testid="calendar-dropdown"
             className="absolute top-full left-0 mt-2 z-40 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden w-fit"
-            style={{ "--rdp-accent-color": business.accentColor } as React.CSSProperties}
+            style={{ "--rdp-accent-color": accentColor } as React.CSSProperties}
           >
             <DayPicker
               mode="single"
@@ -231,7 +289,7 @@ export default function AvailabilitySection({
       <SlotGrid
         slots={slots}
         facility={facility}
-        accentColor={business.accentColor}
+        accentColor={accentColor}
         loadingSlots={loadingSlots}
         emptyMessage={
           todayHours?.closed
@@ -248,7 +306,7 @@ export default function AvailabilitySection({
       <BookingActionBar
         activeSelection={activeSelection}
         selectedDate={selectedDate}
-        accentColor={business.accentColor}
+        accentColor={accentColor}
         onBook={onBook}
       />
 
