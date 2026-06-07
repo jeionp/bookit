@@ -11,6 +11,7 @@ import {
   Users,
   Droplets,
   Package,
+  ExternalLink,
 } from "lucide-react";
 import { Business } from "@/lib/types";
 import StarRating from "@/components/ui/StarRating";
@@ -149,15 +150,33 @@ export default function Sidebar({ business }: { business: Business }) {
 
       {/* Location */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-100">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-bold text-gray-900">Location</h2>
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.address)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            Open in Maps
+            <ExternalLink size={10} />
+          </a>
         </div>
-        <div className="h-36 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-          <div className="text-center space-y-1.5">
-            <MapPin size={22} className="mx-auto text-gray-400" />
-            <p className="text-xs font-medium text-gray-500 px-4">{business.address}</p>
-            <p className="text-[10px] text-gray-400">Map coming soon</p>
-          </div>
+        <div className="h-48 relative">
+          <iframe
+            title={`Map of ${business.name}`}
+            src={
+              business.mapUrl ||
+              `https://maps.google.com/maps?q=${encodeURIComponent(business.address)}&t=&z=15&ie=UTF8&iwloc=&output=embed`
+            }
+            className="w-full h-full border-0"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        </div>
+        <div className="px-4 py-2.5 border-t border-gray-100 flex items-start gap-2">
+          <MapPin size={12} className="text-gray-400 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-gray-500 leading-snug">{business.address}</p>
         </div>
       </div>
     </div>

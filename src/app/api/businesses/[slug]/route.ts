@@ -21,6 +21,7 @@ export async function PATCH(
     "address", "phone", "email", "accentColor",
     "facilities", "amenities", "operatingHours",
     "accepts_qr", "accepts_cash", "static_qr_url",
+    "mapUrl",
   ]);
 
   const raw = await req.json();

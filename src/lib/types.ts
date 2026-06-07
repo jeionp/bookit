@@ -91,4 +91,5 @@ export interface Business {
   saas_credit_balance?: number;
   static_qr_url?: string | null;
   gateway_sub_account_id?: string | null;
+  mapUrl?: string | null;
 }

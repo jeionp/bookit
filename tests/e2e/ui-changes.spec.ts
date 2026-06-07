@@ -948,3 +948,75 @@ test.describe('Sidebar — About section always visible', () => {
     })
   })
 })
+
+// ─── Section 15: Business map ─────────────────────────────────────────────────
+
+test.describe('Sidebar — Location map', () => {
+  test.describe('desktop (≥1280px)', () => {
+    test.use({ viewport: { width: 1280, height: 900 } })
+
+    test('Location section is visible with a map iframe', async ({ page }) => {
+      await page.goto(BUSINESS)
+      // Scroll the sidebar location section into view
+      const locationHeader = page.locator('h2', { hasText: 'Location' })
+      await expect(locationHeader).toBeVisible({ timeout: 8_000 })
+      await locationHeader.scrollIntoViewIfNeeded()
+
+      // iframe is present and has a Google Maps src
+      const mapIframe = page.locator('iframe[title*="Map of"]')
+      await expect(mapIframe).toBeVisible()
+      const src = await mapIframe.getAttribute('src')
+      expect(src).toContain('maps.google.com')
+    })
+
+    test('"Open in Maps" link points to Google Maps with the business address', async ({ page }) => {
+      await page.goto(BUSINESS)
+      const openLink = page.locator('a', { hasText: 'Open in Maps' })
+      await openLink.scrollIntoViewIfNeeded()
+      await expect(openLink).toBeVisible({ timeout: 8_000 })
+      const href = await openLink.getAttribute('href')
+      expect(href).toContain('google.com/maps')
+      expect(href).toContain('Katipunan') // part of the seeded paddleup address
+    })
+
+    test('address text is shown below the map iframe', async ({ page }) => {
+      await page.goto(BUSINESS)
+      const locationSection = page.locator('div.bg-white.rounded-2xl', {
+        has: page.locator('h2', { hasText: 'Location' }),
+      })
+      await locationSection.scrollIntoViewIfNeeded()
+      await expect(locationSection).toContainText('Katipunan')
+    })
+  })
+
+  test.describe('mobile Info tab (<1280px)', () => {
+    test.use({ viewport: { width: 390, height: 844 } })
+
+    test('map is visible in the mobile Info tab', async ({ page }) => {
+      await page.goto(BUSINESS)
+      await page.getByRole('button', { name: 'Info' }).click()
+
+      // Both sidebars (desktop + mobile) are in the DOM — scope to the xl:hidden wrapper
+      const infoTabWrapper = page.locator('.xl\\:hidden', {
+        has: page.locator('.space-y-4'),
+      })
+      const mapIframe = infoTabWrapper.locator('iframe[title*="Map of"]')
+      await expect(mapIframe).toBeVisible({ timeout: 8_000 })
+      const src = await mapIframe.getAttribute('src')
+      expect(src).toContain('maps.google.com')
+    })
+
+    test('"Open in Maps" link is accessible from the mobile Info tab', async ({ page }) => {
+      await page.goto(BUSINESS)
+      await page.getByRole('button', { name: 'Info' }).click()
+
+      const infoTabWrapper = page.locator('.xl\\:hidden', {
+        has: page.locator('.space-y-4'),
+      })
+      const openLink = infoTabWrapper.locator('a', { hasText: 'Open in Maps' })
+      await expect(openLink).toBeVisible({ timeout: 8_000 })
+      const href = await openLink.getAttribute('href')
+      expect(href).toContain('google.com/maps')
+    })
+  })
+})
