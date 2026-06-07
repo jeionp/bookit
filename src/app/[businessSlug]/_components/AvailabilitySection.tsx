@@ -235,6 +235,7 @@ export default function AvailabilitySection({
         {/* Full calendar dropdown for dates beyond the strip */}
         {calendarOpen && (
           <div
+            data-testid="calendar-dropdown"
             className="absolute top-full left-0 mt-2 z-40 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden w-fit"
             style={{ "--rdp-accent-color": accentColor } as React.CSSProperties}
           >

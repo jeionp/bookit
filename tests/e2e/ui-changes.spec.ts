@@ -902,8 +902,7 @@ test.describe('Date strip', () => {
     await page.goto(BUSINESS)
     const calBtn = page.locator('[data-testid="calendar-btn"]')
     await calBtn.click()
-    // DayPicker renders month/weekday structure — check for a weekday abbreviation heading
-    await expect(page.locator('[class*="weekday"]').first()).toBeAttached({ timeout: 5000 })
+    await expect(page.locator('[data-testid="calendar-dropdown"]')).toBeAttached({ timeout: 5000 })
   })
 
   test('today chip is present and tappable on initial load', async ({ page }) => {
