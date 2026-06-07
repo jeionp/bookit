@@ -75,9 +75,6 @@ export default function SlotGrid({
                 if (state === "active") {
                   cls += "text-white border-transparent cursor-pointer";
                   style = { backgroundColor: accentColor, borderColor: accentColor };
-                } else if (state === "pending-start") {
-                  cls += "text-white border-transparent cursor-pointer animate-pulse";
-                  style = { backgroundColor: accentColor };
                 } else if (state === "available") {
                   cls += "border-transparent cursor-pointer hover:brightness-95";
                   style = { backgroundColor: `${accentColor}20`, color: accentColor };
