@@ -86,10 +86,11 @@ test.describe('Business page', () => {
     await page.goto(BUSINESS)
     const list = page.locator('[data-testid="courts-list"]')
     await expect(list).toBeVisible()
-    await expect(list.getByText('Court 1')).toBeVisible()
-    await expect(list.getByText('Court 2')).toBeVisible()
-    await expect(list.getByText('Court 3 (Indoor)')).toBeVisible()
-    await expect(list.getByText('Court 4 (Indoor)')).toBeVisible()
+    // toContainText avoids strict-mode multi-match from the dual mobile/desktop renders
+    await expect(list).toContainText('Court 1')
+    await expect(list).toContainText('Court 2')
+    await expect(list).toContainText('Court 3 (Indoor)')
+    await expect(list).toContainText('Court 4 (Indoor)')
   })
 
   test('shows Home and My Bookings navigation tabs', async ({ page }) => {

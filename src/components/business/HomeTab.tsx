@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import { Business } from "@/lib/types";
 import { toDateKey, generateSlots } from "@/lib/slots";
 import AvailabilitySection, { Selection } from "@/app/[businessSlug]/_components/AvailabilitySection";
@@ -83,44 +83,84 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
               </span>
             </div>
 
-            <div data-testid="courts-list" className="flex flex-col gap-2">
+            {/*
+              Mobile: horizontal scrollable chip row (like the date strip).
+              Desktop: vertical text list with radio indicator.
+              Two separate elements per facility so each breakpoint gets
+              its own layout and colour treatment without inline-style hacks.
+            */}
+            <div
+              data-testid="courts-list"
+              className="flex gap-2 overflow-x-auto scrollbar-hide pb-1
+                         xl:flex-col xl:overflow-visible xl:pb-0"
+            >
               {business.facilities.map((facility) => {
                 const active = selectedFacilityId === facility.id;
                 const badge = occupancyBadge(facility.id);
                 return (
-                  <button
-                    key={facility.id}
-                    onClick={() => selectFacility(facility.id)}
-                    data-testid="court-list-item"
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all cursor-pointer text-left hover:shadow-sm"
-                    style={{
-                      borderColor: active ? business.accentColor : "transparent",
-                      backgroundColor: active ? `${business.accentColor}0d` : "#f9fafb",
-                    }}
-                  >
-                    <span
-                      className="shrink-0 w-3.5 h-3.5 rounded-full border-2 transition-colors"
-                      style={active
-                        ? { backgroundColor: business.accentColor, borderColor: business.accentColor }
-                        : { borderColor: "#d1d5db" }}
-                    />
-                    <span className="flex-1 min-w-0">
-                      <span className="text-sm font-bold text-gray-900 block truncate">{facility.name}</span>
-                      <span className="text-xs font-semibold" style={{ color: business.accentColor }}>
-                        {facility.primePricePerHour ? "from " : ""}
-                        ₱{facility.pricePerHour.toLocaleString()}
-                        <span className="font-normal text-gray-400">/hr</span>
-                      </span>
-                    </span>
-                    {badge && (
+                  <Fragment key={facility.id}>
+
+                    {/* ── Mobile chip (hidden at xl) ── */}
+                    <button
+                      onClick={() => selectFacility(facility.id)}
+                      data-testid="court-chip"
+                      className="xl:hidden shrink-0 flex flex-col items-center justify-center
+                                 px-3 py-2 rounded-xl border-2 min-w-[72px] transition-all cursor-pointer"
+                      style={{
+                        borderColor: active ? business.accentColor : "transparent",
+                        backgroundColor: active ? business.accentColor : "#f9fafb",
+                      }}
+                    >
                       <span
-                        className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                        style={{ backgroundColor: badge.bg, color: badge.text }}
+                        className="text-xs font-bold leading-tight text-center truncate max-w-[80px]"
+                        style={{ color: active ? "white" : "#111827" }}
                       >
-                        {badge.label}
+                        {facility.name}
                       </span>
-                    )}
-                  </button>
+                      <span
+                        className="text-[10px] font-semibold mt-0.5"
+                        style={{ color: active ? "rgba(255,255,255,0.8)" : business.accentColor }}
+                      >
+                        {facility.primePricePerHour ? "from " : ""}₱{facility.pricePerHour.toLocaleString()}
+                      </span>
+                    </button>
+
+                    {/* ── Desktop list row (hidden below xl) ── */}
+                    <button
+                      onClick={() => selectFacility(facility.id)}
+                      data-testid="court-list-item"
+                      className="hidden xl:flex w-full items-center gap-3 px-3 py-2.5
+                                 rounded-xl border-2 transition-all cursor-pointer text-left hover:shadow-sm"
+                      style={{
+                        borderColor: active ? business.accentColor : "transparent",
+                        backgroundColor: active ? `${business.accentColor}0d` : "#f9fafb",
+                      }}
+                    >
+                      <span
+                        className="shrink-0 w-3.5 h-3.5 rounded-full border-2 transition-colors"
+                        style={active
+                          ? { backgroundColor: business.accentColor, borderColor: business.accentColor }
+                          : { borderColor: "#d1d5db" }}
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="text-sm font-bold text-gray-900 block truncate">{facility.name}</span>
+                        <span className="text-xs font-semibold" style={{ color: business.accentColor }}>
+                          {facility.primePricePerHour ? "from " : ""}
+                          ₱{facility.pricePerHour.toLocaleString()}
+                          <span className="font-normal text-gray-400">/hr</span>
+                        </span>
+                      </span>
+                      {badge && (
+                        <span
+                          className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          style={{ backgroundColor: badge.bg, color: badge.text }}
+                        >
+                          {badge.label}
+                        </span>
+                      )}
+                    </button>
+
+                  </Fragment>
                 );
               })}
             </div>

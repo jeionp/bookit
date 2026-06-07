@@ -700,28 +700,30 @@ test.describe('HomeTab — desktop court list (≥1280px)', () => {
   })
 })
 
-// ─── 11. HomeTab — mobile court list (<1280px) ───────────────────────────────
+// ─── 11. HomeTab — mobile court chips (<1280px) ──────────────────────────────
 
-test.describe('HomeTab — mobile court list (<1280px)', () => {
+test.describe('HomeTab — mobile court chips (<1280px)', () => {
   test.use({ viewport: { width: 375, height: 812 } })
 
-  test('court list is present on mobile', async ({ page }) => {
+  test('court chip row is present on mobile', async ({ page }) => {
     await page.goto(BUSINESS)
     await expect(page.locator('[data-testid="courts-list"]')).toBeAttached()
   })
 
-  test('court list items are visible on mobile', async ({ page }) => {
+  test('court chips are visible and show court name + price on mobile', async ({ page }) => {
     await page.goto(BUSINESS)
-    await expect(page.locator('[data-testid="court-list-item"]').first()).toBeVisible({ timeout: 8_000 })
+    const chip = page.locator('[data-testid="court-chip"]').first()
+    await expect(chip).toBeVisible({ timeout: 8_000 })
+    // Each chip shows a court name and a price starting with ₱
+    await expect(chip.getByText(/₱/)).toBeVisible()
   })
 
-  test('tapping a court list row on mobile scrolls to availability section', async ({ page }) => {
+  test('tapping a court chip on mobile scrolls to availability section', async ({ page }) => {
     await page.goto(BUSINESS)
     const scrollBefore = await page.evaluate(() => window.scrollY)
-    await page.locator('[data-testid="court-list-item"]').first().click()
+    await page.locator('[data-testid="court-chip"]').first().click()
     await page.waitForTimeout(600)
     const scrollAfter = await page.evaluate(() => window.scrollY)
-    // On mobile, selecting a court should scroll down to availability
     expect(scrollAfter).toBeGreaterThanOrEqual(scrollBefore)
   })
 })
