@@ -238,7 +238,7 @@ test.describe('GET /api/admin-team', () => {
 
 // ─── Settings UI ─────────────────────────────────────────────────────────────
 
-async function signInAsAdmin(page: import('@playwright/test').Page) {
+async function goToAdminSettings(page: import('@playwright/test').Page) {
   await page.goto('/paddleup')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByText('Welcome back')).toBeVisible({ timeout: 8_000 })
@@ -246,31 +246,27 @@ async function signInAsAdmin(page: import('@playwright/test').Page) {
   await page.getByPlaceholder('••••••••').fill(ADMIN_PASS)
   await page.locator('form').getByRole('button', { name: /sign in/i }).click()
   await expect(page.getByText('Welcome back')).not.toBeAttached({ timeout: 8_000 })
+  await page.getByRole('link', { name: 'Admin', exact: true }).click()
+  await expect(page.getByLabel('Next day')).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-save-btn')).toBeVisible({ timeout: 8_000 })
 }
 
 test.describe('Settings UI — Team Members', () => {
-  test.use({ viewport: { width: 390, height: 844 } })
-
   test('Team Members section is visible in Settings', async ({ page }) => {
-    await signInAsAdmin(page)
-    await page.goto('/paddleup')
-    await page.getByRole('tab', { name: /settings/i }).click()
+    await goToAdminSettings(page)
     await expect(page.getByText('Team Members')).toBeVisible({ timeout: 10_000 })
   })
 
   test('opening Team Members shows invite form', async ({ page }) => {
-    await signInAsAdmin(page)
-    await page.goto('/paddleup')
-    await page.getByRole('tab', { name: /settings/i }).click()
+    await goToAdminSettings(page)
     await page.getByText('Team Members').click()
     await expect(page.getByTestId('invite-email-input')).toBeVisible({ timeout: 5_000 })
     await expect(page.getByTestId('invite-submit-btn')).toBeVisible()
   })
 
   test('invite form submits and shows success message', async ({ page }) => {
-    await signInAsAdmin(page)
-    await page.goto('/paddleup')
-    await page.getByRole('tab', { name: /settings/i }).click()
+    await goToAdminSettings(page)
     await page.getByText('Team Members').click()
     await page.getByTestId('invite-email-input').fill('brand-new@example.com')
     await page.getByTestId('invite-submit-btn').click()
