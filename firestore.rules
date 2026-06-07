@@ -87,5 +87,12 @@ service cloud.firestore {
       // All writes go through Admin SDK (POST /api/reviews, DELETE /api/reviews/[id])
       allow write: if false;
     }
+
+    match /invites/{token} {
+      // Public read — the token itself is the secret; bearer of the URL can validate it
+      allow read: if true;
+      // All writes go through Admin SDK (POST /api/invite, POST /api/accept-invite)
+      allow write: if false;
+    }
   }
 }

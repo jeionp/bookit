@@ -4,6 +4,7 @@ export const COLL = {
   BUSINESSES:    "businesses",
   ADMINS:        "admins",
   CREDIT_LEDGER: "credit_ledger",
+  INVITES:       "invites",
 } as const;
 
 /** Valid payment_status_v2 values */
