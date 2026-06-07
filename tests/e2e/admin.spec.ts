@@ -1338,7 +1338,7 @@ test.describe('Admin settings tab', () => {
     await expect(page.getByText('Closed on this day')).toBeVisible({ timeout: 8_000 })
 
     // Switch to Court 2 (uses business hours) — must show available slots
-    await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 2' })
+    await page.locator('[data-testid="court-list-item"]').filter({ hasText: 'Court 2' }).click()
     await page.getByTestId('slot-grid-loading').waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {})
     await expect(page.getByTestId('slot-grid-ready')).toBeVisible({ timeout: 10_000 })
 
@@ -1355,7 +1355,7 @@ test.describe('Admin settings tab', () => {
 
     await page.goto(STOREFRONT)
     await expect(
-      page.getByTestId('availability-section').locator('select')
+      page.locator('[data-testid="courts-list"]')
     ).toContainText('New Court', { timeout: 8_000 })
   })
 
@@ -1373,7 +1373,7 @@ test.describe('Admin settings tab', () => {
 
     await page.goto(STOREFRONT)
     await expect(
-      page.getByTestId('availability-section').locator('select')
+      page.locator('[data-testid="courts-list"]')
     ).not.toContainText('Court 8 (VIP)', { timeout: 8_000 })
   })
 })

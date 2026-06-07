@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import Image from "next/image";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import { Business } from "@/lib/types";
 import { toDateKey, generateSlots } from "@/lib/slots";
 import AvailabilitySection, { Selection } from "@/app/[businessSlug]/_components/AvailabilitySection";
@@ -17,9 +15,6 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
     business.facilities[0]?.id ?? ""
   );
   const availabilityRef = useRef<HTMLDivElement>(null);
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const [todayBookedCounts, setTodayBookedCounts] = useState<Record<string, number>>({});
 
@@ -58,30 +53,6 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
     return null;
   }
 
-  const updateScrollState = useCallback(() => {
-    const el = carouselRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
-
-  useEffect(() => {
-    const el = carouselRef.current;
-    if (!el) return;
-    updateScrollState();
-    el.addEventListener("scroll", updateScrollState, { passive: true });
-    const ro = new ResizeObserver(updateScrollState);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", updateScrollState);
-      ro.disconnect();
-    };
-  }, [updateScrollState]);
-
-  function scroll(dir: "left" | "right") {
-    carouselRef.current?.scrollBy({ left: dir === "left" ? -220 : 220, behavior: "smooth" });
-  }
-
   const facilityLabel =
     business.type === "court" ? "Courts" :
     business.type === "appointment" ? "Services" : "Rooms";
@@ -105,101 +76,93 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
         {/* Courts — sticky on desktop */}
         <div className="xl:sticky xl:top-[72px] xl:self-start">
           <section>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold text-gray-900">{facilityLabel}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 font-medium">
-                  {business.facilities.length} available
-                </span>
-                {/* Scroll buttons — mobile carousel only */}
-                <div className="flex gap-1 xl:hidden">
-                  <button
-                    onClick={() => scroll("left")}
-                    disabled={!canScrollLeft}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-30 disabled:cursor-default"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <button
-                    onClick={() => scroll("right")}
-                    disabled={!canScrollRight}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-30 disabled:cursor-default"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
+              <span className="text-xs text-gray-400 font-medium">
+                {business.facilities.length} available
+              </span>
             </div>
 
-            <div className="relative">
-              {/* Mobile: horizontal carousel. Desktop: 1-column vertical list. */}
-              <div
-                ref={carouselRef}
-                data-testid="courts-carousel"
-                className="flex gap-3 overflow-x-auto scrollbar-hide pb-1
-                           xl:grid xl:grid-cols-1 xl:overflow-visible xl:gap-3 xl:pb-0"
-              >
-                {business.facilities.map((facility) => {
-                  const active = selectedFacilityId === facility.id;
-                  return (
-                    <div
-                      key={facility.id}
+            {/*
+              Mobile: horizontal scrollable chip row (like the date strip).
+              Desktop: vertical text list with radio indicator.
+              Two separate elements per facility so each breakpoint gets
+              its own layout and colour treatment without inline-style hacks.
+            */}
+            <div
+              data-testid="courts-list"
+              className="flex gap-2 overflow-x-auto scrollbar-hide pb-1
+                         xl:flex-col xl:overflow-visible xl:pb-0"
+            >
+              {business.facilities.map((facility) => {
+                const active = selectedFacilityId === facility.id;
+                const badge = occupancyBadge(facility.id);
+                return (
+                  <Fragment key={facility.id}>
+
+                    {/* ── Mobile chip (hidden at xl) ── */}
+                    <button
                       onClick={() => selectFacility(facility.id)}
-                      className="shrink-0 w-52 xl:w-auto rounded-2xl overflow-hidden border-2 bg-white hover:shadow-md transition-all cursor-pointer flex flex-col"
-                      style={{ borderColor: active ? business.accentColor : "#f3f4f6" }}
+                      data-testid="court-chip"
+                      className="xl:hidden shrink-0 flex flex-col items-center justify-center
+                                 px-3 py-2 rounded-xl border-2 min-w-[72px] transition-all cursor-pointer"
+                      style={{
+                        borderColor: active ? business.accentColor : "transparent",
+                        backgroundColor: active ? business.accentColor : "#f9fafb",
+                      }}
                     >
-                      <div className="relative h-32 bg-gray-100">
-                        <Image
-                          src={facility.image || "/placeholder-court.svg"}
-                          alt={facility.name}
-                          fill
-                          className="object-cover"
-                          sizes="(min-width: 1280px) 280px, 208px"
-                        />
-                        {(() => {
-                          const badge = occupancyBadge(facility.id);
-                          return badge ? (
-                            <span
-                              className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                              style={{ backgroundColor: badge.bg, color: badge.text }}
-                            >
-                              {badge.label}
-                            </span>
-                          ) : null;
-                        })()}
-                      </div>
-                      <div className="p-3 flex flex-col flex-1">
-                        <h3 className="text-sm font-bold text-gray-900 leading-tight">{facility.name}</h3>
-                        <span className="text-xs font-semibold mt-0.5" style={{ color: business.accentColor }}>
+                      <span
+                        className="text-xs font-bold leading-tight text-center truncate max-w-[80px]"
+                        style={{ color: active ? "white" : "#111827" }}
+                      >
+                        {facility.name}
+                      </span>
+                      <span
+                        className="text-[10px] font-semibold mt-0.5"
+                        style={{ color: active ? "rgba(255,255,255,0.8)" : business.accentColor }}
+                      >
+                        {facility.primePricePerHour ? "from " : ""}₱{facility.pricePerHour.toLocaleString()}
+                      </span>
+                    </button>
+
+                    {/* ── Desktop list row (hidden below xl) ── */}
+                    <button
+                      onClick={() => selectFacility(facility.id)}
+                      data-testid="court-list-item"
+                      className="hidden xl:flex w-full items-center gap-3 px-3 py-2.5
+                                 rounded-xl border-2 transition-all cursor-pointer text-left hover:shadow-sm"
+                      style={{
+                        borderColor: active ? business.accentColor : "transparent",
+                        backgroundColor: active ? `${business.accentColor}0d` : "#f9fafb",
+                      }}
+                    >
+                      <span
+                        className="shrink-0 w-3.5 h-3.5 rounded-full border-2 transition-colors"
+                        style={active
+                          ? { backgroundColor: business.accentColor, borderColor: business.accentColor }
+                          : { borderColor: "#d1d5db" }}
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="text-sm font-bold text-gray-900 block truncate">{facility.name}</span>
+                        <span className="text-xs font-semibold" style={{ color: business.accentColor }}>
                           {facility.primePricePerHour ? "from " : ""}
                           ₱{facility.pricePerHour.toLocaleString()}
                           <span className="font-normal text-gray-400">/hr</span>
                         </span>
-                        <div className="mt-auto min-h-3" />
-                        <button
-                          onClick={(e) => { e.stopPropagation(); selectFacility(facility.id); }}
-                          className="w-full py-2 rounded-xl text-xs font-bold transition-colors"
-                          style={
-                            active
-                              ? { backgroundColor: business.accentColor, color: "white" }
-                              : { backgroundColor: `${business.accentColor}15`, color: business.accentColor }
-                          }
+                      </span>
+                      {badge && (
+                        <span
+                          className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          style={{ backgroundColor: badge.bg, color: badge.text }}
                         >
-                          {active ? "Selected ✓" : "Check availability →"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                {/* Trailing spacer — mobile only so last card isn't flush against edge */}
-                <div className="shrink-0 w-2 xl:hidden" />
-              </div>
+                          {badge.label}
+                        </span>
+                      )}
+                    </button>
 
-              {/* Gradient scroll indicators — mobile only */}
-              {canScrollLeft && (
-                <div className="xl:hidden pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-white to-transparent" />
-              )}
-              <div className="xl:hidden pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white to-transparent" />
+                  </Fragment>
+                );
+              })}
             </div>
           </section>
         </div>
@@ -210,7 +173,6 @@ export default function HomeTab({ business, onBook }: HomeTabProps) {
             business={business}
             onBook={onBook}
             selectedFacilityId={selectedFacilityId}
-            onFacilityChange={setSelectedFacilityId}
           />
         </div>
 

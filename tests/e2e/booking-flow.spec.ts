@@ -82,14 +82,15 @@ test.describe('Business page', () => {
     await expect(page.locator('aside span', { hasText: 'Katipunan Ave' })).toBeVisible()
   })
 
-  test('shows court selector dropdown in the availability section', async ({ page }) => {
+  test('shows court list with all facilities in the courts section', async ({ page }) => {
     await page.goto(BUSINESS)
-    const selector = page.getByTestId('availability-section').locator('select')
-    await expect(selector).toBeVisible()
-    await expect(selector.locator('option', { hasText: 'Court 1' })).toHaveCount(1)
-    await expect(selector.locator('option', { hasText: 'Court 2' })).toHaveCount(1)
-    await expect(selector.locator('option', { hasText: 'Court 3 (Indoor)' })).toHaveCount(1)
-    await expect(selector.locator('option', { hasText: 'Court 4 (Indoor)' })).toHaveCount(1)
+    const list = page.locator('[data-testid="courts-list"]')
+    await expect(list).toBeVisible()
+    // toContainText avoids strict-mode multi-match from the dual mobile/desktop renders
+    await expect(list).toContainText('Court 1')
+    await expect(list).toContainText('Court 2')
+    await expect(list).toContainText('Court 3 (Indoor)')
+    await expect(list).toContainText('Court 4 (Indoor)')
   })
 
   test('shows Home and My Bookings navigation tabs', async ({ page }) => {
@@ -311,8 +312,8 @@ test.describe('Court switching', () => {
     await selectSlot(page, '8 AM')
     await expect(page.getByRole('button', { name: /book now/i })).toBeVisible()
 
-    // Switch to Court 2 via the court selector dropdown in AvailabilitySection
-    await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 2' })
+    // Switch to Court 2 via the court list in the left column
+    await page.locator('[data-testid="court-list-item"]').filter({ hasText: 'Court 2' }).click()
     await expect(page.getByRole('button', { name: /book now/i })).not.toBeVisible()
   })
 
@@ -320,11 +321,11 @@ test.describe('Court switching', () => {
     await page.goto(BUSINESS)
     await waitForSlots(page)
 
-    // Court 3 (Indoor) standard rate = ₱700/hr
-    await page.getByTestId('availability-section').locator('select').selectOption({ label: 'Court 3 (Indoor)' })
+    // Court 3 (Indoor) standard rate = ₱700/hr — select via the court list
+    await page.locator('[data-testid="court-list-item"]').filter({ hasText: 'Court 3 (Indoor)' }).click()
     await waitForSlots(page)
 
-    await expect(page.getByTestId('availability-section').getByText(/₱700/)).toBeVisible()
+    await expect(page.locator('[data-testid="court-hero"]').getByText(/₱700/)).toBeVisible()
   })
 })
 
