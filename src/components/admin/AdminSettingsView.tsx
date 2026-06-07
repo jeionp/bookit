@@ -157,6 +157,17 @@ export default function AdminSettingsView({ business }: { business: Business }) 
               </div>
               <LabeledInput label="Location" value={draft.location} onChange={(v) => setField("location", v)} />
               <LabeledInput label="Address" value={draft.address} onChange={(v) => setField("address", v)} />
+              <div className="sm:col-span-2">
+                <LabeledInput
+                  label="Map Embed URL (optional)"
+                  value={draft.mapUrl ?? ""}
+                  onChange={(v) => setField("mapUrl", v || null)}
+                  placeholder="Leave blank to auto-generate from Address"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  To pin an exact location: open Google Maps → click the pin → Share → Embed a map → copy the <code className="font-mono">src</code> URL from the iframe code.
+                </p>
+              </div>
               <LabeledInput label="Phone" value={draft.phone} onChange={(v) => setField("phone", v)} />
               <LabeledInput label="Email" value={draft.email} onChange={(v) => setField("email", v)} />
               <div className="sm:col-span-2">
