@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Business } from "@/lib/types";
 import StarRating from "@/components/ui/StarRating";
+import ReviewsSection from "./ReviewsSection";
 
 const AMENITY_ICONS: Record<string, React.ReactNode> = {
   "Free Parking": <Car size={15} />,
@@ -94,6 +95,8 @@ export default function Sidebar({ business }: { business: Business }) {
         <h2 className="text-sm font-bold text-gray-900 mb-2">About</h2>
         <p className="text-xs text-gray-500 leading-relaxed">{business.description}</p>
       </div>
+
+      <ReviewsSection businessSlug={business.slug} accentColor={business.accentColor} />
 
       {/* Amenities */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5">

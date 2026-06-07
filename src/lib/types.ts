@@ -93,3 +93,14 @@ export interface Business {
   gateway_sub_account_id?: string | null;
   mapUrl?: string | null;
 }
+
+export interface Review {
+  id: string;        // same as bookingId — one review per booking
+  userId: string;
+  userName: string;
+  businessSlug: string;
+  bookingId: string;
+  rating: number;    // 1–5
+  comment: string;
+  createdAt: import("firebase/firestore").Timestamp;
+}

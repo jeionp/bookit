@@ -13,6 +13,7 @@ import { DAYS, defaultOperatingHours } from "@/lib/slots";
 import SettingsCourtsSection from "./SettingsCourtsSection";
 import SettingsPaymentSection from "./SettingsPaymentSection";
 import SettingsCreditsSection from "./SettingsCreditsSection";
+import SettingsReviewsSection from "./SettingsReviewsSection";
 
 
 export default function AdminSettingsView({ business }: { business: Business }) {
@@ -27,6 +28,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
     amenities: true,
     payment: true,
     credits: false,
+    reviews: false,
   });
 
   const isGoogleLinked = user?.providerData.some((p) => p.providerId === "google.com") ?? false;
@@ -269,6 +271,12 @@ export default function AdminSettingsView({ business }: { business: Business }) 
           user={user}
           open={sectionOpen.credits}
           onToggle={() => toggleSection("credits")}
+        />
+
+        <SettingsReviewsSection
+          businessSlug={business.slug}
+          open={sectionOpen.reviews}
+          onToggle={() => toggleSection("reviews")}
         />
 
         {!isGoogleLinked && (
