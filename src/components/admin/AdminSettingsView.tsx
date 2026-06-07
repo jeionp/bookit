@@ -14,6 +14,7 @@ import SettingsCourtsSection from "./SettingsCourtsSection";
 import SettingsPaymentSection from "./SettingsPaymentSection";
 import SettingsCreditsSection from "./SettingsCreditsSection";
 import SettingsReviewsSection from "./SettingsReviewsSection";
+import SettingsTeamSection from "./SettingsTeamSection";
 
 
 export default function AdminSettingsView({ business }: { business: Business }) {
@@ -29,6 +30,7 @@ export default function AdminSettingsView({ business }: { business: Business }) 
     payment: true,
     credits: false,
     reviews: false,
+    team: false,
   });
 
   const isGoogleLinked = user?.providerData.some((p) => p.providerId === "google.com") ?? false;
@@ -277,6 +279,13 @@ export default function AdminSettingsView({ business }: { business: Business }) 
           businessSlug={business.slug}
           open={sectionOpen.reviews}
           onToggle={() => toggleSection("reviews")}
+        />
+
+        <SettingsTeamSection
+          businessSlug={business.slug}
+          businessName={business.name}
+          open={sectionOpen.team}
+          onToggle={() => toggleSection("team")}
         />
 
         {!isGoogleLinked && (

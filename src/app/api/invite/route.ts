@@ -1,8 +1,13 @@
+import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { Timestamp } from "firebase-admin/firestore";
 import { requireUser, isAdminOf } from "@/lib/api/auth";
 import { requireString } from "@/lib/api/validation";
+import { adminDb, adminAuth } from "@/lib/firebase/admin-app";
+import { COLL } from "@/lib/api/constants";
+import { sendAdminInvite } from "@/lib/notifications/email";
 
 export interface InviteRequest {
   email:        string;
@@ -25,8 +30,6 @@ function getRatelimit(): Ratelimit | null {
   return ratelimit;
 }
 
-// TODO: replace stub with real email send (e.g. Resend, SendGrid, or Firebase Extensions).
-// The invite should link to /[businessSlug] with a "sign up" prompt pre-filled with the email.
 export async function POST(req: NextRequest) {
   const tokenOrRes = await requireUser(req);
   if (tokenOrRes instanceof NextResponse) return tokenOrRes;
@@ -56,6 +59,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  console.log("[api/invite] stub called:", body);
-  return NextResponse.json({ ok: true, stub: true });
+  let inviterName = "An admin";
+  try {
+    const inviterRecord = await adminAuth.getUser(uid);
+    inviterName = inviterRecord.displayName ?? inviterRecord.email ?? "An admin";
+  } catch {
+    // non-blocking — fall back to generic
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = Timestamp.fromDate(new Date(Date.now() + 48 * 60 * 60 * 1000));
+
+  await adminDb.collection(COLL.INVITES).doc(token).set({
+    token,
+    email,
+    businessSlug,
+    businessName,
+    invitedBy:  uid,
+    inviterName,
+    expiresAt,
+    createdAt:  Timestamp.now(),
+  });
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
+  const acceptUrl = `${baseUrl}/accept-invite?token=${token}`;
+
+  await sendAdminInvite({ inviteeEmail: email, businessName, businessSlug, inviterName, acceptUrl });
+
+  return NextResponse.json({ ok: true });
 }

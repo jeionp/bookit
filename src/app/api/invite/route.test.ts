@@ -2,7 +2,7 @@
  * Unit tests for POST /api/invite
  *
  * Tests auth (S7), admin-slug authorization, rate limiting, input validation,
- * and the happy-path stub response.
+ * and the happy-path (token written + invite email sent).
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest'
@@ -12,20 +12,39 @@ import { NextRequest } from 'next/server'
 
 const {
   mockVerifyIdToken,
+  mockGetUser,
   mockAdminDocGet,
+  mockInviteDocSet,
   mockRatelimitLimit,
+  mockSendAdminInvite,
 } = vi.hoisted(() => ({
   mockVerifyIdToken:   vi.fn(),
+  mockGetUser:         vi.fn(),
   mockAdminDocGet:     vi.fn(),
+  mockInviteDocSet:    vi.fn(),
   mockRatelimitLimit:  vi.fn(),
+  mockSendAdminInvite: vi.fn(),
 }))
 
 vi.mock('@/lib/firebase/admin-app', () => ({
-  adminAuth: { verifyIdToken: mockVerifyIdToken },
+  adminAuth: {
+    verifyIdToken: mockVerifyIdToken,
+    getUser:       mockGetUser,
+  },
   adminDb: {
     collection: () => ({
-      doc: () => ({ get: mockAdminDocGet }),
+      doc: () => ({
+        get: mockAdminDocGet,
+        set: mockInviteDocSet,
+      }),
     }),
+  },
+}))
+
+vi.mock('firebase-admin/firestore', () => ({
+  Timestamp: {
+    fromDate: (d: Date) => ({ toMillis: () => d.getTime() }),
+    now:      ()        => ({ toMillis: () => Date.now() }),
   },
 }))
 
@@ -38,6 +57,10 @@ vi.mock('@upstash/ratelimit', () => ({
 
 vi.mock('@upstash/redis', () => ({
   Redis: { fromEnv: vi.fn() },
+}))
+
+vi.mock('@/lib/notifications/email', () => ({
+  sendAdminInvite: mockSendAdminInvite,
 }))
 
 import { POST } from './route'
@@ -99,7 +122,6 @@ describe('POST /api/invite — input validation', () => {
   })
 
   test('returns 400 when email is missing', async () => {
-    // body validation happens before admin lookup, so no admin mock needed
     const res = await POST(makeReq({ businessSlug: 'paddleup', businessName: 'PaddleUp' }))
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ error: 'Invalid request' })
@@ -174,15 +196,35 @@ describe('POST /api/invite — happy path', () => {
       exists: true,
       data: () => ({ slugs: ['paddleup'] }),
     })
-    // Ensure any cached rate-limiter singleton passes through
+    mockGetUser.mockResolvedValue({ displayName: 'Admin User', email: 'admin@example.com' })
+    mockInviteDocSet.mockResolvedValue(undefined)
+    mockSendAdminInvite.mockResolvedValue(undefined)
+    // Rate-limiter singleton may be cached from previous test group — always allow
     mockRatelimitLimit.mockResolvedValue({ success: true })
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
   })
 
-  test('returns 200 { ok: true, stub: true } for valid admin request', async () => {
+  test('returns 200 { ok: true } and writes invite + sends email', async () => {
     const res = await POST(makeReq(VALID_BODY))
     expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ ok: true, stub: true })
+    expect(await res.json()).toMatchObject({ ok: true })
+    expect(mockInviteDocSet).toHaveBeenCalledOnce()
+    expect(mockSendAdminInvite).toHaveBeenCalledOnce()
+    const inviteArg = mockInviteDocSet.mock.calls[0][0] as Record<string, unknown>
+    expect(inviteArg.email).toBe('customer@example.com')
+    expect(inviteArg.businessSlug).toBe('paddleup')
+    expect(inviteArg.invitedBy).toBe('admin-uid')
+    expect(typeof inviteArg.token).toBe('string')
+    expect((inviteArg.token as string).length).toBe(64) // 32 bytes hex
+  })
+
+  test('gracefully falls back when getUser throws', async () => {
+    mockGetUser.mockRejectedValue(new Error('User not found'))
+    const res = await POST(makeReq(VALID_BODY))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
+    const inviteArg = mockInviteDocSet.mock.calls[0][0] as Record<string, unknown>
+    expect(inviteArg.inviterName).toBe('An admin')
   })
 })

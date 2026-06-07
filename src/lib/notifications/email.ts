@@ -813,6 +813,89 @@ export async function sendPaymentRejected(data: PaymentRejectedData): Promise<vo
   }
 }
 
+export interface AdminInviteData {
+  inviteeEmail: string;
+  businessName: string;
+  businessSlug: string;
+  inviterName: string;
+  acceptUrl:   string;
+}
+
+function buildAdminInviteHtml(data: AdminInviteData): string {
+  const businessName = escapeHtml(data.businessName);
+  const inviterName  = escapeHtml(data.inviterName);
+  const acceptUrl    = escapeHtml(data.acceptUrl);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+        <tr>
+          <td style="background:#111827;padding:28px 32px;">
+            <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;letter-spacing:0.08em;text-transform:uppercase;">${businessName}</p>
+            <h1 style="margin:0;font-size:22px;font-weight:600;color:#ffffff;">You've been invited to manage ${businessName}</h1>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:28px 32px 0;">
+            <p style="margin:0 0 20px;font-size:15px;color:#374151;">
+              <strong>${inviterName}</strong> has invited you to be an admin of <strong>${businessName}</strong> on bookit.
+              Click the button below to accept and gain access to the admin dashboard.
+            </p>
+            <p style="margin:0 0 28px;">
+              <a href="${acceptUrl}"
+                 style="display:inline-block;padding:12px 24px;background:#111827;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px;">
+                Accept Invitation →
+              </a>
+            </p>
+            <p style="margin:0 0 28px;font-size:12px;color:#9ca3af;">
+              This invitation link expires in 48 hours. If you didn't expect this email, you can ignore it.
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
+              If the button doesn't work, copy this link:<br>
+              <a href="${acceptUrl}" style="color:#6b7280;word-break:break-all;">${acceptUrl}</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendAdminInvite(data: AdminInviteData): Promise<void> {
+  const client = getResend();
+  if (!client) {
+    console.warn("[notifications] RESEND_API_KEY not set — skipping admin invite email");
+    return;
+  }
+
+  const from = process.env.RESEND_FROM_ADDRESS ?? "onboarding@resend.dev";
+
+  try {
+    await client.emails.send({
+      from,
+      to:      data.inviteeEmail,
+      subject: sanitizeSubject(`You're invited to manage ${data.businessName} on bookit`),
+      html:    buildAdminInviteHtml(data),
+    });
+  } catch (err) {
+    console.error("[notifications] failed to send admin invite email:", err);
+  }
+}
+
 export function sendConfirmationEmails(data: BookingConfirmationData, logContext: string): void {
   Promise.all([
     sendBookingConfirmation(data),
