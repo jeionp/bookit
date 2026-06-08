@@ -423,8 +423,8 @@ test.describe('Landing page', () => {
   test('shows hero section and "How it works" on /', async ({ page }) => {
     await page.goto(LANDING)
 
-    // Hero headline copy
-    await expect(page.getByText(/palo na/i)).toBeVisible({ timeout: 8_000 })
+    // Hero headline copy (h1: "Tara! Palo na.")
+    await expect(page.getByRole('heading', { name: /tara.*palo/i })).toBeVisible({ timeout: 8_000 })
 
     // "How it works" section
     await expect(page.getByText(/how.*serbi.*works/i)).toBeVisible({ timeout: 8_000 })
