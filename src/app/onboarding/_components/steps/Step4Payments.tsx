@@ -70,9 +70,17 @@ export default function Step4Payments({ draft, patch, onBack, onNext }: Props) {
         />
       </div>
 
-      <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700">
-        Each confirmed booking uses 1 serbi credit from your wallet. Credits can be topped up from the Payments tab in your admin dashboard.
-      </div>
+      <details className="group border border-indigo-100 bg-indigo-50 rounded-xl text-xs text-indigo-700 open:pb-3">
+        <summary className="cursor-pointer select-none list-none flex items-center justify-between px-4 py-3 font-semibold">
+          <span>How serbi credits work</span>
+          <span className="text-indigo-400 group-open:rotate-180 transition-transform">▾</span>
+        </summary>
+        <div className="px-4 flex flex-col gap-1.5 leading-relaxed">
+          <p>Each confirmed booking deducts <strong>1 credit</strong> from your business wallet.</p>
+          <p>Credits are <strong>not</strong> charged for cancellations — only confirmed bookings count.</p>
+          <p>Top up anytime from the <strong>Payments tab</strong> in your admin dashboard. You start with free credits to get going.</p>
+        </div>
+      </details>
 
       {noneSelected && (
         <p className="text-xs text-amber-600">Select at least one payment method to continue.</p>
