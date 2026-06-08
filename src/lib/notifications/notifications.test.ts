@@ -91,7 +91,7 @@ describe("generateICS", () => {
       description: "",
       location: "456 Sports Ave",
     });
-    expect(ics).toContain("UID:booking-99@bookit");
+    expect(ics).toContain("UID:booking-99@serbi");
     expect(ics).toContain("SUMMARY:Court B at Arena");
     expect(ics).toContain("LOCATION:456 Sports Ave");
   });

@@ -35,7 +35,7 @@ export default function Step5Review({ draft, onBack, onSubmit, submitting, error
         <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">Business Info</h3>
         <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-2">
           <Row label="Name" value={draft.name} />
-          <Row label="URL" value={`bookit.app/${draft.slug}`} />
+          <Row label="URL" value={`serbi.app/${draft.slug}`} />
           <Row label="Type" value={draft.type} />
           <Row label="Tagline" value={draft.tagline} />
           <Row label="Description" value={draft.description} />

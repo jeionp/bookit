@@ -295,7 +295,7 @@ test.describe('Slot selection', () => {
     await expect(page.getByRole('button', { name: /book now/i })).toBeVisible()
 
     // Click the page header — outside both the slot grid and the action bar
-    await page.locator('header').getByText('bookit').click()
+    await page.locator('header a[href="/"]').click()
 
     await expect(page.getByRole('button', { name: /book now/i })).not.toBeVisible()
   })
@@ -835,16 +835,16 @@ test.describe('My Bookings tab', () => {
 // ─── Business page navigation ─────────────────────────────────────────────────
 
 test.describe('Business page navigation', () => {
-  test('bookit logo navigates to landing page (unauthenticated)', async ({ page }) => {
+  test('serbi logo navigates to landing page (unauthenticated)', async ({ page }) => {
     await page.goto(BUSINESS)
-    await page.getByRole('link', { name: 'bookit' }).click()
+    await page.locator('header a[href="/"]').click()
     await page.waitForURL('/', { timeout: 5_000 })
   })
 
-  test('bookit logo navigates to landing page (signed in)', async ({ page }) => {
+  test('serbi logo navigates to landing page (signed in)', async ({ page }) => {
     await page.goto(BUSINESS)
     await signIn(page)
-    await page.getByRole('link', { name: 'bookit' }).click()
+    await page.locator('header a[href="/"]').click()
     await page.waitForURL('/', { timeout: 5_000 })
   })
 

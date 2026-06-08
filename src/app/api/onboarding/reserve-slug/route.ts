@@ -17,7 +17,7 @@ function getRatelimit(): Ratelimit | null {
   ratelimit = new Ratelimit({
     redis:   Redis.fromEnv(),
     limiter: Ratelimit.slidingWindow(10, "60 m"),
-    prefix:  "bookit:rl:reserve-slug",
+    prefix:  "serbi:rl:reserve-slug",
   });
   return ratelimit;
 }

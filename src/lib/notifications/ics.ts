@@ -36,11 +36,11 @@ export function generateICS(event: ICSEventData): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//bookit//bookit//EN",
+    "PRODID:-//serbi//serbi//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
-    `UID:${event.bookingId}@bookit`,
+    `UID:${event.bookingId}@serbi`,
     `DTSTAMP:${dtstamp}`,
     `DTSTART:${toICSDateTime(event.date, startHour)}`,
     `DTEND:${toICSDateTime(event.date, endHour)}`,

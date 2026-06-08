@@ -27,7 +27,7 @@ export default function BusinessCard({ business }: { business: Business }) {
         ) : (
           <div
             className="w-full h-full flex items-center justify-center text-3xl font-black text-white"
-            style={{ backgroundColor: business.accentColor ?? "#3B82F6" }}
+            style={{ backgroundColor: business.accentColor ?? "#4338CA" }}
           >
             {business.name.charAt(0)}
           </div>
@@ -39,7 +39,7 @@ export default function BusinessCard({ business }: { business: Business }) {
 
       {/* Info */}
       <div className="p-4 flex flex-col gap-1.5 flex-1">
-        <h3 className="font-bold text-gray-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">
+        <h3 className="font-bold text-gray-900 text-sm leading-tight group-hover:text-indigo-700 transition-colors">
           {business.name}
         </h3>
         {business.location && (
@@ -57,7 +57,7 @@ export default function BusinessCard({ business }: { business: Business }) {
           </span>
           <span
             className="text-xs font-semibold px-2.5 py-1 rounded-full text-white"
-            style={{ backgroundColor: business.accentColor ?? "#3B82F6" }}
+            style={{ backgroundColor: business.accentColor ?? "#4338CA" }}
           >
             Book now →
           </span>

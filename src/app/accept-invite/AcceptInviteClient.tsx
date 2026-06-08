@@ -218,7 +218,7 @@ export default function AcceptInviteClient() {
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           <strong>{invite.inviterName}</strong> invited you to manage{" "}
-          <strong>{invite.businessName}</strong> on bookit.
+          <strong>{invite.businessName}</strong> on serbi.
         </p>
       </div>
 

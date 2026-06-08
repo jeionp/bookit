@@ -13,8 +13,8 @@ export default function LandingNav() {
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="text-xl font-black text-blue-600 tracking-tight">
-          book<span className="text-gray-900">it</span>
+        <Link href="/" className="text-xl font-black tracking-tight">
+          <span className="text-indigo-700">ser</span><span className="text-gray-900">bi</span>
         </Link>
 
         <nav className="flex items-center gap-3">
@@ -33,7 +33,7 @@ export default function LandingNav() {
                   href="/account"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
                 >
-                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
+                  <div className="w-5 h-5 rounded-full bg-indigo-700 text-white text-xs flex items-center justify-center font-bold shrink-0">
                     {(user.displayName ?? user.email ?? "U").charAt(0).toUpperCase()}
                   </div>
                   <span className="hidden sm:block max-w-[120px] truncate">
@@ -60,7 +60,7 @@ export default function LandingNav() {
         </nav>
       </div>
 
-      <AuthModal open={showAuth} onClose={() => setShowAuth(false)} accentColor="#2563EB" />
+      <AuthModal open={showAuth} onClose={() => setShowAuth(false)} accentColor="#4338CA" />
     </header>
   );
 }

@@ -650,8 +650,8 @@ function buildLowBalanceHtml(data: LowBalanceWarningData): string {
   const headerBg  = isCritical ? "#991b1b" : "#92400e";
   const headerSub = isCritical ? "#fca5a5" : "#fde68a";
   const message   = isCritical
-    ? `Your bookit wallet balance is now <strong>${balance}</strong>. Online bookings will be suspended when the balance reaches <strong>−5</strong>. Top up now to keep your storefront active.`
-    : `Your bookit wallet balance is low at <strong>${balance}</strong>. Please top up before you run out.`;
+    ? `Your serbi wallet balance is now <strong>${balance}</strong>. Online bookings will be suspended when the balance reaches <strong>−5</strong>. Top up now to keep your storefront active.`
+    : `Your serbi wallet balance is low at <strong>${balance}</strong>. Please top up before you run out.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -669,7 +669,7 @@ function buildLowBalanceHtml(data: LowBalanceWarningData): string {
         <tr>
           <td style="padding:28px 32px 0;">
             <p style="margin:0 0 24px;font-size:15px;color:#374151;">${message}</p>
-            <p style="margin:0 0 28px;font-size:14px;color:#6b7280;">Log in to your bookit admin dashboard to top up your wallet and avoid service interruption.</p>
+            <p style="margin:0 0 28px;font-size:14px;color:#6b7280;">Log in to your serbi admin dashboard to top up your wallet and avoid service interruption.</p>
           </td>
         </tr>
         <tr>
@@ -844,7 +844,7 @@ function buildAdminInviteHtml(data: AdminInviteData): string {
         <tr>
           <td style="padding:28px 32px 0;">
             <p style="margin:0 0 20px;font-size:15px;color:#374151;">
-              <strong>${inviterName}</strong> has invited you to be an admin of <strong>${businessName}</strong> on bookit.
+              <strong>${inviterName}</strong> has invited you to be an admin of <strong>${businessName}</strong> on serbi.
               Click the button below to accept and gain access to the admin dashboard.
             </p>
             <p style="margin:0 0 28px;">
@@ -888,7 +888,7 @@ export async function sendAdminInvite(data: AdminInviteData): Promise<void> {
     await client.emails.send({
       from,
       to:      data.inviteeEmail,
-      subject: sanitizeSubject(`You're invited to manage ${data.businessName} on bookit`),
+      subject: sanitizeSubject(`You're invited to manage ${data.businessName} on serbi`),
       html:    buildAdminInviteHtml(data),
     });
   } catch (err) {

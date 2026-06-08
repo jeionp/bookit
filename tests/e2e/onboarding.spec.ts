@@ -367,7 +367,7 @@ test.describe('Happy path — full wizard submission', () => {
 
     // Review summary must show the business name and slug URL
     await expect(page.getByText('Test Venue')).toBeVisible()
-    await expect(page.getByText('bookit.app/test-venue')).toBeVisible()
+    await expect(page.getByText('serbi.app/test-venue')).toBeVisible()
 
     // Facility must appear in the review
     await expect(page.getByText('Court A')).toBeVisible()
@@ -424,10 +424,10 @@ test.describe('Landing page', () => {
     await page.goto(LANDING)
 
     // Hero headline copy
-    await expect(page.getByText(/your next game/i)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/every court/i)).toBeVisible({ timeout: 8_000 })
 
     // "How it works" section
-    await expect(page.getByText(/how.*bookit.*works/i)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/how.*serbi.*works/i)).toBeVisible({ timeout: 8_000 })
   })
 
   // Searching for a known business name should surface its card.
@@ -435,7 +435,7 @@ test.describe('Landing page', () => {
     await page.goto(LANDING)
 
     await page.getByPlaceholder(/search by business name/i).fill('PaddleUp')
-    await page.getByRole('button', { name: /find a court/i }).click()
+    await page.getByRole('button', { name: /search/i }).click()
 
     // Business card heading
     await expect(page.getByText('PaddleUp')).toBeVisible({ timeout: 8_000 })
@@ -447,7 +447,7 @@ test.describe('Landing page', () => {
     await page.goto(LANDING)
 
     await page.getByPlaceholder(/search by business name/i).fill('nonexistent-xyz-12345')
-    await page.getByRole('button', { name: /find a court/i }).click()
+    await page.getByRole('button', { name: /search/i }).click()
 
     // Target the empty-state description which is unique (the heading "No businesses found"
     // also appears in the count subtitle, so we match the description paragraph instead)
