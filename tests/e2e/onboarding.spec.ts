@@ -424,7 +424,7 @@ test.describe('Landing page', () => {
     await page.goto(LANDING)
 
     // Hero headline copy
-    await expect(page.getByText(/every court/i)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/palo na/i)).toBeVisible({ timeout: 8_000 })
 
     // "How it works" section
     await expect(page.getByText(/how.*serbi.*works/i)).toBeVisible({ timeout: 8_000 })
