@@ -154,7 +154,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext, loading, error
             {slugStatus === "taken" && <span className="text-red-500">Already taken — try another</span>}
             {slugStatus === "invalid" && <span className="text-red-500">Use lowercase letters, numbers, and hyphens only (min 3 chars)</span>}
             {(slugStatus === "idle" || slugStatus === "checking") && (
-              <span className="text-gray-400">Your booking page will be at bookit.app/{draft.slug || "…"}</span>
+              <span className="text-gray-400">Your booking page will be at serbi.app/{draft.slug || "…"}</span>
             )}
           </p>
         </div>

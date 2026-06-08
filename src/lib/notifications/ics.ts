@@ -40,7 +40,7 @@ export function generateICS(event: ICSEventData): string {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
-    `UID:${event.bookingId}@bookit`,
+    `UID:${event.bookingId}@serbi`,
     `DTSTAMP:${dtstamp}`,
     `DTSTART:${toICSDateTime(event.date, startHour)}`,
     `DTEND:${toICSDateTime(event.date, endHour)}`,
