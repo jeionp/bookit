@@ -165,67 +165,30 @@ test.describe('StepIndicator — responsive CSS classes', () => {
   })
 })
 
-// ─── 3. Step1BusinessInfo — disabled business types ───────────────────────────
+// ─── 3. Step1BusinessInfo — business type selector ───────────────────────────
+// Only available types are rendered. When only one type is available (Sports Court),
+// the entire selector is hidden — no value in showing a single-option picker.
 
-test.describe('Step1BusinessInfo — disabled business types', () => {
-  test('Sports Court button is enabled and clickable', async ({ page }) => {
+test.describe('Step1BusinessInfo — business type selector', () => {
+  test('type selector is hidden when only one type is available', async ({ page }) => {
     await goToStep1Wizard(page)
-
-    const courtBtn = page.getByRole('button', { name: /sports court/i })
-    await expect(courtBtn).toBeEnabled()
+    // The Sports Court button should not render (only type, so selector is omitted)
+    await expect(page.getByRole('button', { name: /sports court/i })).not.toBeAttached()
   })
 
-  test('Appointment-based button is disabled', async ({ page }) => {
+  test('disabled Appointment-based option is not shown', async ({ page }) => {
     await goToStep1Wizard(page)
-
-    const apptBtn = page.getByRole('button', { name: /appointment-based/i })
-    await expect(apptBtn).toBeDisabled()
+    await expect(page.getByRole('button', { name: /appointment-based/i })).not.toBeAttached()
   })
 
-  test('Room / Space button is disabled', async ({ page }) => {
+  test('disabled Room / Space option is not shown', async ({ page }) => {
     await goToStep1Wizard(page)
-
-    const roomBtn = page.getByRole('button', { name: /room \/ space/i })
-    await expect(roomBtn).toBeDisabled()
+    await expect(page.getByRole('button', { name: /room \/ space/i })).not.toBeAttached()
   })
 
-  test('"Soon" badge renders on Appointment-based button', async ({ page }) => {
+  test('"Soon" badges are not rendered when disabled types are hidden', async ({ page }) => {
     await goToStep1Wizard(page)
-
-    // The "Soon" badge is a <span> inside the button
-    await expect(page.getByText('Soon').first()).toBeAttached()
-  })
-
-  test('"Soon" badges render on exactly the two disabled options', async ({ page }) => {
-    await goToStep1Wizard(page)
-
-    const soonBadges = page.getByText('Soon')
-    await expect(soonBadges).toHaveCount(2)
-  })
-
-  test('clicking disabled Appointment-based button does not select it (type stays "court")', async ({ page }) => {
-    await goToStep1Wizard(page)
-
-    // Sports Court should already be visually selected (blue border)
-    const courtBtn = page.getByRole('button', { name: /sports court/i })
-    await expect(courtBtn).toHaveClass(/border-blue-600/)
-
-    // Click the disabled Appointment-based button — it should not change selection
-    const apptBtn = page.getByRole('button', { name: /appointment-based/i })
-    await apptBtn.click({ force: true }) // force=true to bypass disabled attribute check
-
-    // court button should still be selected
-    await expect(courtBtn).toHaveClass(/border-blue-600/)
-  })
-
-  test('disabled buttons have cursor-not-allowed class', async ({ page }) => {
-    await goToStep1Wizard(page)
-
-    const apptBtn = page.getByRole('button', { name: /appointment-based/i })
-    await expect(apptBtn).toHaveClass(/cursor-not-allowed/)
-
-    const roomBtn = page.getByRole('button', { name: /room \/ space/i })
-    await expect(roomBtn).toHaveClass(/cursor-not-allowed/)
+    await expect(page.getByText('Soon').first()).not.toBeAttached()
   })
 })
 

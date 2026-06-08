@@ -159,35 +159,29 @@ export default function Step1BusinessInfo({ draft, patch, onNext, loading, error
           </p>
         </div>
 
-        {/* Business type */}
+        {/* Business type — only shown when multiple types are available */}
+        {BUSINESS_TYPES.filter(({ available }) => available).length > 1 && (
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-gray-500">Business type</label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {BUSINESS_TYPES.map(({ value, label, available }) => (
+            {BUSINESS_TYPES.filter(({ available }) => available).map(({ value, label }) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => available && patch({ type: value })}
-                disabled={!available}
+                onClick={() => patch({ type: value })}
                 className={[
                   "relative py-2 px-3 rounded-xl border text-sm font-medium transition-colors",
-                  !available
-                    ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
-                    : draft.type === value
+                  draft.type === value
                     ? "border-blue-600 bg-blue-50 text-blue-700"
                     : "border-gray-200 text-gray-600 hover:border-gray-300",
                 ].join(" ")}
               >
                 {label}
-                {!available && (
-                  <span className="absolute -top-2 -right-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 leading-none">
-                    Soon
-                  </span>
-                )}
               </button>
             ))}
           </div>
         </div>
+        )}
 
         <LabeledInput
           label="Tagline"

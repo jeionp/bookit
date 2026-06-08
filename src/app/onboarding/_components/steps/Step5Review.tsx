@@ -1,5 +1,6 @@
 "use client";
 
+import { ExternalLink } from "lucide-react";
 import { WizardDraft } from "../OnboardingWizard";
 
 interface Props {
@@ -25,9 +26,22 @@ export default function Step5Review({ draft, onBack, onSubmit, submitting, error
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">Review & Launch</h2>
-        <p className="text-sm text-gray-500 mt-1">Double-check everything before going live.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Review & Launch</h2>
+          <p className="text-sm text-gray-500 mt-1">Double-check everything before going live.</p>
+        </div>
+        {draft.slug && (
+          <a
+            href={`/${draft.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition-colors mt-1"
+          >
+            <ExternalLink size={12} />
+            Preview page
+          </a>
+        )}
       </div>
 
       {/* Business info */}
