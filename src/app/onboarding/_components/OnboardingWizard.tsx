@@ -147,7 +147,7 @@ export default function OnboardingWizard() {
       {/* Nav */}
       <header className="bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-base font-black tracking-tight text-gray-900">bookit</span>
+          <span className="text-base font-black tracking-tight text-gray-900">serbi</span>
           <button
             onClick={handleExit}
             className="flex items-center gap-1 text-sm font-medium text-gray-400 hover:text-gray-700 transition-colors"

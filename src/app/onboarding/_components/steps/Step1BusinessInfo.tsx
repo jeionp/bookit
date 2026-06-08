@@ -133,7 +133,7 @@ export default function Step1BusinessInfo({ draft, patch, onNext, loading, error
           </label>
           <div className="flex items-center rounded-xl border border-gray-200 bg-white overflow-hidden focus-within:border-gray-400 transition-colors">
             <span className="px-3 py-2 text-sm text-gray-400 border-r border-gray-200 select-none bg-gray-50">
-              bookit.app/
+              serbi.app/
             </span>
             <input
               type="text"

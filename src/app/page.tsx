@@ -97,7 +97,7 @@ export default async function Home({
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900">
-              How <span className="text-blue-600">bookit</span> works
+              How <span className="text-blue-600">serbi</span> works
             </h2>
             <p className="text-gray-500 mt-2 text-sm">On the court in three simple steps</p>
           </div>
@@ -183,7 +183,7 @@ export default async function Home({
                   Start for free →
                 </Link>
                 <Link
-                  href="mailto:hello@bookit.ph"
+                  href="mailto:hello@serbi.app"
                   className="px-6 py-3 rounded-xl border border-blue-700 text-white text-sm font-semibold hover:bg-blue-900 transition-colors"
                 >
                   Contact us
@@ -234,10 +234,8 @@ export default async function Home({
       {/* ── Footer ── */}
       <footer className="bg-white border-t border-gray-100 py-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-400">
-          <span className="font-black text-blue-600 text-base">
-            book<span className="text-gray-900">it</span>
-          </span>
-          <span>© {new Date().getFullYear()} Bookit. All rights reserved.</span>
+          <span className="font-black text-blue-600 text-base">serbi</span>
+          <span>© {new Date().getFullYear()} serbi. All rights reserved.</span>
           <Link href="/onboarding" className="text-blue-600 font-semibold hover:underline">
             List your business
           </Link>

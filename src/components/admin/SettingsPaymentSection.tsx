@@ -157,7 +157,7 @@ export default function SettingsPaymentSection({ draft, setDraft, user, open, on
             </>
           )}
           <p className="text-xs text-gray-400">
-            Wallet balance is managed by the bookit platform. Contact support to top up.
+            Wallet balance is managed by the serbi platform. Contact support to top up.
           </p>
         </div>
       )}

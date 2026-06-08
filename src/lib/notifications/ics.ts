@@ -36,7 +36,7 @@ export function generateICS(event: ICSEventData): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//bookit//bookit//EN",
+    "PRODID:-//serbi//serbi//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

@@ -71,7 +71,7 @@ export default function Step4Payments({ draft, patch, onBack, onNext }: Props) {
       </div>
 
       <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700">
-        Each confirmed booking uses 1 bookit credit from your wallet. Credits can be topped up from the Payments tab in your admin dashboard.
+        Each confirmed booking uses 1 serbi credit from your wallet. Credits can be topped up from the Payments tab in your admin dashboard.
       </div>
 
       {noneSelected && (

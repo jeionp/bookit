@@ -21,7 +21,7 @@ export default function AdminView({ business }: { business: Business }) {
       {/* Header */}
       <header className="bg-white border-b border-gray-100 shrink-0 h-14 flex items-center px-4 justify-between">
         <div className="flex items-center gap-2">
-          <Link href="/" className="text-base font-black tracking-tight text-gray-900 hover:text-blue-600 transition-colors">bookit</Link>
+          <Link href="/" className="text-base font-black tracking-tight text-gray-900 hover:text-blue-600 transition-colors">serbi</Link>
           <span className="text-gray-300">/</span>
           <span className="text-sm font-semibold text-gray-600">{business.name}</span>
           <span
