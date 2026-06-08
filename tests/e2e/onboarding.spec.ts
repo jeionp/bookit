@@ -376,8 +376,14 @@ test.describe('Happy path — full wizard submission', () => {
     // Click the launch button
     await page.getByRole('button', { name: /launch my business/i }).click()
 
-    // Should navigate to /test-venue/admin after a successful POST /api/onboarding
-    await expect(page).toHaveURL('/test-venue/admin', { timeout: 15_000 })
+    // Success overlay replaces the wizard — assert the "You're live!" heading appears
+    await expect(page.getByRole('heading', { name: /you.re live/i })).toBeVisible({ timeout: 15_000 })
+
+    // Click "Go to your dashboard →" to navigate to the admin page
+    await page.getByRole('link', { name: /go to your dashboard/i }).click()
+
+    // Should now be on the admin page
+    await expect(page).toHaveURL('/test-venue/admin', { timeout: 8_000 })
   })
 })
 
