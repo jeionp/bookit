@@ -4,11 +4,11 @@
  * Because the Vitest environment is `node` (no jsdom), we test the pure data
  * that drives the header link rather than rendering the full component.
  *
- * The Phase 10 change converted the "bookit" plain <span> into a Next.js
- * <Link href="/"> so users can navigate from the admin dashboard back to the
- * landing page.  We verify:
+ * The Phase 10 change converted the plain <span> into a Next.js <Link href="/">
+ * so users can navigate from the admin dashboard back to the landing page.
+ * The serbi rebrand renders the wordmark as two spans (ser + bi).  We verify:
  *   - The href target is "/" (landing page root)
- *   - The link text is "bookit"
+ *   - The link label is "serbi" (conceptual brand name)
  *   - The element is a link (not a plain span)
  */
 
@@ -19,19 +19,19 @@ import { describe, test, expect } from 'vitest'
 
 const HEADER_LOGO_LINK = {
   href:  '/',
-  label: 'bookit',
+  label: 'serbi',
   isLink: true,   // Next.js <Link> (was a plain <span> before Phase 10)
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('AdminView — header "bookit" link', () => {
+describe('AdminView — header "serbi" link', () => {
   test('href points to "/" (landing page)', () => {
     expect(HEADER_LOGO_LINK.href).toBe('/')
   })
 
-  test('link label is "bookit"', () => {
-    expect(HEADER_LOGO_LINK.label).toBe('bookit')
+  test('link label is "serbi"', () => {
+    expect(HEADER_LOGO_LINK.label).toBe('serbi')
   })
 
   test('element is a link (not a plain span)', () => {
@@ -51,7 +51,7 @@ const ADMIN_VIEW_PATH = resolve(
   'AdminView.tsx',
 )
 
-describe('AdminView source — "bookit" Link href verification', () => {
+describe('AdminView source — "serbi" Link href verification', () => {
   let source: string
 
   test('AdminView.tsx exists and is readable', () => {
@@ -69,8 +69,8 @@ describe('AdminView source — "bookit" Link href verification', () => {
     expect(source).toMatch(/href=["']\/["']/)
   })
 
-  test('AdminView.tsx renders "bookit" text near the header Link', () => {
+  test('AdminView.tsx renders serbi wordmark (two-tone ser + bi spans)', () => {
     source = source ?? readFileSync(ADMIN_VIEW_PATH, 'utf-8')
-    expect(source).toContain('bookit')
+    expect(source).toMatch(/ser.*bi/)
   })
 })
