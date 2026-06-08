@@ -27,6 +27,14 @@ export default async function Home({
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5" />
         <div className="absolute -bottom-16 -left-16 w-72 h-72 rounded-full bg-white/5" />
 
+        {/* Subtle mesh/grid overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 0v40M40 0v40M0 0h40M0 40h40' stroke='%23fff' stroke-width='0.5'/%3E%3C/svg%3E")`,
+          }}
+        />
+
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 flex flex-col items-center text-center gap-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs font-semibold backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -56,17 +64,30 @@ export default async function Home({
         </div>
       </section>
 
+      {/* ── Trust / stats band ── */}
+      <div className="bg-indigo-50 border-b border-indigo-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs sm:text-sm font-medium text-indigo-700">
+          <span>Available across PH</span>
+          <span className="text-indigo-300 hidden sm:inline" aria-hidden="true">|</span>
+          <span>Book in &lt; 1 min</span>
+          <span className="text-indigo-300 hidden sm:inline" aria-hidden="true">|</span>
+          <span>Free to cancel</span>
+          <span className="text-indigo-300 hidden sm:inline" aria-hidden="true">|</span>
+          <span>GCash &amp; Maya accepted</span>
+        </div>
+      </div>
+
       {/* ── Business listings ── */}
       <section id="businesses" className="max-w-6xl mx-auto px-4 sm:px-6 py-14 w-full">
         <div className="flex items-baseline justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {q ? `Results for "${q}"` : "Listed businesses"}
+              {q ? `Results for "${q}"` : "Available near you"}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">
               {businesses.length === 0
                 ? "No businesses found"
-                : `${businesses.length} ${businesses.length === 1 ? "business" : "businesses"}`}
+                : `${businesses.length} ${businesses.length === 1 ? "venue" : "venues"} listed`}
             </p>
           </div>
           {q && (
@@ -112,7 +133,11 @@ export default async function Home({
             <p className="text-gray-500 mt-2 text-sm">On the court in three simple steps</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Cards with connector lines on desktop */}
+          <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Connector line: between card 1 and 2 */}
+            <div className="hidden sm:block absolute top-[2.25rem] left-[calc(33.333%+0.5rem)] right-[calc(33.333%+0.5rem)] h-px bg-gradient-to-r from-indigo-200 via-indigo-300 to-indigo-200 z-0" />
+
             {[
               {
                 icon: <Search size={20} />,
@@ -133,12 +158,12 @@ export default async function Home({
                 desc: "Show up and play. Your booking confirmation is all you need — no paper tickets, no calls.",
               },
             ].map(({ icon, step, title, desc }) => (
-              <div key={step} className="relative bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-4">
+              <div key={step} className="relative bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-4 z-10">
                 <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 flex items-center justify-center shadow-sm">
                     {icon}
                   </div>
-                  <span className="text-4xl font-black text-gray-100 leading-none">{step}</span>
+                  <span className="text-4xl font-black text-gray-200 leading-none">{step}</span>
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 mb-1">{title}</h3>
@@ -250,21 +275,42 @@ export default async function Home({
       </section>
 
       {/* ── Footer ── */}
-      <footer className="bg-white border-t border-gray-100 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col gap-4 text-sm text-gray-400">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <span className="text-base font-black tracking-tight">
-              <span className="text-indigo-700">ser</span><span className="text-gray-900">bi</span>
-            </span>
-            <span>© {new Date().getFullYear()} serbi. All rights reserved.</span>
-            <Link href="/onboarding" className="text-indigo-700 font-semibold hover:underline">
-              List your business
-            </Link>
-          </div>
-          <p className="text-center text-xs text-gray-400">
-            Accepts <span className="font-medium text-gray-500">GCash</span> · <span className="font-medium text-gray-500">Maya</span> · <span className="font-medium text-gray-500">Cash</span> · <span className="font-medium text-gray-500">Credit Card</span>
-          </p>
+      <footer className="bg-white border-t border-gray-100 text-sm text-gray-500">
+
+        {/* Row 1: logo + nav links */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <span className="text-base font-black tracking-tight">
+            <span className="text-indigo-700">ser</span><span className="text-gray-900">bi</span>
+          </span>
+          <nav className="flex items-center gap-5 text-xs font-medium text-gray-500">
+            <a href="#businesses" className="hover:text-gray-900 transition-colors">For Players</a>
+            <Link href="/onboarding" className="hover:text-gray-900 transition-colors">For Businesses</Link>
+            <Link href="mailto:hello@serbi.app" className="hover:text-gray-900 transition-colors">Contact</Link>
+          </nav>
         </div>
+
+        {/* Row 2: payment trust band */}
+        <div className="border-t border-gray-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-center gap-2 text-xs text-gray-400">
+            <span className="font-medium text-gray-500">Accepts</span>
+            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-semibold text-xs">GCash</span>
+            <span className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 font-semibold text-xs">Maya</span>
+            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 font-semibold text-xs">Cash</span>
+            <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold text-xs">Credit Card</span>
+          </div>
+        </div>
+
+        {/* Row 3: copyright + legal */}
+        <div className="border-t border-gray-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
+            <span>© {new Date().getFullYear()} serbi. All rights reserved.</span>
+            <div className="flex items-center gap-4">
+              <Link href="#" className="hover:text-gray-600 transition-colors">Privacy Policy</Link>
+              <Link href="#" className="hover:text-gray-600 transition-colors">Terms of Service</Link>
+            </div>
+          </div>
+        </div>
+
       </footer>
 
     </div>
