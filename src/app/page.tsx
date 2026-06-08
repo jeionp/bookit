@@ -22,7 +22,7 @@ export default async function Home({
       <LandingNav />
 
       {/* ── Hero ── */}
-      <section className="relative bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 text-white overflow-hidden">
+      <section className="relative bg-gradient-to-br from-indigo-700 via-indigo-800 to-[#1e1b6e] text-white overflow-hidden">
         {/* Decorative circles */}
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5" />
         <div className="absolute -bottom-16 -left-16 w-72 h-72 rounded-full bg-white/5" />
@@ -34,12 +34,12 @@ export default async function Home({
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-tight tracking-tight max-w-2xl">
-            Your next game<br />
-            <span className="text-blue-200">starts here.</span>
+            Every court.<br />
+            <span className="text-indigo-200">One tap away.</span>
           </h1>
 
-          <p className="text-blue-100 text-base sm:text-lg max-w-xl leading-relaxed">
-            Search and book courts, rooms, and sports facilities from businesses across the Philippines.
+          <p className="text-indigo-100 text-base sm:text-lg max-w-xl leading-relaxed">
+            ready to serve — book racket sport courts and sports facilities from businesses across the Philippines.
           </p>
 
           <SearchForm defaultValue={q} />
@@ -60,7 +60,7 @@ export default async function Home({
             </p>
           </div>
           {q && (
-            <Link href="/" className="text-sm text-blue-600 font-semibold hover:text-blue-700 transition-colors">
+            <Link href="/" className="text-sm text-indigo-700 font-semibold hover:text-indigo-800 transition-colors">
               Clear search
             </Link>
           )}
@@ -84,7 +84,7 @@ export default async function Home({
                 : "No businesses are listed yet. Be the first to get listed!"}
             </p>
             {q && (
-              <Link href="/" className="mt-1 text-sm text-blue-600 font-semibold hover:underline">
+              <Link href="/" className="mt-1 text-sm text-indigo-700 font-semibold hover:underline">
                 View all businesses
               </Link>
             )}
@@ -97,7 +97,7 @@ export default async function Home({
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-black text-gray-900">
-              How <span className="text-blue-600">serbi</span> works
+              How <span className="text-indigo-700">serbi</span> works
             </h2>
             <p className="text-gray-500 mt-2 text-sm">On the court in three simple steps</p>
           </div>
@@ -119,13 +119,13 @@ export default async function Home({
               {
                 icon: <Zap size={20} />,
                 step: "03",
-                title: "Play",
-                desc: "Show up and enjoy. Your booking confirmation is all you need.",
+                title: "Palo na.",
+                desc: "Show up and play. Your booking confirmation is all you need.",
               },
             ].map(({ icon, step, title, desc }) => (
               <div key={step} className="relative bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-4">
                 <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
                     {icon}
                   </div>
                   <span className="text-4xl font-black text-gray-100 leading-none">{step}</span>
@@ -141,19 +141,19 @@ export default async function Home({
       </section>
 
       {/* ── For business owners ── */}
-      <section className="bg-blue-950 text-white py-20">
+      <section className="bg-indigo-950 text-white py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
 
             {/* Left: copy */}
             <div className="flex flex-col gap-6">
               <div>
-                <p className="text-blue-400 text-sm font-semibold uppercase tracking-widest mb-3">For business owners</p>
+                <p className="text-indigo-400 text-sm font-semibold uppercase tracking-widest mb-3">For business owners</p>
                 <h2 className="text-3xl sm:text-4xl font-black leading-tight">
                   Own a court or space?<br />
-                  <span className="text-blue-300">Get listed for free.</span>
+                  <span className="text-indigo-300">Get listed for free.</span>
                 </h2>
-                <p className="text-blue-200 mt-4 text-sm leading-relaxed max-w-md">
+                <p className="text-indigo-200 mt-4 text-sm leading-relaxed max-w-md">
                   Start accepting bookings in minutes. No setup fees, no monthly charges for the basics —
                   upgrade only when you need more.
                 </p>
@@ -166,8 +166,8 @@ export default async function Home({
                   { icon: <BarChart3 size={15} />, text: "Track revenue and booking analytics" },
                   { icon: <Users size={15} />, text: "Build a customer history and repeat business" },
                 ].map(({ icon, text }) => (
-                  <li key={text} className="flex items-center gap-3 text-sm text-blue-100">
-                    <span className="w-6 h-6 rounded-full bg-blue-800 text-blue-300 flex items-center justify-center shrink-0">
+                  <li key={text} className="flex items-center gap-3 text-sm text-indigo-100">
+                    <span className="w-6 h-6 rounded-full bg-indigo-800 text-indigo-300 flex items-center justify-center shrink-0">
                       {icon}
                     </span>
                     {text}
@@ -178,13 +178,13 @@ export default async function Home({
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link
                   href="/onboarding"
-                  className="px-6 py-3 rounded-xl bg-white text-blue-900 text-sm font-bold hover:bg-blue-50 transition-colors"
+                  className="px-6 py-3 rounded-xl bg-amber-400 text-gray-900 text-sm font-bold hover:bg-amber-500 transition-colors"
                 >
                   Start for free →
                 </Link>
                 <Link
                   href="mailto:hello@serbi.app"
-                  className="px-6 py-3 rounded-xl border border-blue-700 text-white text-sm font-semibold hover:bg-blue-900 transition-colors"
+                  className="px-6 py-3 rounded-xl border border-indigo-700 text-white text-sm font-semibold hover:bg-indigo-900 transition-colors"
                 >
                   Contact us
                 </Link>
@@ -194,7 +194,7 @@ export default async function Home({
             {/* Right: feature tiers */}
             <div className="flex flex-col gap-3">
               {/* Free tier */}
-              <div className="bg-blue-900/50 border border-blue-800 rounded-2xl p-5">
+              <div className="bg-indigo-900/50 border border-indigo-800 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-bold text-white">Free</span>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-green-500/20 text-green-300 font-semibold border border-green-500/30">
@@ -203,7 +203,7 @@ export default async function Home({
                 </div>
                 <ul className="flex flex-col gap-2">
                   {["Business listing page", "Online bookings", "Court / space management", "Basic analytics"].map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-blue-200">
+                    <li key={f} className="flex items-center gap-2 text-sm text-indigo-200">
                       <span className="text-green-400">✓</span> {f}
                     </li>
                   ))}
@@ -211,17 +211,17 @@ export default async function Home({
               </div>
 
               {/* Pro tier */}
-              <div className="bg-blue-900/30 border border-blue-800/50 rounded-2xl p-5 opacity-75">
+              <div className="bg-indigo-900/30 border border-indigo-800/50 rounded-2xl p-5 opacity-75">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-bold text-white">Pro</span>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/30">
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
                     Coming soon
                   </span>
                 </div>
                 <ul className="flex flex-col gap-2">
                   {["Everything in Free", "Online payments via PayMongo", "Walk-in & refund management", "Priority listing & support"].map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-sm text-blue-300">
-                      <span className="text-blue-400">✓</span> {f}
+                    <li key={f} className="flex items-center gap-2 text-sm text-indigo-300">
+                      <span className="text-indigo-400">✓</span> {f}
                     </li>
                   ))}
                 </ul>
@@ -234,9 +234,11 @@ export default async function Home({
       {/* ── Footer ── */}
       <footer className="bg-white border-t border-gray-100 py-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-400">
-          <span className="font-black text-blue-600 text-base">serbi</span>
+          <span className="text-base font-black tracking-tight">
+            <span className="text-indigo-700">ser</span><span className="text-gray-900">bi</span>
+          </span>
           <span>© {new Date().getFullYear()} serbi. All rights reserved.</span>
-          <Link href="/onboarding" className="text-blue-600 font-semibold hover:underline">
+          <Link href="/onboarding" className="text-indigo-700 font-semibold hover:underline">
             List your business
           </Link>
         </div>

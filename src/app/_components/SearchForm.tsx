@@ -20,7 +20,7 @@ export default function SearchForm({ defaultValue }: { defaultValue?: string }) 
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-xl flex gap-2">
-      <div className="flex-1 flex items-center gap-2 bg-white rounded-2xl border border-gray-200 px-4 shadow-sm focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+      <div className="flex-1 flex items-center gap-2 bg-white rounded-2xl border border-gray-200 px-4 shadow-sm focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
         <Search size={18} className="text-gray-400 shrink-0" />
         <input
           ref={inputRef}
@@ -33,9 +33,9 @@ export default function SearchForm({ defaultValue }: { defaultValue?: string }) 
       </div>
       <button
         type="submit"
-        className="px-5 py-3 rounded-2xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+        className="px-5 py-3 rounded-2xl bg-amber-400 text-gray-900 text-sm font-semibold hover:bg-amber-500 transition-colors shadow-sm whitespace-nowrap"
       >
-        Find a court
+        Search →
       </button>
     </form>
   );
