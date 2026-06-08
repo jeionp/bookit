@@ -27,6 +27,14 @@ export default async function Home({
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5" />
         <div className="absolute -bottom-16 -left-16 w-72 h-72 rounded-full bg-white/5" />
 
+        {/* Subtle mesh/grid overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 0v40M40 0v40M0 0h40M0 40h40' stroke='%23fff' stroke-width='0.5'/%3E%3C/svg%3E")`,
+          }}
+        />
+
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 flex flex-col items-center text-center gap-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs font-semibold backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -34,29 +42,52 @@ export default async function Home({
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-tight tracking-tight max-w-2xl">
-            Every court.<br />
-            <span className="text-indigo-200">One tap away.</span>
+            Tara!{" "}
+            <span className="text-indigo-200">Palo na.</span>
           </h1>
 
-          <p className="text-indigo-100 text-base sm:text-lg max-w-xl leading-relaxed">
-            ready to serve — book racket sport courts and sports facilities from businesses across the Philippines.
+          <p className="text-white/80 text-base sm:text-lg max-w-md leading-relaxed">
+            Book your courts and start playing in less than a minute.
+          </p>
+
+          <p className="text-indigo-200 text-lg sm:text-xl font-medium tracking-tight italic">
+            Ready to serve.
           </p>
 
           <SearchForm defaultValue={q} />
+
+          <div className="mt-1">
+            <a href="#businesses" className="text-sm text-indigo-300 hover:text-white underline underline-offset-2 transition-colors">
+              Browse all venues →
+            </a>
+          </div>
         </div>
       </section>
 
+      {/* ── Trust / stats band ── */}
+      <div className="bg-indigo-50 border-b border-indigo-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-xs sm:text-sm font-medium text-indigo-700">
+          <span>Available across PH</span>
+          <span className="text-indigo-300 hidden sm:inline" aria-hidden="true">|</span>
+          <span>Book in &lt; 1 min</span>
+          <span className="text-indigo-300 hidden sm:inline" aria-hidden="true">|</span>
+          <span>Free to cancel</span>
+          <span className="text-indigo-300 hidden sm:inline" aria-hidden="true">|</span>
+          <span>GCash &amp; Maya accepted</span>
+        </div>
+      </div>
+
       {/* ── Business listings ── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-14 w-full">
+      <section id="businesses" className="max-w-6xl mx-auto px-4 sm:px-6 py-14 w-full">
         <div className="flex items-baseline justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {q ? `Results for "${q}"` : "Listed businesses"}
+              {q ? `Results for "${q}"` : "Available near you"}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">
               {businesses.length === 0
                 ? "No businesses found"
-                : `${businesses.length} ${businesses.length === 1 ? "business" : "businesses"}`}
+                : `${businesses.length} ${businesses.length === 1 ? "venue" : "venues"} listed`}
             </p>
           </div>
           {q && (
@@ -80,8 +111,8 @@ export default async function Home({
             <p className="text-gray-700 font-semibold">No businesses found</p>
             <p className="text-sm text-gray-400 max-w-xs">
               {q
-                ? `We couldn't find anything matching "${q}". Try a different search.`
-                : "No businesses are listed yet. Be the first to get listed!"}
+                ? `Wala pang results para sa "${q}". Try a different city or court type.`
+                : "Wala pang listed dito. Try a different city or check back soon!"}
             </p>
             {q && (
               <Link href="/" className="mt-1 text-sm text-indigo-700 font-semibold hover:underline">
@@ -102,7 +133,11 @@ export default async function Home({
             <p className="text-gray-500 mt-2 text-sm">On the court in three simple steps</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Cards with connector lines on desktop */}
+          <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Connector line: between card 1 and 2 */}
+            <div className="hidden sm:block absolute top-[2.25rem] left-[calc(33.333%+0.5rem)] right-[calc(33.333%+0.5rem)] h-px bg-gradient-to-r from-indigo-200 via-indigo-300 to-indigo-200 z-0" />
+
             {[
               {
                 icon: <Search size={20} />,
@@ -120,15 +155,15 @@ export default async function Home({
                 icon: <Zap size={20} />,
                 step: "03",
                 title: "Palo na.",
-                desc: "Show up and play. Your booking confirmation is all you need.",
+                desc: "Show up and play. Your booking confirmation is all you need — no paper tickets, no calls.",
               },
             ].map(({ icon, step, title, desc }) => (
-              <div key={step} className="relative bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-4">
+              <div key={step} className="relative bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-4 z-10">
                 <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 flex items-center justify-center shadow-sm">
                     {icon}
                   </div>
-                  <span className="text-4xl font-black text-gray-100 leading-none">{step}</span>
+                  <span className="text-4xl font-black text-gray-200 leading-none">{step}</span>
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 mb-1">{title}</h3>
@@ -175,6 +210,14 @@ export default async function Home({
                 ))}
               </ul>
 
+              <div className="border border-indigo-800 rounded-xl p-4 text-sm text-indigo-200 space-y-1.5">
+                <p className="font-semibold text-white text-xs uppercase tracking-wide mb-2">What setup looks like</p>
+                <p>① Business info &amp; slug — 2 min</p>
+                <p>② Add courts with pricing — 5 min</p>
+                <p>③ Set payment methods — 2 min</p>
+                <p>④ Go live and accept bookings — instant</p>
+              </div>
+
               <div className="flex flex-wrap gap-3 pt-2">
                 <Link
                   href="/onboarding"
@@ -211,7 +254,7 @@ export default async function Home({
               </div>
 
               {/* Pro tier */}
-              <div className="bg-indigo-900/30 border border-indigo-800/50 rounded-2xl p-5 opacity-75">
+              <div className="bg-indigo-900/30 border border-indigo-800/50 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-bold text-white">Pro</span>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
@@ -232,16 +275,42 @@ export default async function Home({
       </section>
 
       {/* ── Footer ── */}
-      <footer className="bg-white border-t border-gray-100 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-400">
+      <footer className="bg-white border-t border-gray-100 text-sm text-gray-500">
+
+        {/* Row 1: logo + nav links */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <span className="text-base font-black tracking-tight">
             <span className="text-indigo-700">ser</span><span className="text-gray-900">bi</span>
           </span>
-          <span>© {new Date().getFullYear()} serbi. All rights reserved.</span>
-          <Link href="/onboarding" className="text-indigo-700 font-semibold hover:underline">
-            List your business
-          </Link>
+          <nav className="flex items-center gap-5 text-xs font-medium text-gray-500">
+            <a href="#businesses" className="hover:text-gray-900 transition-colors">For Players</a>
+            <Link href="/onboarding" className="hover:text-gray-900 transition-colors">For Businesses</Link>
+            <Link href="mailto:hello@serbi.app" className="hover:text-gray-900 transition-colors">Contact</Link>
+          </nav>
         </div>
+
+        {/* Row 2: payment trust band */}
+        <div className="border-t border-gray-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-center gap-2 text-xs text-gray-400">
+            <span className="font-medium text-gray-500">Accepts</span>
+            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-semibold text-xs">GCash</span>
+            <span className="px-2 py-0.5 rounded-md bg-green-50 text-green-700 font-semibold text-xs">Maya</span>
+            <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 font-semibold text-xs">Cash</span>
+            <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold text-xs">Credit Card</span>
+          </div>
+        </div>
+
+        {/* Row 3: copyright + legal */}
+        <div className="border-t border-gray-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
+            <span>© {new Date().getFullYear()} serbi. All rights reserved.</span>
+            <div className="flex items-center gap-4">
+              <Link href="#" className="hover:text-gray-600 transition-colors">Privacy Policy</Link>
+              <Link href="#" className="hover:text-gray-600 transition-colors">Terms of Service</Link>
+            </div>
+          </div>
+        </div>
+
       </footer>
 
     </div>

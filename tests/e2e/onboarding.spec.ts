@@ -429,8 +429,8 @@ test.describe('Landing page', () => {
   test('shows hero section and "How it works" on /', async ({ page }) => {
     await page.goto(LANDING)
 
-    // Hero headline copy
-    await expect(page.getByText(/every court/i)).toBeVisible({ timeout: 8_000 })
+    // Hero headline copy (h1: "Tara! Palo na.")
+    await expect(page.getByRole('heading', { name: /tara.*palo/i })).toBeVisible({ timeout: 8_000 })
 
     // "How it works" section
     await expect(page.getByText(/how.*serbi.*works/i)).toBeVisible({ timeout: 8_000 })
@@ -455,16 +455,15 @@ test.describe('Landing page', () => {
     await page.getByPlaceholder(/search by business name/i).fill('nonexistent-xyz-12345')
     await page.getByRole('button', { name: /search/i }).click()
 
-    // Target the empty-state description which is unique (the heading "No businesses found"
-    // also appears in the count subtitle, so we match the description paragraph instead)
-    await expect(page.getByText(/couldn't find anything matching/i)).toBeVisible({ timeout: 8_000 })
+    // Target the empty-state description (Taglish copy introduced with the UX update)
+    await expect(page.getByText(/wala pang results/i)).toBeVisible({ timeout: 8_000 })
   })
 
   // The "Clear search" link on a search-results page must navigate back to the full listing.
   test('"Clear search" link returns to full listing', async ({ page }) => {
     await page.goto('/?q=nonexistent-xyz-12345')
 
-    await expect(page.getByText(/couldn't find anything matching/i)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/wala pang results/i)).toBeVisible({ timeout: 8_000 })
 
     // "Clear search" link text matches the source code
     await page.getByRole('link', { name: /clear search/i }).first().click()
