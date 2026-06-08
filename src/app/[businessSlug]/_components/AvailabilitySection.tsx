@@ -296,7 +296,9 @@ export default function AvailabilitySection({
             ? "Closed on this day"
             : isToday
             ? "No more slots available today"
-            : "Closed on this day"
+            : todayHours
+            ? "No slots available — try another date"
+            : "Not open on this day"
         }
         slotsRef={slotsRef}
         slotState={slotState}

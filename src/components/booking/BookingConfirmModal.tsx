@@ -73,7 +73,11 @@ export default function BookingConfirmModal({
   useEffect(() => {
     if (!open || !user) return;
     getCreditsByBusiness(user.uid, businessSlug)
-      .then((credits) => setCreditBalance(computeBalance(credits)))
+      .then((credits) => {
+        const balance = computeBalance(credits);
+        setCreditBalance(balance);
+        if (balance > 0) setUseCredits(true);
+      })
       .catch(() => setCreditBalance(0));
   }, [open, user, businessSlug]);
 
@@ -200,6 +204,7 @@ export default function BookingConfirmModal({
     setUploadError("");
     setError("");
     setUseCredits(false);
+    setCreditBalance(0);
     setSelectedPaymentOption(null);
     onClose();
     if (wasComplete) onSuccess();
@@ -252,13 +257,28 @@ export default function BookingConfirmModal({
               from <strong>{formatHour(startHour)}</strong> to{" "}
               <strong>{formatHour(endHour)}</strong> has been confirmed.
             </p>
-            <button
-              onClick={handleClose}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white"
-              style={{ backgroundColor: accentColor }}
-            >
-              Done
-            </button>
+            {bookingId && (
+              <p className="text-xs text-gray-400 font-mono">
+                Ref: {bookingId.slice(0, 8).toUpperCase()}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                }}
+                className="flex-1 text-xs border border-gray-200 rounded-xl py-2 text-gray-500 hover:bg-gray-50 transition-colors"
+              >
+                🔗 Copy link
+              </button>
+              <button
+                onClick={handleClose}
+                className="flex-1 py-2 rounded-xl text-sm font-bold text-white"
+                style={{ backgroundColor: accentColor }}
+              >
+                Done
+              </button>
+            </div>
           </div>
 
         ) : checkoutType === "PAY_AT_VENUE" ? (
@@ -285,13 +305,28 @@ export default function BookingConfirmModal({
             <div className="bg-amber-50 rounded-2xl px-4 py-3 text-sm text-amber-800 font-semibold">
               Please pay at the venue on the day of your booking.
             </div>
-            <button
-              onClick={handleClose}
-              className="w-full py-3 rounded-xl text-sm font-bold text-white"
-              style={{ backgroundColor: accentColor }}
-            >
-              Done
-            </button>
+            {bookingId && (
+              <p className="text-xs text-gray-400 font-mono">
+                Ref: {bookingId.slice(0, 8).toUpperCase()}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                }}
+                className="flex-1 text-xs border border-gray-200 rounded-xl py-2 text-gray-500 hover:bg-gray-50 transition-colors"
+              >
+                🔗 Copy link
+              </button>
+              <button
+                onClick={handleClose}
+                className="flex-1 py-2 rounded-xl text-sm font-bold text-white"
+                style={{ backgroundColor: accentColor }}
+              >
+                Done
+              </button>
+            </div>
           </div>
 
         ) : checkoutType === "P2P_AI" ? (
